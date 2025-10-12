@@ -1,0 +1,5 @@
+# Include top-level files in source distributions
+# Note: Documentation is also packaged in calgebra/docs/ for programmatic access
+include README.md
+include LICENSE
+

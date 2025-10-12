@@ -1,0 +1,43 @@
+[project]
+name = "calgebra"
+version = "0.0.1"
+description = "A tiny DSL for calendar interval algebra - compose, filter, and query time ranges using set operations."
+authors = [{ name = "ashenfad"}]
+requires-python = ">=3.12"
+readme = "README.md"
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "black",
+    "uv",
+    "pytest"
+]
+google-calendar = [
+    "gcsa>=2.6.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = {find = {where = ["./"], exclude = ["tests*", "build*"]}}  # Discover packages, exclude tests/examples
+
+# Include documentation files within the package
+[tool.setuptools.package-data]
+calgebra = ["docs/*.md"]
+
+[tool.black]
+line-length = 88
+
+[tool.ruff]
+line-length = 88
+select = ["E", "F", "W", "I"]
