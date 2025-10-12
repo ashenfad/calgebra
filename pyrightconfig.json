@@ -1,0 +1,8 @@
+{
+  "reportMissingTypeStubs": "none",
+  "reportUnusedCallResult": "none",
+  "reportReturnType": "none",
+  "reportUnusedParameter": "none",
+  "reportExplicitAny": "none",
+  "reportAny": "none"
+}
