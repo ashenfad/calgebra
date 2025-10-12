@@ -22,6 +22,12 @@ class Event(Interval):
     summary: str
     description: str | None
 
+    @override
+    def __str__(self) -> str:
+        """Human-friendly string showing event details and duration."""
+        duration = self.end - self.start + 1
+        return f"Event('{self.summary}', {self.start}→{self.end}, {duration}s)"
+
 
 def list_calendars() -> list[CalendarItem]:
     """Return calendars accessible to the locally authenticated user."""
