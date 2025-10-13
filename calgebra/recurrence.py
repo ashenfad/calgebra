@@ -116,9 +116,7 @@ class RecurringTimeline(Timeline[Interval]):
                 if d_lower not in _DAY_MAP:
                     valid = ", ".join(sorted(_DAY_MAP.keys()))
                     raise ValueError(
-                        f"Invalid day name: '{d}'\n"
-                        f"Valid days: {valid}\n"
-                        f"Example: day_of_week('monday') or day_of_week(['tuesday', 'thursday'])"
+                        f"Invalid day name: '{d}'\n" f"Valid days: {valid}\n"
                     )
 
                 wd = _DAY_MAP[d_lower]
@@ -148,7 +146,6 @@ class RecurringTimeline(Timeline[Interval]):
         if start is None or end is None:
             raise ValueError(
                 f"RecurringTimeline requires finite bounds, got start={start}, end={end}.\n"
-                f"Recurring patterns generate infinite sequences and need bounded queries.\n"
                 f"Fix: Use explicit bounds when slicing: list(recurring(...)[start:end])\n"
                 f"Example: list(mondays[1704067200:1735689599])"
             )
