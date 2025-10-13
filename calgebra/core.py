@@ -53,10 +53,6 @@ class Timeline(ABC, Generic[IvlOut]):
                     f"Timeline slice {edge} bound must be a timezone-aware datetime.\n"
                     f"Got naive datetime: {bound!r}\n"
                     f"Hint: Add timezone info:\n"
-                    f"  from zoneinfo import ZoneInfo\n"
-                    f"  dt = datetime(..., tzinfo=ZoneInfo('UTC'))  "
-                    f"# or 'US/Pacific', etc.\n"
-                    f"  # Or use timezone.utc for UTC:\n"
                     f"  dt = datetime(..., tzinfo=timezone.utc)"
                 )
             return int(bound.timestamp())
