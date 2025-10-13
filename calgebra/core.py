@@ -31,7 +31,10 @@ class Timeline(ABC, Generic[IvlOut]):
         if isinstance(bound, int):
             return bound
         raise TypeError(
-            f"Timeline slice {edge} bound must be an int or None, got {type(bound)!r}"
+            f"Timeline slice {edge} bound must be an int or None, got {type(bound).__name__!r}.\n"
+            f"Timelines use integer seconds (Unix timestamps) by default.\n"
+            f"Hint: Convert datetime to int with: int(dt.timestamp())\n"
+            f"Or override _coerce_bound() to accept custom types."
         )
 
     @overload
@@ -42,7 +45,12 @@ class Timeline(ABC, Generic[IvlOut]):
 
     def __or__(self, other: "Timeline[IvlOut] | Filter[Any]") -> "Timeline[IvlOut]":
         if isinstance(other, Filter):
-            raise ValueError("Cannot union a source with a filter")
+            raise TypeError(
+                f"Cannot union (|) a Timeline with a Filter.\n"
+                f"Got: Timeline | {type(other).__name__}\n"
+                f"Hint: Use & to apply filters: timeline & (hours >= 2)\n"
+                f"      Use | to combine timelines: timeline_a | timeline_b"
+            )
         return Union(self, other)
 
     @overload
@@ -82,7 +90,12 @@ class Filter(ABC, Generic[IvlIn]):
         self, other: "Filter[IvlIn] | Timeline[Any]"
     ) -> "Filter[IvlIn] | Timeline[Any]":
         if isinstance(other, Timeline):
-            raise ValueError("Cannot union a filter with a source")
+            raise TypeError(
+                f"Cannot union (|) a Filter with a Timeline.\n"
+                f"Got: {type(self).__name__} | Timeline\n"
+                f"Hint: Use & to apply filters: timeline & (hours >= 2)\n"
+                f"      Use | to combine filters: (hours >= 2) | (minutes < 30)"
+            )
         return Or(self, other)
 
     @overload
@@ -270,7 +283,12 @@ class Complement(Timeline[IvlOut]):
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
         if start is None or end is None:
-            raise ValueError("Complement requires finite start and end bounds")
+            raise ValueError(
+                f"Complement (~) requires finite bounds, got start={start}, end={end}.\n"
+                f"Complement inverts a timeline, which requires a bounded universe.\n"
+                f"Fix: Use explicit bounds when slicing: list((~timeline)[start:end])\n"
+                f"Example: list((~busy)[1704067200:1735689599])"
+            )
 
         def generate() -> Iterable[IvlOut]:
             cursor = start
@@ -304,7 +322,22 @@ class Complement(Timeline[IvlOut]):
 
 
 def flatten(timeline: "Timeline[Any]") -> "Timeline[Interval]":
-    """Return a timeline that yields coalesced intervals for the given source."""
+    """Return a timeline that yields coalesced intervals for the given source.
+
+    Merges overlapping and adjacent intervals into single continuous spans.
+    Useful before aggregations or when you need simplified coverage.
+
+    Implementation: Uses double complement (~(~timeline)) to merge intervals.
+    The first ~ produces gaps, the second ~ produces merged coverage.
+
+    Note: Returns plain Interval objects (custom metadata is lost).
+          Requires finite bounds when slicing: flatten(tl)[start:end]
+
+    Example:
+        >>> timeline = union(cal_a, cal_b)  # May have overlaps
+        >>> merged = flatten(timeline)
+        >>> coverage = list(merged[start:end])  # Non-overlapping intervals
+    """
 
     return ~(~timeline)
 
@@ -313,7 +346,10 @@ def union(*timelines: "Timeline[IvlOut]") -> "Timeline[IvlOut]":
     """Compose timelines with union semantics (equivalent to chaining `|`)."""
 
     if not timelines:
-        raise ValueError("union requires at least one timeline")
+        raise ValueError(
+            f"union() requires at least one timeline argument.\n"
+            f"Example: union(cal_a, cal_b, cal_c)"
+        )
 
     def reducer(acc: "Timeline[IvlOut]", nxt: "Timeline[IvlOut]"):
         return acc | nxt
@@ -327,7 +363,10 @@ def intersection(
     """Compose timelines with intersection semantics (equivalent to chaining `&`)."""
 
     if not timelines:
-        raise ValueError("intersection requires at least one timeline")
+        raise ValueError(
+            f"intersection() requires at least one timeline argument.\n"
+            f"Example: intersection(cal_a, cal_b, cal_c)"
+        )
 
     def reducer(acc: "Timeline[IvlOut]", nxt: "Timeline[IvlOut]"):
         return acc & nxt

@@ -161,7 +161,7 @@ def test_recurring_daily():
 
 def test_recurring_requires_finite_bounds():
     """Test that recurring requires finite bounds."""
-    with pytest.raises(ValueError, match="finite start and end bounds"):
+    with pytest.raises(ValueError, match="requires finite bounds"):
         list(recurring(freq="weekly", day="monday")[:100])
 
 

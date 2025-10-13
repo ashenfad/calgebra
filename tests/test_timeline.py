@@ -244,12 +244,12 @@ def test_property_inequality_operator() -> None:
 def test_union_with_filter_raises() -> None:
     timeline = DummyTimeline(Interval(start=0, end=5))
 
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError, match="Cannot union"):
         _ = timeline | (start >= 0)
 
 
 def test_filter_union_with_timeline_raises() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError, match="Cannot union"):
         _ = (start >= 0) | DummyTimeline(Interval(start=0, end=5))
 
 
