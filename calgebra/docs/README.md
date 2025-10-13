@@ -19,6 +19,7 @@ pip install -e .[google-calendar]
 ## Quick Start
 
 ```python
+from datetime import datetime, timezone
 from calgebra import day_of_week, time_of_day, hours, HOUR
 
 # Compose time windows from primitives
@@ -35,11 +36,13 @@ free = business_hours - busy
 # Filter: only slots >= 2 hours
 long_slots = free & (hours >= 2)
 
-# Fetch results with slice notation
-meeting_options = list(long_slots[start_second:end_second])
+# Fetch results with slice notation (supports int, datetime, or date)
+start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+end = datetime(2025, 12, 31, tzinfo=timezone.utc)
+meeting_options = list(long_slots[start:end])
 ```
 
-Intervals in `calgebra` are inclusive of both `start` and `end`—durations therefore reflect every second covered by an interval. Timeline slices accept integer seconds; timeline implementations can override `_coerce_bound` if they want to accept other time representations (for example, datetimes) and translate them internally. When you subclass `Interval`, define your subclass as a dataclass (ideally `frozen=True`) so the algebra can clone and clamp events internally.
+Intervals in `calgebra` are inclusive of both `start` and `end`—durations therefore reflect every second covered by an interval. Timeline slices accept integer seconds (Unix timestamps), timezone-aware datetime objects, or date objects. When you subclass `Interval`, define your subclass as a dataclass (ideally `frozen=True`) so the algebra can clone and clamp events internally.
 
 Common helpers and aggregates are exposed alongside the core DSL:
 

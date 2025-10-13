@@ -4,14 +4,16 @@
 
 ### `Timeline[IvlOut]`
 - `fetch(start, end)` → iterable of intervals within bounds (inclusive integer seconds)
-- `__getitem__(slice)` → shorthand for `fetch`
+- `__getitem__(slice)` → shorthand for `fetch`, accepts int, datetime, or date slice bounds
+  - Integer seconds (Unix timestamps): `timeline[1735689600:1767225600]`
+  - Timezone-aware datetime: `timeline[datetime(2025, 1, 1, tzinfo=timezone.utc):...]`
+  - Date objects: `timeline[date(2025, 1, 1):date(2025, 12, 31)]`
+  - Naive datetimes are rejected with TypeError
 - Set-like operators:
   - `timeline | other` → `Union`
   - `timeline & other` → `Intersection` or `Filtered`
   - `timeline - other` → `Difference`
   - `~timeline` → `Complement`
-- Extension hooks:
-  - `_coerce_bound(value, edge)` → hook for accepting non-integer slice values (default only accepts integers)
 
 ### `Filter[IvlIn]`
 - `apply(event)` → predicate on intervals

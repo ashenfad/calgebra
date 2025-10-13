@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, Literal, override
+from typing import Literal, override
 from zoneinfo import ZoneInfo
 
 from gcsa.google_calendar import GoogleCalendar
@@ -89,21 +89,6 @@ class Calendar(Timeline[Event]):
             client if client is not None else GoogleCalendar(calendar_id)
         )
         self._zone: ZoneInfo = ZoneInfo(timezone_name)
-
-    @override
-    def _coerce_bound(self, bound: Any, edge: Literal["start", "end"]) -> int | None:
-        if bound is None or isinstance(bound, int):
-            return bound
-        if isinstance(bound, (datetime, date)):
-            return _to_timestamp(bound, edge, self._zone)
-        raise TypeError(
-            f"Google Calendar timeline slices accept int, datetime, date, or None.\n"
-            f"Got {type(bound).__name__!r} for {edge} bound.\n"
-            f"Examples:\n"
-            f"  calendar[start_timestamp:end_timestamp]  # integers (Unix seconds)\n"
-            f"  calendar[datetime(2025,1,1):datetime(2025,12,31)]  # datetime objects\n"
-            f"  calendar[date(2025,1,1):date(2025,12,31)]  # date objects"
-        )
 
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[Event]:
