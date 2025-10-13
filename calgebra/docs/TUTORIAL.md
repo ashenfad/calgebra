@@ -180,6 +180,80 @@ meeting_slots = list(options[0:10000])
 
 If your timeline produces enriched interval subclasses, override `Timeline._make_complement_interval` so the complement operator keeps that metadata intact.
 
+## Built-in Time Windows
+
+calgebra includes timezone-aware helpers for common recurring patterns like business hours, weekdays, and weekends. These require no external dependencies and work seamlessly with the algebra.
+
+### Business Hours
+
+Generate weekday work hours (default 9am-5pm):
+
+```python
+from calgebra import business_hours
+
+# Standard 9-5 Pacific time
+workhours = business_hours(tz="US/Pacific")
+
+# Custom hours: 8am-6pm
+extended = business_hours(tz="UTC", start_hour=8, end_hour=18)
+
+# Find free time during work hours
+free = workhours - my_calendar
+free_slots = list(free[monday:friday])
+```
+
+### Weekdays and Weekends
+
+Filter events to specific days of the week:
+
+```python
+from calgebra import weekdays, weekends
+
+# Only show weekday events
+weekday_meetings = my_calendar & weekdays(tz="US/Eastern")
+
+# Weekend availability
+weekend_free = ~my_calendar & weekends(tz="UTC")
+
+# Results
+events = list(weekday_meetings[start:end])
+```
+
+### Combining Time Windows
+
+Time windows compose like any other timeline:
+
+```python
+from calgebra import business_hours, weekdays, hours
+
+# Only meetings during business hours
+work_meetings = my_calendar & business_hours(tz="US/Pacific")
+
+# Free time during work hours, at least 2 hours long
+candidate_slots = (
+    business_hours(tz="US/Pacific") 
+    - my_calendar 
+    & (hours >= 2)
+)
+
+# Get results
+slots = list(candidate_slots[monday:friday])
+```
+
+### Timezone Handling
+
+All time window helpers are timezone-aware:
+
+```python
+# Different timezones for different queries
+pacific_hours = business_hours(tz="US/Pacific")
+london_hours = business_hours(tz="Europe/London")
+
+# Find overlap between Pacific and London work hours
+overlap = pacific_hours & london_hours
+shared_hours = list(overlap[start:end])
+```
+
 ## Extending calgebra
 
 ### Custom Intervals

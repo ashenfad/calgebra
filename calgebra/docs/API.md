@@ -46,13 +46,35 @@
 - `count_intervals(timeline, start, end)` → number of events in slice
 - `coverage_ratio(timeline, start, end)` → fraction of window covered (`float`)
 
+## Time Windows (`calgebra.windows`)
+Built-in timezone-aware generators for common recurring patterns (zero dependencies):
+
+### `business_hours(tz="UTC", start_hour=9, end_hour=17)`
+- Returns a timeline of weekday work hours
+- `tz`: IANA timezone name (e.g., "US/Pacific", "Europe/London")
+- `start_hour`: inclusive hour (0-23), default 9
+- `end_hour`: exclusive hour (0-24), default 17 (ends at 16:59:59)
+- Example: `workhours = business_hours(tz="US/Pacific", start_hour=8, end_hour=18)`
+
+### `weekdays(tz="UTC")`
+- Returns a timeline of all Monday-Friday time (all hours)
+- Example: `weekday_events = my_calendar & weekdays(tz="US/Eastern")`
+
+### `weekends(tz="UTC")`
+- Returns a timeline of all Saturday-Sunday time (all hours)
+- Example: `weekend_free = ~my_calendar & weekends(tz="UTC")`
+
+**Note:** All time window functions require finite bounds when slicing (e.g., `timeline[start:end]`).
+
 ## Module Exports (`calgebra.__init__`)
 - `Interval`, `Timeline`, `Filter`, `Property`
 - Properties and helpers: `start`, `end`, `seconds`, `minutes`, `hours`, `days`, `one_of`
 - Metrics: `total_duration`, `max_duration`, `min_duration`, `count_intervals`, `coverage_ratio`
 - Utils: `flatten`, `union`, `intersection`
+- Time windows: `business_hours`, `weekdays`, `weekends`
 
 ## Notes
 - All intervals are inclusive; durations use `end - start + 1`.
 - Complement and flatten require finite bounds when slicing.
 - Aggregation helpers clamp to query bounds but preserve metadata via `dataclasses.replace`.
+- Time window helpers are timezone-aware and use stdlib `zoneinfo`.

@@ -10,6 +10,7 @@ from .metrics import (
     total_duration,
 )
 from .properties import Property, days, end, hours, minutes, one_of, seconds, start
+from .windows import business_hours, weekdays, weekends
 
 # Load documentation files for programmatic access by agents and code-aware tools
 _docs_path = files(__package__) / "docs"
@@ -39,5 +40,8 @@ __all__ = [
     "min_duration",
     "count_intervals",
     "coverage_ratio",
+    "business_hours",
+    "weekdays",
+    "weekends",
     "docs",
 ]
