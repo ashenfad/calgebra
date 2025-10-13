@@ -19,16 +19,18 @@ pip install -e .[google-calendar]
 ## Quick Start
 
 ```python
-from calgebra import business_hours, hours
+from calgebra import day_of_week, time_of_day, hours, flatten
 
-# Built-in time windows (weekdays, weekends, business hours)
-workhours = business_hours(tz="US/Pacific")
+# Compose time windows from primitives
+weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
+work_hours = time_of_day(start_hour=9, duration_hours=8, tz="US/Pacific")
+business_hours = flatten(weekdays & work_hours)
 
 # Union: combine multiple calendars
 busy = alice_calendar | bob_calendar | charlie_calendar
 
 # Difference: find free time during business hours
-free = workhours - busy
+free = business_hours - busy
 
 # Filter: only slots >= 2 hours
 long_slots = free & (hours >= 2)
@@ -42,9 +44,9 @@ Intervals in `calgebra` are inclusive of both `start` and `end`—durations ther
 Common helpers and aggregates are exposed alongside the core DSL:
 
 **Time Windows** (built-in, zero dependencies):
-- `business_hours(tz, start_hour, end_hour)` generates weekday work hours (default 9am-5pm)
-- `weekdays(tz)` generates all Monday-Friday time
-- `weekends(tz)` generates all Saturday-Sunday time
+- `day_of_week(days, tz)` filters by day(s) of week ("monday", ["tuesday", "thursday"], etc.)
+- `time_of_day(start_hour, duration_hours, tz)` filters by time window (supports fractional hours)
+- Compose with `&` to create patterns like business hours, recurring meetings, etc.
 
 **Aggregation & Analysis**:
 - `flatten(timeline)` converts overlapping/adjacent spans into a coalesced timeline (returns plain `Interval`s and must be sliced with explicit bounds)

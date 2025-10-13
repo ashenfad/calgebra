@@ -182,62 +182,109 @@ If your timeline produces enriched interval subclasses, override `Timeline._make
 
 ## Built-in Time Windows
 
-calgebra includes timezone-aware helpers for common recurring patterns like business hours, weekdays, and weekends. These require no external dependencies and work seamlessly with the algebra.
+calgebra provides two composable primitives for building time-based filters. These require no external dependencies and work seamlessly with the algebra.
 
-### Business Hours
+### The Two Primitives
 
-Generate weekday work hours (default 9am-5pm):
+**`day_of_week(days, tz)`** - Filter by day(s) of the week  
+**`time_of_day(start_hour, duration_hours, tz)`** - Filter by time window
+
+### Basic Usage
 
 ```python
-from calgebra import business_hours
+from calgebra import day_of_week, time_of_day
 
-# Standard 9-5 Pacific time
-workhours = business_hours(tz="US/Pacific")
+# All Mondays
+mondays = day_of_week("monday", tz="US/Pacific")
 
-# Custom hours: 8am-6pm
-extended = business_hours(tz="UTC", start_hour=8, end_hour=18)
+# Weekdays (Monday-Friday)
+weekdays = day_of_week(
+    ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    tz="US/Pacific"
+)
+
+# Weekends
+weekends = day_of_week(["saturday", "sunday"], tz="UTC")
+
+# 9am-5pm every day (8 hour duration)
+daytime = time_of_day(start_hour=9, duration_hours=8, tz="UTC")
+
+# 9:30am-10am (fractional hours for 30 minutes)
+standup_time = time_of_day(start_hour=9.5, duration_hours=0.5, tz="US/Pacific")
+```
+
+### Composing: Business Hours
+
+Combine day-of-week and time-of-day to create business hours:
+
+```python
+from calgebra import day_of_week, time_of_day, flatten
+
+# Business hours = weekdays AND 9-5
+weekdays = day_of_week(
+    ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    tz="US/Pacific"
+)
+work_hours = time_of_day(start_hour=9, duration_hours=8, tz="US/Pacific")
+
+# Flatten to coalesce (intersection yields one interval per source)
+business_hours = flatten(weekdays & work_hours)
 
 # Find free time during work hours
-free = workhours - my_calendar
+free = business_hours - my_calendar
 free_slots = list(free[monday:friday])
 ```
 
-### Weekdays and Weekends
+### Composing: Recurring Meetings
 
-Filter events to specific days of the week:
+Create specific recurring meeting patterns:
 
 ```python
-from calgebra import weekdays, weekends
+from calgebra import day_of_week, time_of_day, flatten
 
-# Only show weekday events
-weekday_meetings = my_calendar & weekdays(tz="US/Eastern")
+# Monday standup: every Monday at 9:30am for 30 minutes
+mondays = day_of_week("monday", tz="US/Pacific")
+standup_time = time_of_day(start_hour=9.5, duration_hours=0.5, tz="US/Pacific")
+monday_standup = flatten(mondays & standup_time)
 
-# Weekend availability
-weekend_free = ~my_calendar & weekends(tz="UTC")
+# Tuesday/Thursday office hours: 2-4pm
+tue_thu = day_of_week(["tuesday", "thursday"], tz="US/Pacific")
+afternoon = time_of_day(start_hour=14, duration_hours=2, tz="US/Pacific")
+office_hours = flatten(tue_thu & afternoon)
 
-# Results
-events = list(weekday_meetings[start:end])
+# Find conflicts
+conflicts = my_calendar & monday_standup
 ```
 
-### Combining Time Windows
+### Finding Best Meeting Times
 
-Time windows compose like any other timeline:
+Use composition to evaluate candidate meeting times:
 
 ```python
-from calgebra import business_hours, weekdays, hours
+from calgebra import day_of_week, time_of_day, flatten
+from calgebra.metrics import total_duration
 
-# Only meetings during business hours
-work_meetings = my_calendar & business_hours(tz="US/Pacific")
+# Team busy time
+team_busy = flatten(alice_cal | bob_cal | charlie_cal)
 
-# Free time during work hours, at least 2 hours long
-candidate_slots = (
-    business_hours(tz="US/Pacific") 
-    - my_calendar 
-    & (hours >= 2)
-)
+# Candidate standup times
+candidates = {
+    "Mon 9am": flatten(
+        day_of_week("monday") & time_of_day(start_hour=9, duration_hours=0.5)
+    ),
+    "Tue 10am": flatten(
+        day_of_week("tuesday") & time_of_day(start_hour=10, duration_hours=0.5)
+    ),
+    "Wed 2pm": flatten(
+        day_of_week("wednesday") & time_of_day(start_hour=14, duration_hours=0.5)
+    ),
+}
 
-# Get results
-slots = list(candidate_slots[monday:friday])
+# Find option with least conflicts
+for name, option in candidates.items():
+    conflicts = option & team_busy
+    conflict_time = total_duration(conflicts, q_start, q_end)
+    print(f"{name}: {conflict_time}s of conflicts")
 ```
 
 ### Timezone Handling
@@ -246,11 +293,17 @@ All time window helpers are timezone-aware:
 
 ```python
 # Different timezones for different queries
-pacific_hours = business_hours(tz="US/Pacific")
-london_hours = business_hours(tz="Europe/London")
+pacific_hours = flatten(
+    day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"], tz="US/Pacific")
+    & time_of_day(start_hour=9, duration_hours=8, tz="US/Pacific")
+)
+london_hours = flatten(
+    day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"], tz="Europe/London")
+    & time_of_day(start_hour=9, duration_hours=8, tz="Europe/London")
+)
 
 # Find overlap between Pacific and London work hours
-overlap = pacific_hours & london_hours
+overlap = flatten(pacific_hours & london_hours)
 shared_hours = list(overlap[start:end])
 ```
 
