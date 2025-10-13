@@ -51,7 +51,7 @@ Common helpers and aggregates are exposed alongside the core DSL:
 - Compose with `&` to create complex patterns like business hours, recurring meetings, etc.
 
 **Aggregation & Analysis**:
-- `flatten(timeline)` converts overlapping/adjacent spans into a coalesced timeline (returns plain `Interval`s and must be sliced with explicit bounds)
+- `flatten(timeline)` converts overlapping/adjacent spans into a coalesced timeline (returns mask `Interval`s and must be sliced with explicit bounds)
 - `union(*timelines)` / `intersection(*timelines)` offer functional set operations
 - `total_duration` sums inclusive coverage inside a window
 - `max_duration` / `min_duration` find the longest or shortest clamped intervals

@@ -57,8 +57,8 @@ class RecurringTimeline(Timeline[Interval]):
 
     @property
     @override
-    def _is_plain(self) -> bool:
-        """RecurringTimeline always yields plain Interval objects."""
+    def _is_mask(self) -> bool:
+        """RecurringTimeline always yields mask Interval objects."""
         return True
 
     def __init__(

@@ -171,8 +171,8 @@ def test_complement_returns_gaps() -> None:
     ]
 
 
-def test_complement_yields_plain_intervals() -> None:
-    """Complement always yields plain Intervals, even when source has metadata."""
+def test_complement_yields_mask_intervals() -> None:
+    """Complement always yields mask Intervals, even when source has metadata."""
     timeline = DummyTimeline(
         LabeledInterval(start=10, end=12, label="focus"),
         LabeledInterval(start=15, end=17, label="focus"),
@@ -180,13 +180,13 @@ def test_complement_yields_plain_intervals() -> None:
 
     complement = list((~timeline)[10:20])
 
-    # Gaps are plain Intervals (not LabeledIntervals)
+    # Gaps are mask Intervals (not LabeledIntervals)
     assert complement == [
         Interval(start=13, end=14),
         Interval(start=18, end=20),
     ]
 
-    # Verify they're actually plain Interval objects
+    # Verify they're actually mask Interval objects
     assert all(type(gap) == Interval for gap in complement)
 
 

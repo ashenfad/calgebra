@@ -21,7 +21,7 @@
   - `filter & timeline` → filtered timeline
 
 ### `flatten(timeline)`
-- Returns a coalesced timeline by complementing twice. Useful before aggregations or rendering availability. Emits plain `Interval`s and requires slicing with finite bounds (e.g. `flattened[start:end]`).
+- Returns a coalesced timeline by complementing twice. Useful before aggregations or rendering availability. Emits mask `Interval`s and requires slicing with finite bounds (e.g. `flattened[start:end]`).
 
 ### `union(*timelines)` / `intersection(*timelines)`
 - Functional counterparts to chaining `|` / `&`; require at least one operand and preserve overlaps. `intersection` emits one interval per source for each overlap; use `flatten` if you want single coalesced spans.
