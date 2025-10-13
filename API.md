@@ -47,31 +47,57 @@
 - `coverage_ratio(timeline, start, end)` → fraction of window covered (`float`)
 
 ## Time Windows (`calgebra.windows`)
-Built-in timezone-aware generators for common recurring patterns (zero dependencies):
+Built-in timezone-aware generators using two composable primitives (zero dependencies):
 
-### `business_hours(tz="UTC", start_hour=9, end_hour=17)`
-- Returns a timeline of weekday work hours
+### `day_of_week(days, tz="UTC")`
+- Returns a timeline for specific day(s) of the week (all hours)
+- `days`: Single day name or list of day names (case-insensitive)
+  - Valid: "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
 - `tz`: IANA timezone name (e.g., "US/Pacific", "Europe/London")
-- `start_hour`: inclusive hour (0-23), default 9
-- `end_hour`: exclusive hour (0-24), default 17 (ends at 16:59:59)
-- Example: `workhours = business_hours(tz="US/Pacific", start_hour=8, end_hour=18)`
+- Examples:
+  ```python
+  mondays = day_of_week("monday", tz="US/Pacific")
+  weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
+  weekends = day_of_week(["saturday", "sunday"], tz="UTC")
+  ```
 
-### `weekdays(tz="UTC")`
-- Returns a timeline of all Monday-Friday time (all hours)
-- Example: `weekday_events = my_calendar & weekdays(tz="US/Eastern")`
+### `time_of_day(start_hour=0, duration_hours=24, tz="UTC")`
+- Returns a timeline for a specific time window each day (all days)
+- `start_hour`: Start hour (0-24), supports fractional hours (e.g., 9.5 = 9:30am)
+- `duration_hours`: Duration in hours (supports fractional hours)
+- `tz`: IANA timezone name
+- Examples:
+  ```python
+  work_hours = time_of_day(start_hour=9, duration_hours=8, tz="US/Pacific")  # 9am-5pm
+  standup = time_of_day(start_hour=9.5, duration_hours=0.5, tz="UTC")  # 9:30am-10am
+  ```
 
-### `weekends(tz="UTC")`
-- Returns a timeline of all Saturday-Sunday time (all hours)
-- Example: `weekend_free = ~my_calendar & weekends(tz="UTC")`
+### Composing Time Windows
+Combine primitives with `&` to create complex patterns:
 
-**Note:** All time window functions require finite bounds when slicing (e.g., `timeline[start:end]`).
+```python
+from calgebra import day_of_week, time_of_day, flatten
+
+# Business hours = weekdays & 9-5 (flatten to coalesce)
+business_hours = flatten(
+    day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
+    & time_of_day(start_hour=9, duration_hours=8, tz="US/Pacific")
+)
+
+# Monday standup = Mondays & 9:30-10am
+monday_standup = flatten(
+    day_of_week("monday") & time_of_day(start_hour=9.5, duration_hours=0.5)
+)
+```
+
+**Note:** Time windows require finite bounds when slicing. Intersection yields one interval per source, so use `flatten` to coalesce results.
 
 ## Module Exports (`calgebra.__init__`)
 - `Interval`, `Timeline`, `Filter`, `Property`
 - Properties and helpers: `start`, `end`, `seconds`, `minutes`, `hours`, `days`, `one_of`
 - Metrics: `total_duration`, `max_duration`, `min_duration`, `count_intervals`, `coverage_ratio`
 - Utils: `flatten`, `union`, `intersection`
-- Time windows: `business_hours`, `weekdays`, `weekends`
+- Time windows: `day_of_week`, `time_of_day`
 
 ## Notes
 - All intervals are inclusive; durations use `end - start + 1`.

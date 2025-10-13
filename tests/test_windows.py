@@ -1,237 +1,223 @@
 """Tests for built-in time window generators."""
 
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 
 import pytest
 
-from calgebra import Interval, business_hours, weekdays, weekends
+from calgebra import Interval, day_of_week, time_of_day
 
 
-def test_weekdays_generates_monday_through_friday():
-    """Test that weekdays only generates Mon-Fri."""
+def test_day_of_week_single_day():
+    """Test generating intervals for a single day of the week."""
     # Week of Jan 6-12, 2025 (Mon-Sun in UTC)
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     sunday = int(datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp())
 
-    days = list(weekdays(tz="UTC")[monday:sunday])
+    mondays = list(day_of_week("monday", tz="UTC")[monday:sunday])
 
-    # Should get 5 days (Mon-Fri)
-    assert len(days) == 5
+    # Should get 1 day (just Monday)
+    assert len(mondays) == 1
 
-    # Check first day is Monday, full day
     monday_start = monday
     monday_end = int(datetime(2025, 1, 6, 23, 59, 59, tzinfo=timezone.utc).timestamp())
-    assert days[0] == Interval(start=monday_start, end=monday_end)
-
-    # Check last day is Friday
-    friday_start = int(datetime(2025, 1, 10, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    friday_end = int(datetime(2025, 1, 10, 23, 59, 59, tzinfo=timezone.utc).timestamp())
-    assert days[4] == Interval(start=friday_start, end=friday_end)
+    assert mondays[0] == Interval(start=monday_start, end=monday_end)
 
 
-def test_weekdays_respects_timezone():
-    """Test that weekdays correctly handles timezone conversions."""
+def test_day_of_week_multiple_days():
+    """Test generating intervals for multiple days of the week."""
+    monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    sunday = int(datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+
+    # Weekdays (Mon-Fri)
+    weekdays = day_of_week(
+        ["monday", "tuesday", "wednesday", "thursday", "friday"], tz="UTC"
+    )
+    days = list(weekdays[monday:sunday])
+
+    assert len(days) == 5
+
+
+def test_day_of_week_case_insensitive():
+    """Test that day names are case-insensitive."""
+    monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    tuesday = int(datetime(2025, 1, 7, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+
+    mondays_lower = list(day_of_week("monday")[monday:tuesday])
+    mondays_upper = list(day_of_week("MONDAY")[monday:tuesday])
+    mondays_mixed = list(day_of_week("Monday")[monday:tuesday])
+
+    assert mondays_lower == mondays_upper == mondays_mixed
+
+
+def test_day_of_week_invalid_day():
+    """Test that invalid day names raise ValueError."""
+    with pytest.raises(ValueError, match="Invalid day"):
+        day_of_week("notaday")
+
+
+def test_day_of_week_respects_timezone():
+    """Test that day_of_week correctly handles timezone conversions."""
     # Jan 6, 2025 00:00 UTC is Jan 5, 2025 16:00 Pacific (Sunday)
-    # So Pacific weekdays should start later
     utc_monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     one_day_later = utc_monday + 86400
 
-    utc_days = list(weekdays(tz="UTC")[utc_monday:one_day_later])
-    pacific_days = list(weekdays(tz="US/Pacific")[utc_monday:one_day_later])
+    utc_mondays = list(day_of_week("monday", tz="UTC")[utc_monday:one_day_later])
+    pacific_mondays = list(
+        day_of_week("monday", tz="US/Pacific")[utc_monday:one_day_later]
+    )
 
-    # UTC should include Monday 00:00
-    assert len(utc_days) == 2  # Monday and Tuesday
-    assert utc_days[0].start == utc_monday
+    # UTC should include Monday only (one full day)
+    assert len(utc_mondays) == 1
 
     # Pacific Monday starts at UTC 08:00 (midnight Pacific)
     pacific_monday_start = int(
         datetime(2025, 1, 6, 8, 0, 0, tzinfo=timezone.utc).timestamp()
     )
-    assert pacific_days[0].start == pacific_monday_start
+    assert pacific_mondays[0].start == pacific_monday_start
 
 
-def test_weekdays_clamps_to_query_bounds():
-    """Test that weekdays clamps intervals to query range."""
-    # Mid-day Monday to mid-day Wednesday
-    monday_noon = int(datetime(2025, 1, 6, 12, 0, 0, tzinfo=timezone.utc).timestamp())
-    wednesday_noon = int(
-        datetime(2025, 1, 8, 12, 0, 0, tzinfo=timezone.utc).timestamp()
-    )
-
-    days = list(weekdays(tz="UTC")[monday_noon:wednesday_noon])
-
-    # Should get 3 partial/full days
-    assert len(days) == 3
-
-    # First interval should start at query start (Monday noon)
-    assert days[0].start == monday_noon
-
-    # Last interval should end at query end (Wednesday noon)
-    assert days[2].end == wednesday_noon
-
-
-def test_weekdays_requires_finite_bounds():
-    """Test that weekdays raises error for unbounded queries."""
+def test_day_of_week_requires_finite_bounds():
+    """Test that day_of_week raises error for unbounded queries."""
     with pytest.raises(ValueError, match="finite start and end bounds"):
-        list(weekdays()[:100])
-
-    with pytest.raises(ValueError, match="finite start and end bounds"):
-        list(weekdays()[0:])
+        list(day_of_week("monday")[:100])
 
 
-def test_weekends_generates_saturday_and_sunday():
-    """Test that weekends only generates Sat-Sun."""
-    # Week of Jan 6-12, 2025 (Mon-Sun in UTC)
+def test_time_of_day_full_day():
+    """Test time_of_day with default full day."""
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    sunday = int(datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+    tuesday = int(datetime(2025, 1, 7, 23, 59, 59, tzinfo=timezone.utc).timestamp())
 
-    days = list(weekends(tz="UTC")[monday:sunday])
+    # Default is all 24 hours
+    all_day = list(time_of_day(tz="UTC")[monday:tuesday])
 
-    # Should get 2 days (Sat-Sun)
-    assert len(days) == 2
-
-    # Check first day is Saturday
-    saturday_start = int(
-        datetime(2025, 1, 11, 0, 0, 0, tzinfo=timezone.utc).timestamp()
-    )
-    saturday_end = int(
-        datetime(2025, 1, 11, 23, 59, 59, tzinfo=timezone.utc).timestamp()
-    )
-    assert days[0] == Interval(start=saturday_start, end=saturday_end)
-
-    # Check second day is Sunday
-    sunday_start = int(datetime(2025, 1, 12, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    assert days[1].start == sunday_start
+    # Should get 2 full days
+    assert len(all_day) == 2
 
 
-def test_weekends_requires_finite_bounds():
-    """Test that weekends raises error for unbounded queries."""
-    with pytest.raises(ValueError, match="finite start and end bounds"):
-        list(weekends()[:100])
-
-
-def test_business_hours_default_9_to_5():
-    """Test that business_hours defaults to 9am-5pm weekdays."""
-    # Monday Jan 6, 2025
-    monday_start = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+def test_time_of_day_specific_hours():
+    """Test time_of_day with specific hour range."""
+    monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     monday_end = int(datetime(2025, 1, 6, 23, 59, 59, tzinfo=timezone.utc).timestamp())
 
-    hours = list(business_hours(tz="UTC")[monday_start:monday_end])
+    # 9am-5pm (8 hours)
+    work_hours = list(
+        time_of_day(start_hour=9, duration_hours=8, tz="UTC")[monday:monday_end]
+    )
 
-    # Should get one interval (9am-5pm Monday)
-    assert len(hours) == 1
+    assert len(work_hours) == 1
 
     expected_start = int(datetime(2025, 1, 6, 9, 0, 0, tzinfo=timezone.utc).timestamp())
     expected_end = int(
         datetime(2025, 1, 6, 16, 59, 59, tzinfo=timezone.utc).timestamp()
     )
 
-    assert hours[0] == Interval(start=expected_start, end=expected_end)
+    assert work_hours[0] == Interval(start=expected_start, end=expected_end)
 
 
-def test_business_hours_custom_hours():
-    """Test business_hours with custom start and end hours."""
-    # Monday Jan 6, 2025
-    monday_start = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+def test_time_of_day_fractional_hours():
+    """Test time_of_day with fractional hours."""
+    monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     monday_end = int(datetime(2025, 1, 6, 23, 59, 59, tzinfo=timezone.utc).timestamp())
 
-    # 8am-6pm
-    hours = list(
-        business_hours(tz="UTC", start_hour=8, end_hour=18)[monday_start:monday_end]
+    # 9:30am-10am (30 minutes = 0.5 hours)
+    standup = list(
+        time_of_day(start_hour=9.5, duration_hours=0.5, tz="UTC")[monday:monday_end]
     )
 
-    expected_start = int(datetime(2025, 1, 6, 8, 0, 0, tzinfo=timezone.utc).timestamp())
+    assert len(standup) == 1
+
+    expected_start = int(
+        datetime(2025, 1, 6, 9, 30, 0, tzinfo=timezone.utc).timestamp()
+    )
+    expected_end = int(datetime(2025, 1, 6, 9, 59, 59, tzinfo=timezone.utc).timestamp())
+
+    assert standup[0] == Interval(start=expected_start, end=expected_end)
+
+
+def test_time_of_day_validates_parameters():
+    """Test that time_of_day validates hour parameters."""
+    with pytest.raises(ValueError, match="start_hour must be 0-24"):
+        time_of_day(start_hour=-1)
+
+    with pytest.raises(ValueError, match="start_hour must be 0-24"):
+        time_of_day(start_hour=25)
+
+    with pytest.raises(ValueError, match="duration_hours must be positive"):
+        time_of_day(duration_hours=0)
+
+    with pytest.raises(ValueError, match="duration_hours must be positive"):
+        time_of_day(duration_hours=-1)
+
+    with pytest.raises(ValueError, match="exceeds 24 hours"):
+        time_of_day(start_hour=20, duration_hours=5)
+
+
+def test_time_of_day_requires_finite_bounds():
+    """Test that time_of_day raises error for unbounded queries."""
+    with pytest.raises(ValueError, match="finite start and end bounds"):
+        list(time_of_day()[:100])
+
+
+def test_composition_business_hours():
+    """Test composing day_of_week and time_of_day for business hours."""
+    from calgebra import flatten
+
+    monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    sunday = int(datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+
+    # Business hours = weekdays & 9-5
+    weekdays = day_of_week(
+        ["monday", "tuesday", "wednesday", "thursday", "friday"], tz="UTC"
+    )
+    work_hours = time_of_day(start_hour=9, duration_hours=8, tz="UTC")
+
+    # Intersection yields one interval per source, so flatten to get coalesced results
+    business_hours = flatten(weekdays & work_hours)
+
+    hours = list(business_hours[monday:sunday])
+
+    # Should get 5 days (Mon-Fri), each with 9-5 window
+    assert len(hours) == 5
+
+    # Check first day is Monday 9-5
+    expected_start = int(datetime(2025, 1, 6, 9, 0, 0, tzinfo=timezone.utc).timestamp())
     expected_end = int(
-        datetime(2025, 1, 6, 17, 59, 59, tzinfo=timezone.utc).timestamp()
+        datetime(2025, 1, 6, 16, 59, 59, tzinfo=timezone.utc).timestamp()
     )
-
     assert hours[0] == Interval(start=expected_start, end=expected_end)
 
 
-def test_business_hours_only_weekdays():
-    """Test that business_hours excludes weekends."""
-    # Friday through Monday (Jan 10-13, 2025)
-    friday = int(datetime(2025, 1, 10, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    monday = int(datetime(2025, 1, 13, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+def test_composition_recurring_meeting():
+    """Test composing for a specific recurring meeting time."""
+    from calgebra import flatten
 
-    hours = list(business_hours(tz="UTC")[friday:monday])
+    monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    next_month = int(datetime(2025, 2, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
-    # Should get 2 intervals (Friday and Monday, no Sat/Sun)
-    assert len(hours) == 2
+    # Monday standup: every Monday at 9:30am for 30 min
+    mondays = day_of_week("monday", tz="UTC")
+    standup_time = time_of_day(start_hour=9.5, duration_hours=0.5, tz="UTC")
 
+    # Flatten to get single intervals (intersection yields one per source)
+    monday_standup = flatten(mondays & standup_time)
 
-def test_business_hours_respects_timezone():
-    """Test that business_hours handles timezone conversions."""
-    # Query in UTC, but business hours in Pacific
-    utc_start = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    utc_end = int(datetime(2025, 1, 6, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+    standups = list(monday_standup[monday:next_month])
 
-    pacific_hours = list(business_hours(tz="US/Pacific")[utc_start:utc_end])
+    # Should get ~5 Mondays in a month
+    assert 4 <= len(standups) <= 5
 
-    # Pacific 9am-5pm on Jan 6 is UTC 17:00-01:00 (next day)
-    # So query should catch the 17:00-23:59 portion on Jan 6
-    assert len(pacific_hours) == 1
-
-    # Should start at Pacific 9am = UTC 17:00 on Jan 6
-    expected_start = int(
-        datetime(2025, 1, 6, 17, 0, 0, tzinfo=timezone.utc).timestamp()
-    )
-    assert pacific_hours[0].start == expected_start
+    # Each should be 9:30-10am
+    for standup in standups:
+        duration = standup.end - standup.start + 1
+        assert duration == 1800  # 30 minutes
 
 
-def test_business_hours_clamps_to_query_bounds():
-    """Test that business_hours clamps intervals to query range."""
-    # Query from 10am-3pm on Monday
-    start = int(datetime(2025, 1, 6, 10, 0, 0, tzinfo=timezone.utc).timestamp())
-    end = int(datetime(2025, 1, 6, 15, 0, 0, tzinfo=timezone.utc).timestamp())
-
-    hours = list(business_hours(tz="UTC")[start:end])
-
-    # Should get one clamped interval
-    assert len(hours) == 1
-    assert hours[0].start == start
-    assert hours[0].end == end
-
-
-def test_business_hours_validates_hour_range():
-    """Test that business_hours validates hour parameters."""
-    with pytest.raises(ValueError, match="start_hour must be 0-23"):
-        business_hours(start_hour=-1)
-
-    with pytest.raises(ValueError, match="start_hour must be 0-23"):
-        business_hours(start_hour=24)
-
-    with pytest.raises(ValueError, match="end_hour must be 0-24"):
-        business_hours(end_hour=-1)
-
-    with pytest.raises(ValueError, match="end_hour must be 0-24"):
-        business_hours(end_hour=25)
-
-    with pytest.raises(ValueError, match="start_hour must be less than end_hour"):
-        business_hours(start_hour=17, end_hour=9)
-
-    with pytest.raises(ValueError, match="start_hour must be less than end_hour"):
-        business_hours(start_hour=9, end_hour=9)
-
-
-def test_business_hours_requires_finite_bounds():
-    """Test that business_hours raises error for unbounded queries."""
-    with pytest.raises(ValueError, match="finite start and end bounds"):
-        list(business_hours()[:100])
-
-
-def test_windows_compose_with_algebra():
-    """Test that time windows compose with other timeline operations."""
-    # Create a simple busy timeline
-    monday_meeting = Interval(
-        start=int(datetime(2025, 1, 6, 10, 0, 0, tzinfo=timezone.utc).timestamp()),
-        end=int(datetime(2025, 1, 6, 11, 0, 0, tzinfo=timezone.utc).timestamp()),
-    )
-
+def test_composition_with_calendar():
+    """Test composing time windows with calendar operations."""
     from collections.abc import Iterable
     from typing import override
 
+    from calgebra import flatten
     from calgebra.core import Timeline
 
     class SimpleTimeline(Timeline[Interval]):
@@ -247,48 +233,42 @@ def test_windows_compose_with_algebra():
                     break
                 yield event
 
-    busy = SimpleTimeline(monday_meeting)
-
-    # Find free time during business hours on Monday
-    monday_start = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    # Monday with a 10am-11am meeting
+    monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     monday_end = int(datetime(2025, 1, 6, 23, 59, 59, tzinfo=timezone.utc).timestamp())
 
-    free = business_hours(tz="UTC") - busy
-    free_times = list(free[monday_start:monday_end])
+    meeting = Interval(
+        start=int(datetime(2025, 1, 6, 10, 0, 0, tzinfo=timezone.utc).timestamp()),
+        end=int(datetime(2025, 1, 6, 11, 0, 0, tzinfo=timezone.utc).timestamp()),
+    )
+    busy = SimpleTimeline(meeting)
+
+    # Find free time during business hours
+    weekdays = day_of_week(["monday"], tz="UTC")
+    work_hours = time_of_day(start_hour=9, duration_hours=8, tz="UTC")
+
+    # Flatten the intersection to get single intervals
+    business_hours = flatten(weekdays & work_hours)
+
+    free = business_hours - busy
+    free_times = list(free[monday:monday_end])
 
     # Should have free time before (9-10) and after (11-17) the meeting
     assert len(free_times) == 2
 
-    # First slot: 9am-10am
-    assert free_times[0].start == int(
-        datetime(2025, 1, 6, 9, 0, 0, tzinfo=timezone.utc).timestamp()
+
+def test_weekend_pattern():
+    """Test creating weekend pattern with day_of_week."""
+    monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    sunday = int(datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+
+    weekends = day_of_week(["saturday", "sunday"], tz="UTC")
+    days = list(weekends[monday:sunday])
+
+    # Should get 2 days (Sat-Sun)
+    assert len(days) == 2
+
+    saturday_start = int(
+        datetime(2025, 1, 11, 0, 0, 0, tzinfo=timezone.utc).timestamp()
     )
-    assert free_times[0].end == int(
-        datetime(2025, 1, 6, 9, 59, 59, tzinfo=timezone.utc).timestamp()
-    )
-
-    # Second slot: 11am-5pm
-    assert free_times[1].start == int(
-        datetime(2025, 1, 6, 11, 0, 1, tzinfo=timezone.utc).timestamp()
-    )
-    assert free_times[1].end == int(
-        datetime(2025, 1, 6, 16, 59, 59, tzinfo=timezone.utc).timestamp()
-    )
-
-
-def test_weekdays_and_weekends_are_complementary():
-    """Test that weekdays and weekends cover all time without overlap."""
-    from calgebra import flatten
-
-    # One week
-    week_start = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    week_end = int(datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp())
-
-    # Union should cover the whole week
-    all_time = flatten(weekdays(tz="UTC") | weekends(tz="UTC"))
-    coverage = list(all_time[week_start:week_end])
-
-    # Should be a single continuous interval covering the whole week
-    assert len(coverage) == 1
-    assert coverage[0].start == week_start
-    assert coverage[0].end == week_end
+    assert days[0].start == saturday_start
