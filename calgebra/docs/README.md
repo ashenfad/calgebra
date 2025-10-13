@@ -19,12 +19,12 @@ pip install -e .[google-calendar]
 ## Quick Start
 
 ```python
-from calgebra import day_of_week, time_of_day, hours, flatten, HOUR
+from calgebra import day_of_week, time_of_day, hours, HOUR
 
 # Compose time windows from primitives
 weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
 work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
-business_hours = flatten(weekdays & work_hours)
+business_hours = weekdays & work_hours
 
 # Union: combine multiple calendars
 busy = alice_calendar | bob_calendar | charlie_calendar
@@ -52,7 +52,7 @@ Common helpers and aggregates are exposed alongside the core DSL:
 
 **Aggregation & Analysis**:
 - `flatten(timeline)` converts overlapping/adjacent spans into a coalesced timeline (returns plain `Interval`s and must be sliced with explicit bounds)
-- `union(*timelines)` / `intersection(*timelines)` offer functional set operations (intersection yields a trimmed copy from each source, so call `flatten(...)` if you need coalesced spans)
+- `union(*timelines)` / `intersection(*timelines)` offer functional set operations
 - `total_duration` sums inclusive coverage inside a window
 - `max_duration` / `min_duration` find the longest or shortest clamped intervals
 - `count_intervals` tallies events over a slice

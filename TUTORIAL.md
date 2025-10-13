@@ -92,6 +92,8 @@ both_busy = calendar_a & calendar_b
 overlaps = list(both_busy[start:end])
 ```
 
+**Note**: Intersection behavior is smart about when to yield multiple intervals per overlap vs. a single coalesced interval, based on whether the timelines contain metadata. See [Auto-Flattening and When to Use `flatten()`](#auto-flattening-and-when-to-use-flatten) for details.
+
 ### Difference: `-` (SUBTRACT)
 
 Remove intervals from a timeline:
@@ -178,7 +180,7 @@ options = free & (hours >= 1)
 meeting_slots = list(options[0:10000])
 ```
 
-If your timeline produces enriched interval subclasses, override `Timeline._make_complement_interval` so the complement operator keeps that metadata intact.
+**Note**: Complement (`~`) always yields plain `Interval` objects representing gaps, regardless of the source timeline's interval type. Gaps are the absence of events and have no metadata.
 
 ## Recurring Patterns
 
@@ -220,7 +222,7 @@ standup_time = time_of_day(start=9*HOUR + 30*MINUTE, duration=30*MINUTE, tz="US/
 Combine day-of-week and time-of-day to create business hours:
 
 ```python
-from calgebra import day_of_week, time_of_day, flatten, HOUR
+from calgebra import day_of_week, time_of_day, HOUR
 
 # Business hours = weekdays AND 9-5
 weekdays = day_of_week(
@@ -228,9 +230,7 @@ weekdays = day_of_week(
     tz="US/Pacific"
 )
 work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
-
-# Flatten to coalesce (intersection yields one interval per source)
-business_hours = flatten(weekdays & work_hours)
+business_hours = weekdays & work_hours
 
 # Find free time during work hours
 free = business_hours - my_calendar
@@ -242,17 +242,17 @@ free_slots = list(free[monday:friday])
 Create specific recurring meeting patterns:
 
 ```python
-from calgebra import day_of_week, time_of_day, flatten, HOUR, MINUTE
+from calgebra import day_of_week, time_of_day, HOUR, MINUTE
 
 # Monday standup: every Monday at 9:30am for 30 minutes
 mondays = day_of_week("monday", tz="US/Pacific")
 standup_time = time_of_day(start=9*HOUR + 30*MINUTE, duration=30*MINUTE, tz="US/Pacific")
-monday_standup = flatten(mondays & standup_time)
+monday_standup = mondays & standup_time
 
 # Tuesday/Thursday office hours: 2-4pm
 tue_thu = day_of_week(["tuesday", "thursday"], tz="US/Pacific")
 afternoon = time_of_day(start=14*HOUR, duration=2*HOUR, tz="US/Pacific")
-office_hours = flatten(tue_thu & afternoon)
+office_hours = tue_thu & afternoon
 
 # Find conflicts
 conflicts = my_calendar & monday_standup
@@ -263,23 +263,17 @@ conflicts = my_calendar & monday_standup
 Use composition to evaluate candidate meeting times:
 
 ```python
-from calgebra import day_of_week, time_of_day, flatten, HOUR, MINUTE
+from calgebra import day_of_week, time_of_day, HOUR, MINUTE
 from calgebra.metrics import total_duration
 
 # Team busy time
-team_busy = flatten(alice_cal | bob_cal | charlie_cal)
+team_busy = alice_cal | bob_cal | charlie_cal
 
 # Candidate standup times
 candidates = {
-    "Mon 9am": flatten(
-        day_of_week("monday") & time_of_day(start=9*HOUR, duration=30*MINUTE)
-    ),
-    "Tue 10am": flatten(
-        day_of_week("tuesday") & time_of_day(start=10*HOUR, duration=30*MINUTE)
-    ),
-    "Wed 2pm": flatten(
-        day_of_week("wednesday") & time_of_day(start=14*HOUR, duration=30*MINUTE)
-    ),
+    "Mon 9am": day_of_week("monday") & time_of_day(start=9*HOUR, duration=30*MINUTE),
+    "Tue 10am": day_of_week("tuesday") & time_of_day(start=10*HOUR, duration=30*MINUTE),
+    "Wed 2pm": day_of_week("wednesday") & time_of_day(start=14*HOUR, duration=30*MINUTE),
 }
 
 # Find option with least conflicts
@@ -294,20 +288,21 @@ for name, option in candidates.items():
 All time window helpers are timezone-aware:
 
 ```python
-from calgebra import day_of_week, time_of_day, flatten, HOUR
+from calgebra import day_of_week, time_of_day, HOUR
 
 # Different timezones for different queries
-pacific_hours = flatten(
-    day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"], tz="US/Pacific")
+weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday"]
+pacific_hours = (
+    day_of_week(weekdays, tz="US/Pacific")
     & time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
 )
-london_hours = flatten(
-    day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"], tz="Europe/London")
+london_hours = (
+    day_of_week(weekdays, tz="Europe/London")
     & time_of_day(start=9*HOUR, duration=8*HOUR, tz="Europe/London")
 )
 
 # Find overlap between Pacific and London work hours
-overlap = flatten(pacific_hours & london_hours)
+overlap = pacific_hours & london_hours
 shared_hours = list(overlap[start:end])
 ```
 
@@ -426,12 +421,12 @@ Use `merge_within()` when you need to preserve event metadata and control the me
 Transformations are composable with all other operations:
 
 ```python
-from calgebra import buffer, merge_within, flatten, HOUR, MINUTE
+from calgebra import buffer, merge_within, day_of_week, HOUR, MINUTE
 
 # Complex workflow: buffer events, merge nearby ones, then intersect
 buffered_events = buffer(events, before=30*MINUTE, after=15*MINUTE)
 incident_groups = merge_within(buffered_events, gap=10*MINUTE)
-weekday_incidents = flatten(incident_groups & day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"]))
+weekday_incidents = incident_groups & day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
 ```
 
 ## Extending calgebra
@@ -485,7 +480,7 @@ Implement your own data sources:
 
 ```python
 from collections.abc import Iterable
-from calgebra import Timeline, Interval, flatten
+from calgebra import Timeline, Interval, flatten, time_of_day, HOUR
 from typing import override
 
 class MyTimeline(Timeline[Interval]):
@@ -502,11 +497,13 @@ class MyTimeline(Timeline[Interval]):
                 break
             yield interval
 
-# Intersection yields an interval per source, so metadata from each calendar is
-# maintained even when spans overlap. Wrap in `flatten` when you need coalesced
-# coverage. Flatten yields plain `Interval`s and must be sliced with explicit
-# bounds, e.g. `flattened[start:end]`:
+# When both timelines have metadata, use `flatten` for single coalesced spans:
 coalesced = flatten(calendar_a & calendar_b)
+
+# Intersecting with plain recurring patterns automatically preserves metadata:
+work_events = calendar_a & time_of_day(start=9*HOUR, duration=8*HOUR)
+
+# See "Auto-Flattening and When to Use flatten()" section for details
 ```
 
 ### Custom Time Types
@@ -631,16 +628,43 @@ results = list(query[start:end])
 # ✅ Right: combined = query | other; events = list(combined[start:end])
 ```
 
-### Flattening and Metrics
+### Auto-Flattening and When to Use `flatten()`
 
+calgebra automatically optimizes intersections based on whether timelines contain plain intervals (like recurring patterns) or metadata-rich events:
+
+**Automatic Flattening** (no `flatten()` needed):
 ```python
-from calgebra import flatten, union, intersection
+from calgebra import day_of_week, time_of_day, HOUR
+
+# Plain & Plain → Auto-flattened (1 interval per overlap)
+weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
+business_hours = weekdays & time_of_day(start=9*HOUR, duration=8*HOUR)
+
+# Rich & Plain → Preserves rich metadata (only yields from rich source)
+work_meetings = my_calendar & time_of_day(start=9*HOUR, duration=8*HOUR)
+```
+
+**When You Still Need `flatten()`**:
+```python
+from calgebra import flatten
+
+# 1. Coalescing union results for display
+all_busy = flatten(alice_cal | bob_cal | charlie_cal)
+
+# 2. Converting metadata-rich intervals to plain intervals
+simple_coverage = flatten(enriched_calendar)
+
+# 3. When both sources have metadata and you want single coalesced spans
+combined = flatten(calendar_a & calendar_b)  # Without flatten: yields 2 intervals per overlap
+```
+
+**Metrics** automatically flatten when needed:
+```python
 from calgebra.metrics import total_duration, max_duration, min_duration, count_intervals, coverage_ratio
 
-merged = flatten(union(alice_calendar, bob_calendar))
-overlaps = intersection(alice_calendar, bob_calendar)
+merged = alice_calendar | bob_calendar
 
-# Aggregate over a window (all helpers live in `calgebra.metrics`)
+# All helpers flatten internally where needed
 busy_seconds = total_duration(merged, start, end)
 longest_busy = max_duration(merged, start, end)
 shortest_busy = min_duration(merged, start, end)

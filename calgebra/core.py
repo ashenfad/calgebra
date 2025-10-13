@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import replace
 from functools import reduce
-from typing import Any, Generic, Literal, cast, overload, override
+from typing import Any, Generic, Literal, overload, override
 
 from calgebra.interval import Interval, IvlIn, IvlOut
 
@@ -15,10 +15,15 @@ class Timeline(ABC, Generic[IvlOut]):
         """Yield events ordered by start/end within the provided bounds."""
         pass
 
-    def _make_complement_interval(self, start: int, end: int) -> IvlOut:
-        """Construct a gap interval produced by complement operations."""
+    @property
+    def _is_plain(self) -> bool:
+        """True if this timeline only yields plain Interval objects (no metadata).
 
-        return cast(IvlOut, Interval(start=start, end=end))
+        When a timeline is marked as plain, intersections can optimize by
+        auto-flattening or using asymmetric behavior to preserve metadata
+        from rich sources.
+        """
+        return False
 
     def __getitem__(self, item: slice) -> Iterable[IvlOut]:
         start = self._coerce_bound(item.start, "start")
@@ -136,6 +141,12 @@ class Union(Timeline[IvlOut]):
     def __init__(self, *sources: Timeline[IvlOut]):
         self.sources: tuple[Timeline[IvlOut], ...] = sources
 
+    @property
+    @override
+    def _is_plain(self) -> bool:
+        """Union is plain only if all sources are plain."""
+        return all(s._is_plain for s in self.sources)
+
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
         streams = [source.fetch(start, end) for source in self.sources]
@@ -154,20 +165,47 @@ class Intersection(Timeline[IvlOut]):
 
         self.sources: tuple[Timeline[IvlOut], ...] = tuple(flattened)
 
+    @property
+    @override
+    def _is_plain(self) -> bool:
+        """Intersection is plain only if all sources are plain."""
+        return all(s._is_plain for s in self.sources)
+
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
         """Compute intersection using a multi-way merge with sliding window.
 
         Algorithm: Maintains one "current" interval from each source and advances
         them in lockstep. When all current intervals overlap, yields a trimmed copy
-        from each source (preserving metadata). Advances any interval whose end
-        matches the overlap boundary.
+        from sources (behavior depends on source types).
+
+        Auto-flattening optimization:
+        - All plain sources: Yields one interval per overlap (auto-flattened)
+        - Mixed plain/rich: Yields only from rich sources (preserves metadata)
+        - All rich sources: Yields from all sources (preserves metadata)
 
         Key invariant: overlap_start <= overlap_end means all sources have coverage.
-        Yields one interval per source for each overlapping region.
         """
         if not self.sources:
             return ()
+
+        # Determine behavior based on source types
+        plain_sources = [s._is_plain for s in self.sources]
+        all_plain = all(plain_sources)
+        any_plain = any(plain_sources)
+
+        # Get indices of sources to emit from
+        if all_plain:
+            # All plain: emit just one interval per overlap (auto-flatten)
+            emit_indices = [0]
+        elif any_plain:
+            # Mixed: emit only from rich sources (preserve their metadata)
+            emit_indices = [
+                i for i, is_plain in enumerate(plain_sources) if not is_plain
+            ]
+        else:
+            # All rich: emit from all (current behavior)
+            emit_indices = list(range(len(self.sources)))
 
         iterators = [iter(source.fetch(start, end)) for source in self.sources]
 
@@ -183,10 +221,12 @@ class Intersection(Timeline[IvlOut]):
                 overlap_start = max(event.start for event in current)
                 overlap_end = min(event.end for event in current)
 
-                # If there's actual overlap, yield trimmed copy from each source
+                # If there's actual overlap, yield trimmed copy from selected sources
                 if overlap_start <= overlap_end:
-                    for event in current:
-                        yield replace(event, start=overlap_start, end=overlap_end)
+                    for idx in emit_indices:
+                        yield replace(
+                            current[idx], start=overlap_start, end=overlap_end
+                        )
 
                 # Advance any interval that ends at the overlap boundary
                 cutoff = overlap_end
@@ -211,6 +251,12 @@ class Filtered(Timeline[IvlOut]):
         self.source: Timeline[IvlOut] = source
         self.filter: Filter[IvlOut] = filter
 
+    @property
+    @override
+    def _is_plain(self) -> bool:
+        """Filtered timeline preserves the source's plainness."""
+        return self.source._is_plain
+
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
         return (e for e in self.source.fetch(start, end) if self.filter.apply(e))
@@ -224,6 +270,12 @@ class Difference(Timeline[IvlOut]):
     ):
         self.source: Timeline[IvlOut] = source
         self.subtractors: tuple[Timeline[Any], ...] = subtractors
+
+    @property
+    @override
+    def _is_plain(self) -> bool:
+        """Difference preserves the source's plainness (subtractors don't affect type)."""
+        return self.source._is_plain
 
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
@@ -309,12 +361,21 @@ class Difference(Timeline[IvlOut]):
         return generate()
 
 
-class Complement(Timeline[IvlOut]):
-    def __init__(self, source: Timeline[IvlOut]):
-        self.source: Timeline[IvlOut] = source
+class Complement(Timeline[Interval]):
+    def __init__(self, source: Timeline[Any]):
+        self.source: Timeline[Any] = source
+
+    @property
+    @override
+    def _is_plain(self) -> bool:
+        """Complement always produces plain Interval objects.
+
+        Gaps represent the absence of events and have no metadata.
+        """
+        return True
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
+    def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
         """Generate gaps by inverting the source timeline within finite bounds.
 
         Algorithm: Scan through source intervals and emit intervals for the spaces
@@ -328,7 +389,7 @@ class Complement(Timeline[IvlOut]):
                 f"Example: list((~busy)[1704067200:1735689599])"
             )
 
-        def generate() -> Iterable[IvlOut]:
+        def generate() -> Iterable[Interval]:
             cursor = start
 
             for event in self.source.fetch(start, end):
@@ -344,9 +405,7 @@ class Complement(Timeline[IvlOut]):
                     continue
 
                 if segment_start > cursor:
-                    yield self.source._make_complement_interval(
-                        cursor, segment_start - 1
-                    )
+                    yield Interval(start=cursor, end=segment_start - 1)
 
                 cursor = max(cursor, segment_end + 1)
 
@@ -354,7 +413,7 @@ class Complement(Timeline[IvlOut]):
                     return
 
             if cursor <= end:
-                yield self.source._make_complement_interval(cursor, end)
+                yield Interval(start=cursor, end=end)
 
         return generate()
 
@@ -364,9 +423,6 @@ def flatten(timeline: "Timeline[Any]") -> "Timeline[Interval]":
 
     Merges overlapping and adjacent intervals into single continuous spans.
     Useful before aggregations or when you need simplified coverage.
-
-    Implementation: Uses double complement (~(~timeline)) to merge intervals.
-    The first ~ produces gaps, the second ~ produces merged coverage.
 
     Note: Returns plain Interval objects (custom metadata is lost).
           Requires finite bounds when slicing: flatten(tl)[start:end]
