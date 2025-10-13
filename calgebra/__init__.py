@@ -11,6 +11,8 @@ from .metrics import (
 )
 from .properties import Property, days, end, hours, minutes, one_of, seconds, start
 from .recurrence import day_of_week, recurring, time_of_day
+from .transform import buffer, merge_within
+from .util import DAY, HOUR, MINUTE, SECOND
 
 # Load documentation files for programmatic access by agents and code-aware tools
 _docs_path = files(__package__) / "docs"
@@ -43,5 +45,11 @@ __all__ = [
     "day_of_week",
     "time_of_day",
     "recurring",
+    "buffer",
+    "merge_within",
+    "SECOND",
+    "MINUTE",
+    "HOUR",
+    "DAY",
     "docs",
 ]

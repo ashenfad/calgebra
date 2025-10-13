@@ -27,6 +27,7 @@ from dateutil.rrule import (
 
 from calgebra.core import Timeline
 from calgebra.interval import Interval
+from calgebra.util import DAY
 
 Day: TypeAlias = Literal[
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
@@ -63,8 +64,8 @@ class RecurringTimeline(Timeline[Interval]):
         week: int | None = None,
         day_of_month: int | list[int] | None = None,
         month: int | list[int] | None = None,
-        start_hour: float = 0,
-        duration_hours: float = 24,
+        start: int = 0,
+        duration: int = DAY,
         tz: str = "UTC",
     ):
         """
@@ -77,26 +78,27 @@ class RecurringTimeline(Timeline[Interval]):
             week: Which week of month for monthly patterns (1=first, -1=last, 2=second, etc.)
             day_of_month: Day(s) of month (1-31, or -1 for last day)
             month: Month(s) for yearly patterns (1-12)
-            start_hour: Start hour of each occurrence (supports fractional hours)
-            duration_hours: Duration of each occurrence in hours
+            start: Start time of each occurrence in seconds from midnight (default 0)
+            duration: Duration of each occurrence in seconds (default DAY = full day)
             tz: IANA timezone name
 
         Examples:
+            >>> from calgebra import HOUR, MINUTE
             >>> # Every Monday at 9:30am for 30 min
-            >>> recurring(freq="weekly", day="monday", start_hour=9.5, duration_hours=0.5)
+            >>> recurring(freq="weekly", day="monday", start=9*HOUR + 30*MINUTE, duration=30*MINUTE)
             >>>
             >>> # First Monday of each month at 10am for 1 hour
-            >>> recurring(freq="monthly", week=1, day="monday", start_hour=10, duration_hours=1)
+            >>> recurring(freq="monthly", week=1, day="monday", start=10*HOUR, duration=HOUR)
             >>>
-            >>> # Every other Tuesday
+            >>> # Every other Tuesday (full day)
             >>> recurring(freq="weekly", interval=2, day="tuesday")
             >>>
-            >>> # 1st and 15th of every month
+            >>> # 1st and 15th of every month (full day)
             >>> recurring(freq="monthly", day_of_month=[1, 15])
         """
         self.zone: ZoneInfo = ZoneInfo(tz)
-        self.start_hour: float = start_hour
-        self.duration_hours: float = duration_hours
+        self.start_seconds: int = start
+        self.duration_seconds: int = duration
         self.freq: str = freq
 
         # Build rrule kwargs
@@ -164,19 +166,18 @@ class RecurringTimeline(Timeline[Interval]):
         # Generate intervals for each occurrence
         for occurrence in r:
             # Calculate time window for this occurrence
-            start_hour_int = int(self.start_hour)
-            start_minute = int((self.start_hour - start_hour_int) * 60)
-            start_second = int(
-                ((self.start_hour - start_hour_int) * 60 - start_minute) * 60
-            )
+            # Convert start_seconds (seconds from midnight) to hours/minutes/seconds
+            start_hour_int = self.start_seconds // 3600
+            remaining = self.start_seconds % 3600
+            start_minute = remaining // 60
+            start_second = remaining % 60
 
             window_start = occurrence.replace(
                 hour=start_hour_int, minute=start_minute, second=start_second
             )
             # Subtract 1 because intervals are inclusive of both start and end bounds
             # Example: 9am-10am is [9:00:00, 9:59:59] = 3600 seconds total
-            duration_seconds = int(self.duration_hours * 3600) - 1
-            window_end = window_start + timedelta(seconds=duration_seconds)
+            window_end = window_start + timedelta(seconds=self.duration_seconds - 1)
 
             # Clamp to query bounds
             interval_start = max(int(window_start.timestamp()), start)
@@ -194,8 +195,8 @@ def recurring(
     week: int | None = None,
     day_of_month: int | list[int] | None = None,
     month: int | list[int] | None = None,
-    start_hour: float = 0,
-    duration_hours: float = 24,
+    start: int = 0,
+    duration: int = DAY,
     tz: str = "UTC",
 ) -> Timeline[Interval]:
     """
@@ -208,22 +209,22 @@ def recurring(
         week: Which week of month (1=first, -1=last). Only for freq="monthly"
         day_of_month: Day(s) of month (1-31, or -1 for last day). For freq="monthly"
         month: Month(s) (1-12). For freq="yearly"
-        start_hour: Start hour of each occurrence (supports fractional, e.g., 9.5 = 9:30am)
-        duration_hours: Duration in hours (supports fractional)
+        start: Start time of each occurrence in seconds from midnight (default 0)
+        duration: Duration of each occurrence in seconds (default DAY = full day)
         tz: IANA timezone name (e.g., "UTC", "US/Pacific")
 
     Returns:
         Timeline yielding recurring intervals
 
     Examples:
-        >>> from calgebra import recurring
+        >>> from calgebra import recurring, HOUR, MINUTE
         >>>
         >>> # Every Monday at 9:30am for 30 minutes
         >>> monday_standup = recurring(
         ...     freq="weekly",
         ...     day="monday",
-        ...     start_hour=9.5,
-        ...     duration_hours=0.5,
+        ...     start=9*HOUR + 30*MINUTE,
+        ...     duration=30*MINUTE,
         ...     tz="US/Pacific"
         ... )
         >>>
@@ -240,12 +241,12 @@ def recurring(
         ...     freq="monthly",
         ...     week=-1,
         ...     day="friday",
-        ...     start_hour=16,
-        ...     duration_hours=1,
+        ...     start=16*HOUR,
+        ...     duration=HOUR,
         ...     tz="US/Pacific"
         ... )
         >>>
-        >>> # Every other Tuesday (bi-weekly)
+        >>> # Every other Tuesday (bi-weekly, full day)
         >>> biweekly = recurring(
         ...     freq="weekly",
         ...     interval=2,
@@ -253,14 +254,14 @@ def recurring(
         ...     tz="UTC"
         ... )
         >>>
-        >>> # 1st and 15th of every month
+        >>> # 1st and 15th of every month (full day)
         >>> paydays = recurring(
         ...     freq="monthly",
         ...     day_of_month=[1, 15],
         ...     tz="UTC"
         ... )
         >>>
-        >>> # Quarterly (every 3 months on the 1st)
+        >>> # Quarterly (every 3 months on the 1st, full day)
         >>> quarterly = recurring(
         ...     freq="monthly",
         ...     interval=3,
@@ -275,8 +276,8 @@ def recurring(
         week=week,
         day_of_month=day_of_month,
         month=month,
-        start_hour=start_hour,
-        duration_hours=duration_hours,
+        start=start,
+        duration=duration,
         tz=tz,
     )
 
@@ -308,7 +309,7 @@ def day_of_week(days: Day | list[Day], tz: str = "UTC") -> Timeline[Interval]:
 
 
 def time_of_day(
-    start_hour: float = 0, duration_hours: float = 24, tz: str = "UTC"
+    start: int = 0, duration: int = DAY, tz: str = "UTC"
 ) -> Timeline[Interval]:
     """
     Convenience function for filtering by time of day.
@@ -317,43 +318,42 @@ def time_of_day(
     every day).
 
     Args:
-        start_hour: Start hour (0-24), supports fractional hours (e.g., 9.5 = 9:30am)
-        duration_hours: Duration in hours (supports fractional hours)
+        start: Start time in seconds from midnight (default 0)
+        duration: Duration in seconds (default DAY = full day)
         tz: IANA timezone name for time boundaries
 
     Returns:
         Timeline yielding daily intervals for the specified time window
 
     Example:
-        >>> from calgebra import time_of_day, flatten
+        >>> from calgebra import time_of_day, flatten, HOUR
         >>>
-        >>> # 9am-5pm every day
-        >>> work_hours = time_of_day(start_hour=9, duration_hours=8, tz="US/Pacific")
+        >>> # 9am-5pm every day (8 hours)
+        >>> work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
         >>>
         >>> # Combine with day_of_week for business hours
         >>> weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
         >>> business_hours = flatten(weekdays & work_hours)
     """
     # Validate parameters
-    if not (0 <= start_hour < 24):
+    if not (0 <= start < DAY):
         raise ValueError(
-            f"start_hour must be in range [0, 24), got {start_hour}.\n"
-            f"Use 0 for midnight, 12 for noon, 23 for 11pm.\n"
-            f"Fractional hours are supported: 9.5 = 9:30am, 14.25 = 2:15pm"
+            f"start must be in range [0, {DAY}), got {start}.\n"
+            f"Use 0 for midnight, 12*HOUR for noon, 23*HOUR for 11pm.\n"
+            f"Example: start=9*HOUR + 30*MINUTE for 9:30am"
         )
-    if duration_hours <= 0:
+    if duration <= 0:
         raise ValueError(
-            f"duration_hours must be positive, got {duration_hours}.\n"
-            f"Example: duration_hours=8 for an 8-hour window (like 9am-5pm)"
+            f"duration must be positive, got {duration}.\n"
+            f"Example: duration=8*HOUR for an 8-hour window (like 9am-5pm)"
         )
-    if start_hour + duration_hours > 24:
+    if start + duration > DAY:
         raise ValueError(
-            f"start_hour + duration_hours cannot exceed 24 hours.\n"
-            f"Got: {start_hour} + {duration_hours} = {start_hour + duration_hours}\n"
+            f"start + duration cannot exceed 24 hours ({DAY} seconds).\n"
+            f"Got: {start} + {duration} = {start + duration}\n"
             f"time_of_day() cannot span midnight. For overnight windows, use recurring():\n"
-            f"  overnight = recurring(freq='daily', start_hour=20, duration_hours=5, tz='UTC')\n"
+            f"  from calgebra import recurring, HOUR\n"
+            f"  overnight = recurring(freq='daily', start=20*HOUR, duration=5*HOUR, tz='UTC')\n"
         )
 
-    return recurring(
-        freq="daily", start_hour=start_hour, duration_hours=duration_hours, tz=tz
-    )
+    return recurring(freq="daily", start=start, duration=duration, tz=tz)

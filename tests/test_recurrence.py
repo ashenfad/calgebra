@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from calgebra import Interval, recurring
+from calgebra import HOUR, MINUTE, Interval, recurring
 
 
 def test_recurring_weekly_single_day():
@@ -45,8 +45,8 @@ def test_recurring_weekly_with_time_window():
         recurring(
             freq="weekly",
             day="monday",
-            start_hour=9.5,
-            duration_hours=0.5,
+            start=9 * HOUR + 30 * MINUTE,
+            duration=30 * MINUTE,
             tz="UTC",
         )[monday:sunday]
     )
@@ -152,7 +152,7 @@ def test_recurring_daily():
 
     # Every day at 9am for 1 hour
     daily = list(
-        recurring(freq="daily", start_hour=9, duration_hours=1, tz="UTC")[start:end]
+        recurring(freq="daily", start=9 * HOUR, duration=HOUR, tz="UTC")[start:end]
     )
 
     # Should get 7 days
@@ -183,8 +183,8 @@ def test_comparison_with_windows_primitives():
         recurring(
             freq="weekly",
             day="monday",
-            start_hour=9.5,
-            duration_hours=0.5,
+            start=9 * HOUR + 30 * MINUTE,
+            duration=30 * MINUTE,
             tz="UTC",
         )[monday:sunday]
     )
@@ -193,7 +193,7 @@ def test_comparison_with_windows_primitives():
     option_b = list(
         flatten(
             day_of_week("monday", tz="UTC")
-            & time_of_day(start_hour=9.5, duration_hours=0.5, tz="UTC")
+            & time_of_day(start=9 * HOUR + 30 * MINUTE, duration=30 * MINUTE, tz="UTC")
         )[monday:sunday]
     )
 
@@ -218,8 +218,8 @@ def test_recurring_simplifies_common_patterns():
         freq="weekly",
         interval=2,
         day="tuesday",
-        start_hour=10,
-        duration_hours=0.5,
+        start=10 * HOUR,
+        duration=30 * MINUTE,
         tz="UTC",
     )
     assert 20 <= len(list(biweekly_standup[start:end])) <= 30
@@ -229,8 +229,8 @@ def test_recurring_simplifies_common_patterns():
         freq="monthly",
         interval=3,
         day_of_month=1,
-        start_hour=14,
-        duration_hours=2,
+        start=14 * HOUR,
+        duration=2 * HOUR,
         tz="UTC",
     )
     assert len(list(quarterly[start:end])) == 4

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from calgebra import Interval, day_of_week, time_of_day
+from calgebra import HOUR, MINUTE, Interval, day_of_week, time_of_day
 
 
 def test_day_of_week_single_day():
@@ -101,7 +101,7 @@ def test_time_of_day_specific_hours():
 
     # 9am-5pm (8 hours)
     work_hours = list(
-        time_of_day(start_hour=9, duration_hours=8, tz="UTC")[monday:monday_end]
+        time_of_day(start=9 * HOUR, duration=8 * HOUR, tz="UTC")[monday:monday_end]
     )
 
     assert len(work_hours) == 1
@@ -115,13 +115,15 @@ def test_time_of_day_specific_hours():
 
 
 def test_time_of_day_fractional_hours():
-    """Test time_of_day with fractional hours."""
+    """Test time_of_day with minute precision."""
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     monday_end = int(datetime(2025, 1, 6, 23, 59, 59, tzinfo=timezone.utc).timestamp())
 
-    # 9:30am-10am (30 minutes = 0.5 hours)
+    # 9:30am-10am (30 minutes)
     standup = list(
-        time_of_day(start_hour=9.5, duration_hours=0.5, tz="UTC")[monday:monday_end]
+        time_of_day(start=9 * HOUR + 30 * MINUTE, duration=30 * MINUTE, tz="UTC")[
+            monday:monday_end
+        ]
     )
 
     assert len(standup) == 1
@@ -135,21 +137,23 @@ def test_time_of_day_fractional_hours():
 
 
 def test_time_of_day_validates_parameters():
-    """Test that time_of_day validates hour parameters."""
-    with pytest.raises(ValueError, match="start_hour must be in range"):
-        time_of_day(start_hour=-1)
+    """Test that time_of_day validates parameters."""
+    from calgebra import DAY
 
-    with pytest.raises(ValueError, match="start_hour must be in range"):
-        time_of_day(start_hour=25)
+    with pytest.raises(ValueError, match="start must be in range"):
+        time_of_day(start=-1)
 
-    with pytest.raises(ValueError, match="duration_hours must be positive"):
-        time_of_day(duration_hours=0)
+    with pytest.raises(ValueError, match="start must be in range"):
+        time_of_day(start=25 * HOUR)
 
-    with pytest.raises(ValueError, match="duration_hours must be positive"):
-        time_of_day(duration_hours=-1)
+    with pytest.raises(ValueError, match="duration must be positive"):
+        time_of_day(duration=0)
+
+    with pytest.raises(ValueError, match="duration must be positive"):
+        time_of_day(duration=-1)
 
     with pytest.raises(ValueError, match="cannot exceed 24 hours"):
-        time_of_day(start_hour=20, duration_hours=5)
+        time_of_day(start=20 * HOUR, duration=5 * HOUR)
 
 
 def test_time_of_day_requires_finite_bounds():
@@ -169,7 +173,7 @@ def test_composition_business_hours():
     weekdays = day_of_week(
         ["monday", "tuesday", "wednesday", "thursday", "friday"], tz="UTC"
     )
-    work_hours = time_of_day(start_hour=9, duration_hours=8, tz="UTC")
+    work_hours = time_of_day(start=9 * HOUR, duration=8 * HOUR, tz="UTC")
 
     # Intersection yields one interval per source, so flatten to get coalesced results
     business_hours = flatten(weekdays & work_hours)
@@ -196,7 +200,9 @@ def test_composition_recurring_meeting():
 
     # Monday standup: every Monday at 9:30am for 30 min
     mondays = day_of_week("monday", tz="UTC")
-    standup_time = time_of_day(start_hour=9.5, duration_hours=0.5, tz="UTC")
+    standup_time = time_of_day(
+        start=9 * HOUR + 30 * MINUTE, duration=30 * MINUTE, tz="UTC"
+    )
 
     # Flatten to get single intervals (intersection yields one per source)
     monday_standup = flatten(mondays & standup_time)
@@ -245,7 +251,7 @@ def test_composition_with_calendar():
 
     # Find free time during business hours
     weekdays = day_of_week(["monday"], tz="UTC")
-    work_hours = time_of_day(start_hour=9, duration_hours=8, tz="UTC")
+    work_hours = time_of_day(start=9 * HOUR, duration=8 * HOUR, tz="UTC")
 
     # Flatten the intersection to get single intervals
     business_hours = flatten(weekdays & work_hours)

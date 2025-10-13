@@ -49,7 +49,7 @@
 ## Recurring Patterns (`calgebra.recurrence`)
 Timezone-aware recurrence pattern generators backed by `python-dateutil`'s RFC 5545 implementation.
 
-### `recurring(freq, *, interval=1, day=None, week=None, day_of_month=None, month=None, start_hour=0, duration_hours=24, tz="UTC")`
+### `recurring(freq, *, interval=1, day=None, week=None, day_of_month=None, month=None, start=0, duration=DAY, tz="UTC")`
 Generate intervals based on recurrence rules with full RFC 5545 support.
 
 **Parameters:**
@@ -66,17 +66,17 @@ Generate intervals based on recurrence rules with full RFC 5545 support.
   - Examples: `1`, `[1, 15]`, `-1`
 - `month`: Month(s) for yearly patterns (1-12)
   - Examples: `1`, `[1, 4, 7, 10]` (quarterly)
-- `start_hour`: Start hour of each occurrence (0-24, supports fractional)
-- `duration_hours`: Duration in hours (supports fractional)
+- `start`: Start time in seconds from midnight (default: 0)
+- `duration`: Duration in seconds (default: DAY = full day)
 - `tz`: IANA timezone name
 
 **Examples:**
 ```python
-from calgebra import recurring
+from calgebra import recurring, HOUR, MINUTE
 
 # Bi-weekly Mondays at 9:30am for 30 minutes
 biweekly = recurring(freq="weekly", interval=2, day="monday", 
-                     start_hour=9.5, duration_hours=0.5, tz="US/Pacific")
+                     start=9*HOUR + 30*MINUTE, duration=30*MINUTE, tz="US/Pacific")
 
 # First Monday of each month
 first_monday = recurring(freq="monthly", week=1, day="monday", tz="UTC")
@@ -108,17 +108,19 @@ weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
 weekends = day_of_week(["saturday", "sunday"], tz="UTC")
 ```
 
-#### `time_of_day(start_hour=0, duration_hours=24, tz="UTC")`
-Convenience wrapper for daily time windows. Equivalent to `recurring(freq="daily", start_hour=start_hour, duration_hours=duration_hours, tz=tz)`.
+#### `time_of_day(start=0, duration=DAY, tz="UTC")`
+Convenience wrapper for daily time windows. Equivalent to `recurring(freq="daily", start=start, duration=duration, tz=tz)`.
 
-- `start_hour`: Start hour (0-24), supports fractional hours (e.g., 9.5 = 9:30am)
-- `duration_hours`: Duration in hours (supports fractional)
+- `start`: Start time in seconds from midnight (default: 0)
+- `duration`: Duration in seconds (default: DAY = full day)
 - `tz`: IANA timezone name
 
 **Examples:**
 ```python
-work_hours = time_of_day(start_hour=9, duration_hours=8, tz="US/Pacific")  # 9am-5pm
-standup = time_of_day(start_hour=9.5, duration_hours=0.5, tz="UTC")  # 9:30am-10am
+from calgebra import time_of_day, HOUR, MINUTE
+
+work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")  # 9am-5pm
+standup = time_of_day(start=9*HOUR + 30*MINUTE, duration=30*MINUTE, tz="UTC")  # 9:30am-10am
 ```
 
 ### Composing Patterns
@@ -126,21 +128,74 @@ standup = time_of_day(start_hour=9.5, duration_hours=0.5, tz="UTC")  # 9:30am-10
 Combine wrappers with `&` to create complex patterns:
 
 ```python
-from calgebra import day_of_week, time_of_day, flatten
+from calgebra import day_of_week, time_of_day, flatten, HOUR, MINUTE
 
 # Business hours = weekdays & 9-5 (flatten to coalesce)
 business_hours = flatten(
     day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
-    & time_of_day(start_hour=9, duration_hours=8, tz="US/Pacific")
+    & time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
 )
 
 # Monday standup = Mondays & 9:30-10am
 monday_standup = flatten(
-    day_of_week("monday") & time_of_day(start_hour=9.5, duration_hours=0.5)
+    day_of_week("monday") & time_of_day(start=9*HOUR + 30*MINUTE, duration=30*MINUTE)
 )
 ```
 
 **Note:** Recurring patterns require finite bounds when slicing. Intersection yields one interval per source, so use `flatten` to coalesce results.
+
+## Transformations (`calgebra.transform`)
+
+Operations that modify the shape or structure of intervals while preserving metadata.
+
+### `buffer(timeline, *, before=0, after=0)`
+Add buffer time before and/or after each interval.
+
+**Parameters:**
+- `timeline`: Source timeline
+- `before`: Seconds to add before each interval (default: 0)
+- `after`: Seconds to add after each interval (default: 0)
+
+**Returns:** Timeline with buffered intervals preserving original metadata
+
+**Examples:**
+```python
+from calgebra import buffer, HOUR, MINUTE
+
+# Flights need 2 hours of pre-travel time
+blocked = buffer(flights, before=2*HOUR)
+
+# Meetings need 15 min buffer on each side
+busy = buffer(meetings, before=15*MINUTE, after=15*MINUTE)
+
+# Check for conflicts with expanded times
+conflicts = blocked & work_calendar
+```
+
+### `merge_within(timeline, *, gap)`
+Merge intervals separated by at most `gap` seconds.
+
+**Parameters:**
+- `timeline`: Source timeline
+- `gap`: Maximum gap (in seconds) between intervals to merge across
+
+**Returns:** Timeline with nearby intervals merged, preserving first interval's metadata
+
+**Examples:**
+```python
+from calgebra import merge_within, MINUTE
+
+# Treat alarms within 15 min as one incident
+incidents = merge_within(alarms, gap=15*MINUTE)
+
+# Group closely-scheduled meetings into busy blocks
+busy_blocks = merge_within(meetings, gap=5*MINUTE)
+
+# Combine with other operations
+daily_incidents = incidents & day_of_week("monday")
+```
+
+**Note:** Unlike `flatten()`, `merge_within()` preserves metadata from the first interval in each merged group. Use `flatten()` when you don't need to preserve metadata and want all adjacent/overlapping intervals coalesced regardless of gap size.
 
 ## Module Exports (`calgebra.__init__`)
 - `Interval`, `Timeline`, `Filter`, `Property`
@@ -148,6 +203,8 @@ monday_standup = flatten(
 - Metrics: `total_duration`, `max_duration`, `min_duration`, `count_intervals`, `coverage_ratio`
 - Utils: `flatten`, `union`, `intersection`
 - Recurring patterns: `recurring`, `day_of_week`, `time_of_day`
+- Transforms: `buffer`, `merge_within`
+- Time constants: `SECOND`, `MINUTE`, `HOUR`, `DAY`
 
 ## Notes
 - All intervals are inclusive; durations use `end - start + 1`.
