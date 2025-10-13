@@ -21,18 +21,69 @@ Intervals are inclusive of both bounds. In the example above, the interval cover
 A `Timeline` is a source of intervals. It's like a lazy stream that can fetch intervals within a time range:
 
 ```python
+from datetime import datetime, timezone
 from calgebra import Timeline
 
-# Fetch intervals between start and end
+# Fetch intervals between start and end using integer timestamps
 events = timeline.fetch(start=0, end=10000)
 
 # Or use slice notation (more intuitive!)
 events = timeline[0:10000]
+
+# Timelines also accept datetime and date objects
+start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+end = datetime(2025, 12, 31, tzinfo=timezone.utc)
+events = timeline[start:end]
 ```
 
 Timelines are **composable** - you can combine them using operators to create complex queries.
 
 > **Note:** Implementations should yield events sorted by `(start, end)` so that set operations can merge them efficiently.
+
+### Slicing with Datetime and Date
+
+Timelines accept three types of slice bounds:
+
+1. **Integer seconds** (Unix timestamps): `timeline[1735689600:1767225600]`
+2. **Timezone-aware datetime objects**: `timeline[datetime(2025, 1, 1, tzinfo=timezone.utc):...]`
+3. **Date objects**: `timeline[date(2025, 1, 1):date(2025, 12, 31)]`
+
+```python
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
+
+# Integer timestamps (Unix seconds)
+events = timeline[1735689600:1767225600]
+
+# Timezone-aware datetimes (any timezone)
+utc_events = timeline[
+    datetime(2025, 1, 1, tzinfo=timezone.utc):
+    datetime(2025, 12, 31, tzinfo=timezone.utc)
+]
+
+pacific_events = timeline[
+    datetime(2025, 1, 1, tzinfo=ZoneInfo("US/Pacific")):
+    datetime(2025, 12, 31, tzinfo=ZoneInfo("US/Pacific"))
+]
+
+# Date objects (converted to full-day boundaries in UTC)
+date_events = timeline[date(2025, 1, 1):date(2025, 12, 31)]
+
+# Mix and match
+mixed = timeline[datetime(2025, 1, 1, tzinfo=timezone.utc):1767225600]
+```
+
+**Important**: Datetime objects **must be timezone-aware**. Naive datetimes (without timezone info) will raise an error:
+
+```python
+# ❌ This will raise TypeError
+timeline[datetime(2025, 1, 1):datetime(2025, 12, 31)]
+
+# ✅ Always add timezone info
+timeline[datetime(2025, 1, 1, tzinfo=timezone.utc):datetime(2025, 12, 31, tzinfo=timezone.utc)]
+```
+
+Date objects are converted to full-day boundaries (00:00:00 to 23:59:59) in UTC.
 
 ### Filters
 
@@ -505,43 +556,6 @@ work_events = calendar_a & time_of_day(start=9*HOUR, duration=8*HOUR)
 
 # See "Auto-Flattening and When to Use flatten()" section for details
 ```
-
-### Custom Time Types
-
-Timelines can accept different time bound types:
-
-```python
-from datetime import date, datetime, time
-from typing import Literal, override
-
-class DatetimeTimeline(Timeline[Event]):
-    @override
-    def _coerce_bound(
-        self,
-        bound: date | datetime | None,
-        edge: Literal["start", "end"],
-    ) -> int | None:
-        if bound is None:
-            return None
-        if isinstance(bound, datetime):
-            return int(bound.timestamp())
-        if isinstance(bound, date):
-            # align to whole-day boundaries
-            if edge == "start":
-                return int(datetime.combine(bound, time.min).timestamp())
-            return int(datetime.combine(bound, time.max).timestamp())
-        return super()._coerce_bound(bound, edge)
-
-    @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[Event]:
-        # Use integer bounds internally
-        ...
-
-# Now you can slice with datetimes!
-events = timeline[datetime(2025, 1, 1) : datetime(2025, 12, 31)]
-```
-
-> **Tip:** Converting bounds to your canonical time unit (and timezone if needed) is part of the timeline contract. If your implementation stores milliseconds (or buckets like 15-minute slots), normalize the incoming slice bounds inside `_coerce_bound` so callers don’t need to round them manually.
 
 ## Advanced Patterns
 

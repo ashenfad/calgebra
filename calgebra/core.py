@@ -2,6 +2,7 @@ import heapq
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import replace
+from datetime import date, datetime, time, timezone
 from functools import reduce
 from typing import Any, Generic, Literal, overload, override
 
@@ -31,15 +32,49 @@ class Timeline(ABC, Generic[IvlOut]):
         return self.fetch(start, end)
 
     def _coerce_bound(self, bound: Any, edge: Literal["start", "end"]) -> int | None:
+        """Convert slice bounds to integer seconds (Unix timestamps).
+
+        Accepts:
+        - int: Passed through as-is (Unix timestamp)
+        - datetime: Must be timezone-aware, converted to timestamp
+        - date: Converted to start/end of day in UTC
+        - None: Unbounded (passed through)
+
+        Raises:
+            TypeError: If bound is an unsupported type or naive datetime
+        """
         if bound is None:
             return None
         if isinstance(bound, int):
             return bound
+        if isinstance(bound, datetime):
+            if bound.tzinfo is None:
+                raise TypeError(
+                    f"Timeline slice {edge} bound must be a timezone-aware datetime.\n"
+                    f"Got naive datetime: {bound!r}\n"
+                    f"Hint: Add timezone info:\n"
+                    f"  from zoneinfo import ZoneInfo\n"
+                    f"  dt = datetime(..., tzinfo=ZoneInfo('UTC'))  "
+                    f"# or 'US/Pacific', etc.\n"
+                    f"  # Or use timezone.utc for UTC:\n"
+                    f"  dt = datetime(..., tzinfo=timezone.utc)"
+                )
+            return int(bound.timestamp())
+        if isinstance(bound, date):
+            # Convert date to datetime at start/end of day in UTC
+            if edge == "start":
+                dt = datetime.combine(bound, time.min, tzinfo=timezone.utc)
+            else:  # edge == "end"
+                dt = datetime.combine(bound, time.max, tzinfo=timezone.utc)
+            return int(dt.timestamp())
         raise TypeError(
-            f"Timeline slice {edge} bound must be an int or None, got {type(bound).__name__!r}.\n"
-            f"Timelines use integer seconds (Unix timestamps) by default.\n"
-            f"Hint: Convert datetime to int with: int(dt.timestamp())\n"
-            f"Or override _coerce_bound() to accept custom types."
+            f"Timeline slice {edge} bound must be int, datetime, date, or None.\n"
+            f"Got {type(bound).__name__!r}: {bound!r}\n"
+            f"Examples:\n"
+            f"  timeline[start_ts:end_ts]  # int (Unix seconds)\n"
+            f"  timeline[datetime(2025,1,1,tzinfo=timezone.utc):]  "
+            f"# timezone-aware datetime\n"
+            f"  timeline[date(2025,1,1):date(2025,12,31)]  # date objects"
         )
 
     @overload
