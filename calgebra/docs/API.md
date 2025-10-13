@@ -46,34 +46,84 @@
 - `count_intervals(timeline, start, end)` → number of events in slice
 - `coverage_ratio(timeline, start, end)` → fraction of window covered (`float`)
 
-## Time Windows (`calgebra.windows`)
-Built-in timezone-aware generators using two composable primitives (zero dependencies):
+## Recurring Patterns (`calgebra.recurrence`)
+Timezone-aware recurrence pattern generators backed by `python-dateutil`'s RFC 5545 implementation.
 
-### `day_of_week(days, tz="UTC")`
-- Returns a timeline for specific day(s) of the week (all hours)
-- `days`: Single day name or list of day names (case-insensitive)
-  - Valid: "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
-- `tz`: IANA timezone name (e.g., "US/Pacific", "Europe/London")
-- Examples:
-  ```python
-  mondays = day_of_week("monday", tz="US/Pacific")
-  weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
-  weekends = day_of_week(["saturday", "sunday"], tz="UTC")
-  ```
+### `recurring(freq, *, interval=1, day=None, week=None, day_of_month=None, month=None, start_hour=0, duration_hours=24, tz="UTC")`
+Generate intervals based on recurrence rules with full RFC 5545 support.
 
-### `time_of_day(start_hour=0, duration_hours=24, tz="UTC")`
-- Returns a timeline for a specific time window each day (all days)
-- `start_hour`: Start hour (0-24), supports fractional hours (e.g., 9.5 = 9:30am)
-- `duration_hours`: Duration in hours (supports fractional hours)
+**Parameters:**
+- `freq`: Recurrence frequency - `"daily"`, `"weekly"`, or `"monthly"`
+- `interval`: Repeat every N units (default: 1). Examples:
+  - `interval=2` with `freq="weekly"` → bi-weekly
+  - `interval=3` with `freq="monthly"` → quarterly
+- `day`: Day name(s) for weekly/monthly patterns (single string or list)
+  - Valid: `"monday"`, `"tuesday"`, `"wednesday"`, `"thursday"`, `"friday"`, `"saturday"`, `"sunday"`
+  - Examples: `"monday"`, `["tuesday", "thursday"]`
+- `week`: Nth occurrence for monthly patterns (1=first, -1=last, 2=second, etc.)
+  - Combine with `day` for patterns like "first Monday" or "last Friday"
+- `day_of_month`: Day(s) of month (1-31, or -1 for last day)
+  - Examples: `1`, `[1, 15]`, `-1`
+- `month`: Month(s) for yearly patterns (1-12)
+  - Examples: `1`, `[1, 4, 7, 10]` (quarterly)
+- `start_hour`: Start hour of each occurrence (0-24, supports fractional)
+- `duration_hours`: Duration in hours (supports fractional)
 - `tz`: IANA timezone name
-- Examples:
-  ```python
-  work_hours = time_of_day(start_hour=9, duration_hours=8, tz="US/Pacific")  # 9am-5pm
-  standup = time_of_day(start_hour=9.5, duration_hours=0.5, tz="UTC")  # 9:30am-10am
-  ```
 
-### Composing Time Windows
-Combine primitives with `&` to create complex patterns:
+**Examples:**
+```python
+from calgebra import recurring
+
+# Bi-weekly Mondays at 9:30am for 30 minutes
+biweekly = recurring(freq="weekly", interval=2, day="monday", 
+                     start_hour=9.5, duration_hours=0.5, tz="US/Pacific")
+
+# First Monday of each month
+first_monday = recurring(freq="monthly", week=1, day="monday", tz="UTC")
+
+# Last Friday of each month
+last_friday = recurring(freq="monthly", week=-1, day="friday", tz="UTC")
+
+# 1st and 15th of every month
+payroll = recurring(freq="monthly", day_of_month=[1, 15], tz="UTC")
+
+# Quarterly (every 3 months)
+quarterly = recurring(freq="monthly", interval=3, day_of_month=1, tz="UTC")
+```
+
+### Convenience Wrappers
+
+For common patterns, use these ergonomic wrappers:
+
+#### `day_of_week(days, tz="UTC")`
+Convenience wrapper for filtering by day(s) of the week. Equivalent to `recurring(freq="weekly", day=days, tz=tz)`.
+
+- `days`: Single day name or list (e.g., `"monday"`, `["tuesday", "thursday"]`)
+- `tz`: IANA timezone name
+
+**Examples:**
+```python
+mondays = day_of_week("monday", tz="US/Pacific")
+weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
+weekends = day_of_week(["saturday", "sunday"], tz="UTC")
+```
+
+#### `time_of_day(start_hour=0, duration_hours=24, tz="UTC")`
+Convenience wrapper for daily time windows. Equivalent to `recurring(freq="daily", start_hour=start_hour, duration_hours=duration_hours, tz=tz)`.
+
+- `start_hour`: Start hour (0-24), supports fractional hours (e.g., 9.5 = 9:30am)
+- `duration_hours`: Duration in hours (supports fractional)
+- `tz`: IANA timezone name
+
+**Examples:**
+```python
+work_hours = time_of_day(start_hour=9, duration_hours=8, tz="US/Pacific")  # 9am-5pm
+standup = time_of_day(start_hour=9.5, duration_hours=0.5, tz="UTC")  # 9:30am-10am
+```
+
+### Composing Patterns
+
+Combine wrappers with `&` to create complex patterns:
 
 ```python
 from calgebra import day_of_week, time_of_day, flatten
@@ -90,14 +140,14 @@ monday_standup = flatten(
 )
 ```
 
-**Note:** Time windows require finite bounds when slicing. Intersection yields one interval per source, so use `flatten` to coalesce results.
+**Note:** Recurring patterns require finite bounds when slicing. Intersection yields one interval per source, so use `flatten` to coalesce results.
 
 ## Module Exports (`calgebra.__init__`)
 - `Interval`, `Timeline`, `Filter`, `Property`
 - Properties and helpers: `start`, `end`, `seconds`, `minutes`, `hours`, `days`, `one_of`
 - Metrics: `total_duration`, `max_duration`, `min_duration`, `count_intervals`, `coverage_ratio`
 - Utils: `flatten`, `union`, `intersection`
-- Time windows: `day_of_week`, `time_of_day`
+- Recurring patterns: `recurring`, `day_of_week`, `time_of_day`
 
 ## Notes
 - All intervals are inclusive; durations use `end - start + 1`.
