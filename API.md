@@ -7,11 +7,10 @@
 - `__getitem__(slice)` → shorthand for `fetch`
 - Set-like operators:
   - `timeline | other` → `Union`
-  - `timeline & other` → `Intersection` or `Filtered` (intersection yields a trimmed interval per source, so metadata from each input is preserved; use `flatten` when you need coalesced coverage)
+  - `timeline & other` → `Intersection` or `Filtered`
   - `timeline - other` → `Difference`
-  - `~timeline` → `Complement` (requires finite bounds)
+  - `~timeline` → `Complement`
 - Extension hooks:
-  - `_make_complement_interval(start, end)` → customize gap interval type
   - `_coerce_bound(value, edge)` → hook for accepting non-integer slice values (default only accepts integers)
 
 ### `Filter[IvlIn]`

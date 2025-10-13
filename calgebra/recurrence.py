@@ -55,6 +55,12 @@ _FREQ_MAP = {
 class RecurringTimeline(Timeline[Interval]):
     """Generate recurring intervals based on RFC 5545 recurrence rules."""
 
+    @property
+    @override
+    def _is_plain(self) -> bool:
+        """RecurringTimeline always yields plain Interval objects."""
+        return True
+
     def __init__(
         self,
         freq: Literal["daily", "weekly", "monthly", "yearly"],

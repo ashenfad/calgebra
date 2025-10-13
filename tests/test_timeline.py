@@ -48,12 +48,6 @@ class DummyTimeline(Timeline[Ivl], Generic[Ivl]):
             yield event
 
 
-class MetadataTimeline(DummyTimeline[LabeledInterval]):
-    @override
-    def _make_complement_interval(self, start: int, end: int) -> LabeledInterval:
-        return LabeledInterval(start=start, end=end, label="free")
-
-
 def test_fetch_respects_bounds() -> None:
     timeline = DummyTimeline(
         Interval(start=0, end=5),
@@ -177,18 +171,23 @@ def test_complement_returns_gaps() -> None:
     ]
 
 
-def test_complement_preserves_metadata_via_hook() -> None:
-    timeline = MetadataTimeline(
+def test_complement_yields_plain_intervals() -> None:
+    """Complement always yields plain Intervals, even when source has metadata."""
+    timeline = DummyTimeline(
         LabeledInterval(start=10, end=12, label="focus"),
         LabeledInterval(start=15, end=17, label="focus"),
     )
 
     complement = list((~timeline)[10:20])
 
+    # Gaps are plain Intervals (not LabeledIntervals)
     assert complement == [
-        LabeledInterval(start=13, end=14, label="free"),
-        LabeledInterval(start=18, end=20, label="free"),
+        Interval(start=13, end=14),
+        Interval(start=18, end=20),
     ]
+
+    # Verify they're actually plain Interval objects
+    assert all(type(gap) == Interval for gap in complement)
 
 
 def test_filter_applies_property_comparisons() -> None:
