@@ -97,7 +97,12 @@ class Calendar(Timeline[Event]):
         if isinstance(bound, (datetime, date)):
             return _to_timestamp(bound, edge, self._zone)
         raise TypeError(
-            f"Google Calendar timelines accept integers, datetime/date bounds, or None; got {type(bound)!r}"
+            f"Google Calendar timeline slices accept int, datetime, date, or None.\n"
+            f"Got {type(bound).__name__!r} for {edge} bound.\n"
+            f"Examples:\n"
+            f"  calendar[start_timestamp:end_timestamp]  # integers (Unix seconds)\n"
+            f"  calendar[datetime(2025,1,1):datetime(2025,12,31)]  # datetime objects\n"
+            f"  calendar[date(2025,1,1):date(2025,12,31)]  # date objects"
         )
 
     @override

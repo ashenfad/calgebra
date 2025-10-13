@@ -4,5 +4,6 @@
   "reportReturnType": "none",
   "reportUnusedParameter": "none",
   "reportExplicitAny": "none",
-  "reportAny": "none"
+  "reportAny": "none",
+  "reportImplicitStringConcatenation": "none"
 }

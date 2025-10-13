@@ -78,7 +78,7 @@ def test_day_of_week_respects_timezone():
 
 def test_day_of_week_requires_finite_bounds():
     """Test that day_of_week raises error for unbounded queries."""
-    with pytest.raises(ValueError, match="finite start and end bounds"):
+    with pytest.raises(ValueError, match="requires finite bounds"):
         list(day_of_week("monday")[:100])
 
 
@@ -136,10 +136,10 @@ def test_time_of_day_fractional_hours():
 
 def test_time_of_day_validates_parameters():
     """Test that time_of_day validates hour parameters."""
-    with pytest.raises(ValueError, match="start_hour must be 0-24"):
+    with pytest.raises(ValueError, match="start_hour must be in range"):
         time_of_day(start_hour=-1)
 
-    with pytest.raises(ValueError, match="start_hour must be 0-24"):
+    with pytest.raises(ValueError, match="start_hour must be in range"):
         time_of_day(start_hour=25)
 
     with pytest.raises(ValueError, match="duration_hours must be positive"):
@@ -148,13 +148,13 @@ def test_time_of_day_validates_parameters():
     with pytest.raises(ValueError, match="duration_hours must be positive"):
         time_of_day(duration_hours=-1)
 
-    with pytest.raises(ValueError, match="exceeds 24 hours"):
+    with pytest.raises(ValueError, match="cannot exceed 24 hours"):
         time_of_day(start_hour=20, duration_hours=5)
 
 
 def test_time_of_day_requires_finite_bounds():
     """Test that time_of_day raises error for unbounded queries."""
-    with pytest.raises(ValueError, match="finite start and end bounds"):
+    with pytest.raises(ValueError, match="requires finite bounds"):
         list(time_of_day()[:100])
 
 

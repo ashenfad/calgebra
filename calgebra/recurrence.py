@@ -112,8 +112,12 @@ class RecurringTimeline(Timeline[Interval]):
             for d in days:
                 d_lower = d.lower()
                 if d_lower not in _DAY_MAP:
-                    valid = ", ".join(_DAY_MAP.keys())
-                    raise ValueError(f"Invalid day '{d}'. Valid days: {valid}")
+                    valid = ", ".join(sorted(_DAY_MAP.keys()))
+                    raise ValueError(
+                        f"Invalid day name: '{d}'\n"
+                        f"Valid days: {valid}\n"
+                        f"Example: day_of_week('monday') or day_of_week(['tuesday', 'thursday'])"
+                    )
 
                 wd = _DAY_MAP[d_lower]
                 # If week is specified (for monthly), apply offset
@@ -140,7 +144,12 @@ class RecurringTimeline(Timeline[Interval]):
     def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
         """Generate recurring intervals within the query range."""
         if start is None or end is None:
-            raise ValueError("RecurringTimeline requires finite start and end bounds")
+            raise ValueError(
+                f"RecurringTimeline requires finite bounds, got start={start}, end={end}.\n"
+                f"Recurring patterns generate infinite sequences and need bounded queries.\n"
+                f"Fix: Use explicit bounds when slicing: list(recurring(...)[start:end])\n"
+                f"Example: list(mondays[1704067200:1735689599])"
+            )
 
         # Convert bounds to datetime in timezone
         start_dt = datetime.fromtimestamp(start, tz=self.zone)
@@ -164,6 +173,8 @@ class RecurringTimeline(Timeline[Interval]):
             window_start = occurrence.replace(
                 hour=start_hour_int, minute=start_minute, second=start_second
             )
+            # Subtract 1 because intervals are inclusive of both start and end bounds
+            # Example: 9am-10am is [9:00:00, 9:59:59] = 3600 seconds total
             duration_seconds = int(self.duration_hours * 3600) - 1
             window_end = window_start + timedelta(seconds=duration_seconds)
 
@@ -325,12 +336,22 @@ def time_of_day(
     """
     # Validate parameters
     if not (0 <= start_hour < 24):
-        raise ValueError(f"start_hour must be 0-24, got {start_hour}")
+        raise ValueError(
+            f"start_hour must be in range [0, 24), got {start_hour}.\n"
+            f"Use 0 for midnight, 12 for noon, 23 for 11pm.\n"
+            f"Fractional hours are supported: 9.5 = 9:30am, 14.25 = 2:15pm"
+        )
     if duration_hours <= 0:
-        raise ValueError(f"duration_hours must be positive, got {duration_hours}")
+        raise ValueError(
+            f"duration_hours must be positive, got {duration_hours}.\n"
+            f"Example: duration_hours=8 for an 8-hour window (like 9am-5pm)"
+        )
     if start_hour + duration_hours > 24:
         raise ValueError(
-            f"start_hour + duration_hours exceeds 24 hours: {start_hour} + {duration_hours} = {start_hour + duration_hours}"
+            f"start_hour + duration_hours cannot exceed 24 hours.\n"
+            f"Got: {start_hour} + {duration_hours} = {start_hour + duration_hours}\n"
+            f"time_of_day() cannot span midnight. For overnight windows, use recurring():\n"
+            f"  overnight = recurring(freq='daily', start_hour=20, duration_hours=5, tz='UTC')\n"
         )
 
     return recurring(
