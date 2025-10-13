@@ -180,14 +180,16 @@ meeting_slots = list(options[0:10000])
 
 If your timeline produces enriched interval subclasses, override `Timeline._make_complement_interval` so the complement operator keeps that metadata intact.
 
-## Built-in Time Windows
+## Recurring Patterns
 
-calgebra provides two composable primitives for building time-based filters. These require no external dependencies and work seamlessly with the algebra.
+calgebra provides powerful recurrence pattern support via `recurring()`, backed by `python-dateutil`'s RFC 5545 implementation. For common cases, convenience wrappers make simple patterns ergonomic.
 
-### The Two Primitives
+### Convenience Wrappers for Common Patterns
 
-**`day_of_week(days, tz)`** - Filter by day(s) of the week  
-**`time_of_day(start_hour, duration_hours, tz)`** - Filter by time window
+**`day_of_week(days, tz)`** - Filter by day(s) of the week (wrapper around `recurring(freq="weekly", day=...)`)  
+**`time_of_day(start_hour, duration_hours, tz)`** - Filter by time window (wrapper around `recurring(freq="daily", ...)`)
+
+These are great starting points for everyday patterns:
 
 ### Basic Usage
 
@@ -306,6 +308,74 @@ london_hours = flatten(
 overlap = flatten(pacific_hours & london_hours)
 shared_hours = list(overlap[start:end])
 ```
+
+### Advanced Patterns with `recurring()`
+
+For patterns beyond simple weekly/daily filtering, use `recurring()` directly:
+
+```python
+from calgebra import recurring
+
+# Bi-weekly meetings (every other Monday)
+biweekly_standup = recurring(
+    freq="weekly",
+    interval=2,  # Every 2 weeks
+    day="monday",
+    start_hour=9.5,
+    duration_hours=0.5,
+    tz="US/Pacific"
+)
+
+# First Monday of each month (monthly all-hands)
+monthly_allhands = recurring(
+    freq="monthly",
+    week=1,  # First occurrence
+    day="monday",
+    start_hour=10,
+    duration_hours=1,
+    tz="UTC"
+)
+
+# Last Friday of each month (team social)
+end_of_month_social = recurring(
+    freq="monthly",
+    week=-1,  # Last occurrence
+    day="friday",
+    start_hour=17,
+    duration_hours=2,
+    tz="US/Pacific"
+)
+
+# 1st and 15th of every month (payroll processing)
+payroll_days = recurring(
+    freq="monthly",
+    day_of_month=[1, 15],
+    start_hour=0,
+    duration_hours=24,
+    tz="UTC"
+)
+
+# Quarterly board meetings (first Monday of Jan, Apr, Jul, Oct)
+board_meetings = recurring(
+    freq="monthly",
+    interval=3,  # Every 3 months
+    week=1,
+    day="monday",
+    start_hour=14,
+    duration_hours=3,
+    tz="US/Pacific"
+)
+```
+
+The `recurring()` function supports:
+- **freq**: `"daily"`, `"weekly"`, `"monthly"`
+- **interval**: Repeat every N units (e.g., `interval=2` for bi-weekly)
+- **day**: Day name(s) for weekly/monthly patterns (`"monday"`, `["tuesday", "thursday"]`)
+- **week**: Nth occurrence for monthly patterns (`1`=first, `-1`=last, `2`=second, etc.)
+- **day_of_month**: Specific day(s) of month (`1`-`31`, or `-1` for last day)
+- **month**: Specific month(s) for yearly patterns (`1`-`12`)
+- **start_hour** / **duration_hours**: Time window within each occurrence (supports fractional hours)
+- **tz**: IANA timezone name
 
 ## Extending calgebra
 

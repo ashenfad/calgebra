@@ -9,10 +9,10 @@ A tiny DSL for merging and searching over calendar-like intervals.
 python -m venv .venv
 source .venv/bin/activate
 
-# Install the package (core library, no dependencies)
+# Install the package
 pip install -e .
 
-# Or with Google Calendar support
+# Or with Google Calendar support  
 pip install -e .[google-calendar]
 ```
 
@@ -43,10 +43,11 @@ Intervals in `calgebra` are inclusive of both `start` and `end`—durations ther
 
 Common helpers and aggregates are exposed alongside the core DSL:
 
-**Time Windows** (built-in, zero dependencies):
-- `day_of_week(days, tz)` filters by day(s) of week ("monday", ["tuesday", "thursday"], etc.)
-- `time_of_day(start_hour, duration_hours, tz)` filters by time window (supports fractional hours)
-- Compose with `&` to create patterns like business hours, recurring meetings, etc.
+**Recurring Patterns** (RFC 5545 via `python-dateutil`):
+- `recurring(freq, ...)` generates intervals based on recurrence rules (weekly, bi-weekly, monthly, etc.)
+- `day_of_week(days, tz)` convenience wrapper for filtering by day(s) of week
+- `time_of_day(start_hour, duration_hours, tz)` convenience wrapper for daily time windows
+- Compose with `&` to create complex patterns like business hours, recurring meetings, etc.
 
 **Aggregation & Analysis**:
 - `flatten(timeline)` converts overlapping/adjacent spans into a coalesced timeline (returns plain `Interval`s and must be sliced with explicit bounds)

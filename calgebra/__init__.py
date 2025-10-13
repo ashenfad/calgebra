@@ -10,7 +10,7 @@ from .metrics import (
     total_duration,
 )
 from .properties import Property, days, end, hours, minutes, one_of, seconds, start
-from .windows import day_of_week, time_of_day
+from .recurrence import day_of_week, recurring, time_of_day
 
 # Load documentation files for programmatic access by agents and code-aware tools
 _docs_path = files(__package__) / "docs"
@@ -42,5 +42,6 @@ __all__ = [
     "coverage_ratio",
     "day_of_week",
     "time_of_day",
+    "recurring",
     "docs",
 ]
