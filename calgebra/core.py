@@ -16,10 +16,10 @@ class Timeline(ABC, Generic[IvlOut]):
         pass
 
     @property
-    def _is_plain(self) -> bool:
-        """True if this timeline only yields plain Interval objects (no metadata).
+    def _is_mask(self) -> bool:
+        """True if this timeline only yields mask Interval objects (no metadata).
 
-        When a timeline is marked as plain, intersections can optimize by
+        When a timeline is marked as mask, intersections can optimize by
         auto-flattening or using asymmetric behavior to preserve metadata
         from rich sources.
         """
@@ -143,9 +143,9 @@ class Union(Timeline[IvlOut]):
 
     @property
     @override
-    def _is_plain(self) -> bool:
-        """Union is plain only if all sources are plain."""
-        return all(s._is_plain for s in self.sources)
+    def _is_mask(self) -> bool:
+        """Union is mask only if all sources are mask."""
+        return all(s._is_mask for s in self.sources)
 
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
@@ -167,9 +167,9 @@ class Intersection(Timeline[IvlOut]):
 
     @property
     @override
-    def _is_plain(self) -> bool:
-        """Intersection is plain only if all sources are plain."""
-        return all(s._is_plain for s in self.sources)
+    def _is_mask(self) -> bool:
+        """Intersection is mask only if all sources are mask."""
+        return all(s._is_mask for s in self.sources)
 
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
@@ -180,8 +180,8 @@ class Intersection(Timeline[IvlOut]):
         from sources (behavior depends on source types).
 
         Auto-flattening optimization:
-        - All plain sources: Yields one interval per overlap (auto-flattened)
-        - Mixed plain/rich: Yields only from rich sources (preserves metadata)
+        - All mask sources: Yields one interval per overlap (auto-flattened)
+        - Mixed mask/rich: Yields only from rich sources (preserves metadata)
         - All rich sources: Yields from all sources (preserves metadata)
 
         Key invariant: overlap_start <= overlap_end means all sources have coverage.
@@ -190,19 +190,17 @@ class Intersection(Timeline[IvlOut]):
             return ()
 
         # Determine behavior based on source types
-        plain_sources = [s._is_plain for s in self.sources]
-        all_plain = all(plain_sources)
-        any_plain = any(plain_sources)
+        mask_sources = [s._is_mask for s in self.sources]
+        all_mask = all(mask_sources)
+        any_mask = any(mask_sources)
 
         # Get indices of sources to emit from
-        if all_plain:
-            # All plain: emit just one interval per overlap (auto-flatten)
+        if all_mask:
+            # All mask: emit just one interval per overlap (auto-flatten)
             emit_indices = [0]
-        elif any_plain:
+        elif any_mask:
             # Mixed: emit only from rich sources (preserve their metadata)
-            emit_indices = [
-                i for i, is_plain in enumerate(plain_sources) if not is_plain
-            ]
+            emit_indices = [i for i, is_mask in enumerate(mask_sources) if not is_mask]
         else:
             # All rich: emit from all (current behavior)
             emit_indices = list(range(len(self.sources)))
@@ -253,9 +251,9 @@ class Filtered(Timeline[IvlOut]):
 
     @property
     @override
-    def _is_plain(self) -> bool:
-        """Filtered timeline preserves the source's plainness."""
-        return self.source._is_plain
+    def _is_mask(self) -> bool:
+        """Filtered timeline preserves the source's maskness."""
+        return self.source._is_mask
 
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
@@ -273,9 +271,9 @@ class Difference(Timeline[IvlOut]):
 
     @property
     @override
-    def _is_plain(self) -> bool:
-        """Difference preserves the source's plainness (subtractors don't affect type)."""
-        return self.source._is_plain
+    def _is_mask(self) -> bool:
+        """Difference preserves the source's maskness (subtractors don't affect type)."""
+        return self.source._is_mask
 
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
@@ -367,8 +365,8 @@ class Complement(Timeline[Interval]):
 
     @property
     @override
-    def _is_plain(self) -> bool:
-        """Complement always produces plain Interval objects.
+    def _is_mask(self) -> bool:
+        """Complement always produces mask Interval objects.
 
         Gaps represent the absence of events and have no metadata.
         """
@@ -424,7 +422,7 @@ def flatten(timeline: "Timeline[Any]") -> "Timeline[Interval]":
     Merges overlapping and adjacent intervals into single continuous spans.
     Useful before aggregations or when you need simplified coverage.
 
-    Note: Returns plain Interval objects (custom metadata is lost).
+    Note: Returns mask Interval objects (custom metadata is lost).
           Requires finite bounds when slicing: flatten(tl)[start:end]
 
     Example:

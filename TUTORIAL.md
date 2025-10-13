@@ -180,7 +180,7 @@ options = free & (hours >= 1)
 meeting_slots = list(options[0:10000])
 ```
 
-**Note**: Complement (`~`) always yields plain `Interval` objects representing gaps, regardless of the source timeline's interval type. Gaps are the absence of events and have no metadata.
+**Note**: Complement (`~`) always yields mask `Interval` objects representing gaps, regardless of the source timeline's interval type. Gaps are the absence of events and have no metadata.
 
 ## Recurring Patterns
 
@@ -500,7 +500,7 @@ class MyTimeline(Timeline[Interval]):
 # When both timelines have metadata, use `flatten` for single coalesced spans:
 coalesced = flatten(calendar_a & calendar_b)
 
-# Intersecting with plain recurring patterns automatically preserves metadata:
+# Intersecting with mask recurring patterns automatically preserves metadata:
 work_events = calendar_a & time_of_day(start=9*HOUR, duration=8*HOUR)
 
 # See "Auto-Flattening and When to Use flatten()" section for details
@@ -630,17 +630,17 @@ results = list(query[start:end])
 
 ### Auto-Flattening and When to Use `flatten()`
 
-calgebra automatically optimizes intersections based on whether timelines contain plain intervals (like recurring patterns) or metadata-rich events:
+calgebra automatically optimizes intersections based on whether timelines contain mask intervals (like recurring patterns) or metadata-rich events:
 
 **Automatic Flattening** (no `flatten()` needed):
 ```python
 from calgebra import day_of_week, time_of_day, HOUR
 
-# Plain & Plain → Auto-flattened (1 interval per overlap)
+# Mask & Mask → Auto-flattened (1 interval per overlap)
 weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
 business_hours = weekdays & time_of_day(start=9*HOUR, duration=8*HOUR)
 
-# Rich & Plain → Preserves rich metadata (only yields from rich source)
+# Rich & Mask → Preserves rich metadata (only yields from rich source)
 work_meetings = my_calendar & time_of_day(start=9*HOUR, duration=8*HOUR)
 ```
 
@@ -651,7 +651,7 @@ from calgebra import flatten
 # 1. Coalescing union results for display
 all_busy = flatten(alice_cal | bob_cal | charlie_cal)
 
-# 2. Converting metadata-rich intervals to plain intervals
+# 2. Converting metadata-rich intervals to mask intervals
 simple_coverage = flatten(enriched_calendar)
 
 # 3. When both sources have metadata and you want single coalesced spans
