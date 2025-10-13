@@ -156,25 +156,39 @@ class Intersection(Timeline[IvlOut]):
 
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
+        """Compute intersection using a multi-way merge with sliding window.
+
+        Algorithm: Maintains one "current" interval from each source and advances
+        them in lockstep. When all current intervals overlap, yields a trimmed copy
+        from each source (preserving metadata). Advances any interval whose end
+        matches the overlap boundary.
+
+        Key invariant: overlap_start <= overlap_end means all sources have coverage.
+        Yields one interval per source for each overlapping region.
+        """
         if not self.sources:
             return ()
 
         iterators = [iter(source.fetch(start, end)) for source in self.sources]
 
         def generate() -> Iterable[IvlOut]:
+            # Initialize: get first interval from each source
             try:
                 current = [next(iterator) for iterator in iterators]
             except StopIteration:
                 return
 
             while True:
+                # Find overlap region across all current intervals
                 overlap_start = max(event.start for event in current)
                 overlap_end = min(event.end for event in current)
 
+                # If there's actual overlap, yield trimmed copy from each source
                 if overlap_start <= overlap_end:
                     for event in current:
                         yield replace(event, start=overlap_start, end=overlap_end)
 
+                # Advance any interval that ends at the overlap boundary
                 cutoff = overlap_end
                 advanced = False
                 for idx, event in enumerate(current):
@@ -185,6 +199,7 @@ class Intersection(Timeline[IvlOut]):
                         except StopIteration:
                             return
 
+                # If no interval advanced, we've exhausted all overlaps
                 if not advanced:
                     return
 
@@ -212,11 +227,21 @@ class Difference(Timeline[IvlOut]):
 
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
+        """Subtract intervals using a sweep-line algorithm.
+
+        Algorithm: For each source interval, scan through subtractor intervals
+        and emit the remaining non-overlapping fragments. Uses a cursor to track
+        the current position within each source interval as we carve out holes.
+
+        The subtractors are merged into a single sorted stream for efficiency.
+        """
+
         def generate() -> Iterable[IvlOut]:
             if not self.subtractors:
                 yield from self.source.fetch(start, end)
                 return
 
+            # Merge all subtractor streams into one sorted by (start, end)
             merged = heapq.merge(
                 *(subtractor.fetch(start, end) for subtractor in self.subtractors),
                 key=lambda event: (event.start, event.end),
@@ -235,14 +260,17 @@ class Difference(Timeline[IvlOut]):
                 except StopIteration:
                     current_subtractor = None
 
+            # Process each source interval
             for event in self.source.fetch(start, end):
                 if current_subtractor is None:
                     yield event
                     continue
 
+                # Track current position within this event as we carve out holes
                 cursor = event.start
                 event_end = event.end
 
+                # Skip subtractors that end before our cursor position
                 while current_subtractor and current_subtractor.end < cursor:
                     advance_subtractor()
 
@@ -250,26 +278,31 @@ class Difference(Timeline[IvlOut]):
                     yield event
                     continue
 
+                # Process all subtractors that overlap with this event
                 while current_subtractor and current_subtractor.start <= event_end:
                     overlap_start = max(cursor, current_subtractor.start)
                     overlap_end = min(event_end, current_subtractor.end)
 
                     if overlap_start <= overlap_end:
+                        # Emit fragment before the hole (if any)
                         if cursor <= overlap_start - 1:
                             yield replace(event, start=cursor, end=overlap_start - 1)
+                        # Move cursor past the hole
                         cursor = overlap_end + 1
                         if cursor > event_end:
                             break
 
+                    # Advance if subtractor ends within this event
                     if current_subtractor.end <= event_end:
                         advance_subtractor()
                     else:
                         break
 
+                # Emit final fragment after all holes (if any remains)
                 if cursor <= event_end:
                     yield replace(event, start=cursor, end=event_end)
 
-            # exhaust generator to avoid partially consumed iterators on reuse
+            # Exhaust generator to avoid partially consumed iterators on reuse
             for _ in subtractor_iter:
                 pass
 
@@ -282,6 +315,11 @@ class Complement(Timeline[IvlOut]):
 
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
+        """Generate gaps by inverting the source timeline within finite bounds.
+
+        Algorithm: Scan through source intervals and emit intervals for the spaces
+        between them. Cursor tracks the start of the next potential gap.
+        """
         if start is None or end is None:
             raise ValueError(
                 f"Complement (~) requires finite bounds, got start={start}, end={end}.\n"
