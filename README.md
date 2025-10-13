@@ -19,11 +19,11 @@ pip install -e .[google-calendar]
 ## Quick Start
 
 ```python
-from calgebra import day_of_week, time_of_day, hours, flatten
+from calgebra import day_of_week, time_of_day, hours, flatten, HOUR
 
 # Compose time windows from primitives
 weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
-work_hours = time_of_day(start_hour=9, duration_hours=8, tz="US/Pacific")
+work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
 business_hours = flatten(weekdays & work_hours)
 
 # Union: combine multiple calendars
@@ -46,7 +46,8 @@ Common helpers and aggregates are exposed alongside the core DSL:
 **Recurring Patterns** (RFC 5545 via `python-dateutil`):
 - `recurring(freq, ...)` generates intervals based on recurrence rules (weekly, bi-weekly, monthly, etc.)
 - `day_of_week(days, tz)` convenience wrapper for filtering by day(s) of week
-- `time_of_day(start_hour, duration_hours, tz)` convenience wrapper for daily time windows
+- `time_of_day(start, duration, tz)` convenience wrapper for daily time windows
+- `HOUR`, `MINUTE`, `DAY`, `SECOND` constants for readable time specifications
 - Compose with `&` to create complex patterns like business hours, recurring meetings, etc.
 
 **Aggregation & Analysis**:
@@ -56,6 +57,10 @@ Common helpers and aggregates are exposed alongside the core DSL:
 - `max_duration` / `min_duration` find the longest or shortest clamped intervals
 - `count_intervals` tallies events over a slice
 - `coverage_ratio` reports utilization as a 0–1 fraction
+
+**Transformations**:
+- `buffer(timeline, before, after)` adds buffer time around each interval (useful for travel time, setup/teardown)
+- `merge_within(timeline, gap)` coalesces intervals separated by at most `gap` seconds (useful for grouping related events)
 
 **Integrations**:
 - `calgebra.gcsa.Calendar` provides Google Calendar integration with timezone normalization and automatic paging; it assumes locally stored OAuth credentials

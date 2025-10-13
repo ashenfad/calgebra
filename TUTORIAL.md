@@ -187,14 +187,14 @@ calgebra provides powerful recurrence pattern support via `recurring()`, backed 
 ### Convenience Wrappers for Common Patterns
 
 **`day_of_week(days, tz)`** - Filter by day(s) of the week (wrapper around `recurring(freq="weekly", day=...)`)  
-**`time_of_day(start_hour, duration_hours, tz)`** - Filter by time window (wrapper around `recurring(freq="daily", ...)`)
+**`time_of_day(start, duration, tz)`** - Filter by time window (wrapper around `recurring(freq="daily", ...)`)
 
 These are great starting points for everyday patterns:
 
 ### Basic Usage
 
 ```python
-from calgebra import day_of_week, time_of_day
+from calgebra import day_of_week, time_of_day, HOUR, MINUTE
 
 # All Mondays
 mondays = day_of_week("monday", tz="US/Pacific")
@@ -208,11 +208,11 @@ weekdays = day_of_week(
 # Weekends
 weekends = day_of_week(["saturday", "sunday"], tz="UTC")
 
-# 9am-5pm every day (8 hour duration)
-daytime = time_of_day(start_hour=9, duration_hours=8, tz="UTC")
+# 9am-5pm every day (8 hours)
+daytime = time_of_day(start=9*HOUR, duration=8*HOUR, tz="UTC")
 
-# 9:30am-10am (fractional hours for 30 minutes)
-standup_time = time_of_day(start_hour=9.5, duration_hours=0.5, tz="US/Pacific")
+# 9:30am-10am (30 minutes)
+standup_time = time_of_day(start=9*HOUR + 30*MINUTE, duration=30*MINUTE, tz="US/Pacific")
 ```
 
 ### Composing: Business Hours
@@ -220,14 +220,14 @@ standup_time = time_of_day(start_hour=9.5, duration_hours=0.5, tz="US/Pacific")
 Combine day-of-week and time-of-day to create business hours:
 
 ```python
-from calgebra import day_of_week, time_of_day, flatten
+from calgebra import day_of_week, time_of_day, flatten, HOUR
 
 # Business hours = weekdays AND 9-5
 weekdays = day_of_week(
     ["monday", "tuesday", "wednesday", "thursday", "friday"],
     tz="US/Pacific"
 )
-work_hours = time_of_day(start_hour=9, duration_hours=8, tz="US/Pacific")
+work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
 
 # Flatten to coalesce (intersection yields one interval per source)
 business_hours = flatten(weekdays & work_hours)
@@ -242,16 +242,16 @@ free_slots = list(free[monday:friday])
 Create specific recurring meeting patterns:
 
 ```python
-from calgebra import day_of_week, time_of_day, flatten
+from calgebra import day_of_week, time_of_day, flatten, HOUR, MINUTE
 
 # Monday standup: every Monday at 9:30am for 30 minutes
 mondays = day_of_week("monday", tz="US/Pacific")
-standup_time = time_of_day(start_hour=9.5, duration_hours=0.5, tz="US/Pacific")
+standup_time = time_of_day(start=9*HOUR + 30*MINUTE, duration=30*MINUTE, tz="US/Pacific")
 monday_standup = flatten(mondays & standup_time)
 
 # Tuesday/Thursday office hours: 2-4pm
 tue_thu = day_of_week(["tuesday", "thursday"], tz="US/Pacific")
-afternoon = time_of_day(start_hour=14, duration_hours=2, tz="US/Pacific")
+afternoon = time_of_day(start=14*HOUR, duration=2*HOUR, tz="US/Pacific")
 office_hours = flatten(tue_thu & afternoon)
 
 # Find conflicts
@@ -263,7 +263,7 @@ conflicts = my_calendar & monday_standup
 Use composition to evaluate candidate meeting times:
 
 ```python
-from calgebra import day_of_week, time_of_day, flatten
+from calgebra import day_of_week, time_of_day, flatten, HOUR, MINUTE
 from calgebra.metrics import total_duration
 
 # Team busy time
@@ -272,13 +272,13 @@ team_busy = flatten(alice_cal | bob_cal | charlie_cal)
 # Candidate standup times
 candidates = {
     "Mon 9am": flatten(
-        day_of_week("monday") & time_of_day(start_hour=9, duration_hours=0.5)
+        day_of_week("monday") & time_of_day(start=9*HOUR, duration=30*MINUTE)
     ),
     "Tue 10am": flatten(
-        day_of_week("tuesday") & time_of_day(start_hour=10, duration_hours=0.5)
+        day_of_week("tuesday") & time_of_day(start=10*HOUR, duration=30*MINUTE)
     ),
     "Wed 2pm": flatten(
-        day_of_week("wednesday") & time_of_day(start_hour=14, duration_hours=0.5)
+        day_of_week("wednesday") & time_of_day(start=14*HOUR, duration=30*MINUTE)
     ),
 }
 
@@ -294,14 +294,16 @@ for name, option in candidates.items():
 All time window helpers are timezone-aware:
 
 ```python
+from calgebra import day_of_week, time_of_day, flatten, HOUR
+
 # Different timezones for different queries
 pacific_hours = flatten(
     day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"], tz="US/Pacific")
-    & time_of_day(start_hour=9, duration_hours=8, tz="US/Pacific")
+    & time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
 )
 london_hours = flatten(
     day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"], tz="Europe/London")
-    & time_of_day(start_hour=9, duration_hours=8, tz="Europe/London")
+    & time_of_day(start=9*HOUR, duration=8*HOUR, tz="Europe/London")
 )
 
 # Find overlap between Pacific and London work hours
@@ -314,15 +316,15 @@ shared_hours = list(overlap[start:end])
 For patterns beyond simple weekly/daily filtering, use `recurring()` directly:
 
 ```python
-from calgebra import recurring
+from calgebra import recurring, HOUR, MINUTE
 
 # Bi-weekly meetings (every other Monday)
 biweekly_standup = recurring(
     freq="weekly",
     interval=2,  # Every 2 weeks
     day="monday",
-    start_hour=9.5,
-    duration_hours=0.5,
+    start=9*HOUR + 30*MINUTE,
+    duration=30*MINUTE,
     tz="US/Pacific"
 )
 
@@ -331,8 +333,8 @@ monthly_allhands = recurring(
     freq="monthly",
     week=1,  # First occurrence
     day="monday",
-    start_hour=10,
-    duration_hours=1,
+    start=10*HOUR,
+    duration=HOUR,
     tz="UTC"
 )
 
@@ -341,17 +343,15 @@ end_of_month_social = recurring(
     freq="monthly",
     week=-1,  # Last occurrence
     day="friday",
-    start_hour=17,
-    duration_hours=2,
+    start=17*HOUR,
+    duration=2*HOUR,
     tz="US/Pacific"
 )
 
-# 1st and 15th of every month (payroll processing)
+# 1st and 15th of every month (payroll processing - full day)
 payroll_days = recurring(
     freq="monthly",
     day_of_month=[1, 15],
-    start_hour=0,
-    duration_hours=24,
     tz="UTC"
 )
 
@@ -361,8 +361,8 @@ board_meetings = recurring(
     interval=3,  # Every 3 months
     week=1,
     day="monday",
-    start_hour=14,
-    duration_hours=3,
+    start=14*HOUR,
+    duration=3*HOUR,
     tz="US/Pacific"
 )
 ```
@@ -374,8 +374,65 @@ The `recurring()` function supports:
 - **week**: Nth occurrence for monthly patterns (`1`=first, `-1`=last, `2`=second, etc.)
 - **day_of_month**: Specific day(s) of month (`1`-`31`, or `-1` for last day)
 - **month**: Specific month(s) for yearly patterns (`1`-`12`)
-- **start_hour** / **duration_hours**: Time window within each occurrence (supports fractional hours)
+- **start** / **duration**: Time window within each occurrence in seconds (use `HOUR`, `MINUTE` constants)
 - **tz**: IANA timezone name
+
+## Transformations
+
+Transformations modify the shape or structure of intervals while preserving their identity and metadata.
+
+### Adding Buffer Time with `buffer()`
+
+Add time before and/or after each interval—useful for travel time, setup/teardown, or slack time:
+
+```python
+from calgebra import buffer, HOUR, MINUTE
+
+# Add 2 hours before flights for travel and security
+blocked_time = buffer(flights, before=2*HOUR)
+
+# Add 15 minutes of buffer on both sides of meetings
+busy_time = buffer(meetings, before=15*MINUTE, after=15*MINUTE)
+
+# Check for conflicts with expanded times
+conflicts = blocked_time & other_calendar
+```
+
+### Merging Nearby Intervals with `merge_within()`
+
+Coalesce intervals that are close together in time—useful for clustering related events or grouping alarms into incidents:
+
+```python
+from calgebra import merge_within, MINUTE
+
+# Treat alarms within 15 minutes as one incident
+incidents = merge_within(alarms, gap=15*MINUTE)
+
+# Group meetings scheduled within 5 minutes into busy blocks
+busy_blocks = merge_within(meetings, gap=5*MINUTE)
+
+# Filter to specific day
+monday_incidents = incidents & day_of_week("monday")
+```
+
+**Key Difference from `flatten()`:**
+- `merge_within(gap=X)`: Merges intervals separated by **at most** `X` seconds, preserving metadata from the first interval in each group
+- `flatten()`: Merges **all** adjacent or overlapping intervals (gap=0), creating new minimal `Interval` objects without custom metadata
+
+Use `merge_within()` when you need to preserve event metadata and control the merge threshold. Use `flatten()` for simple coalescing.
+
+### Composing Transformations
+
+Transformations are composable with all other operations:
+
+```python
+from calgebra import buffer, merge_within, flatten, HOUR, MINUTE
+
+# Complex workflow: buffer events, merge nearby ones, then intersect
+buffered_events = buffer(events, before=30*MINUTE, after=15*MINUTE)
+incident_groups = merge_within(buffered_events, gap=10*MINUTE)
+weekday_incidents = flatten(incident_groups & day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"]))
+```
 
 ## Extending calgebra
 
