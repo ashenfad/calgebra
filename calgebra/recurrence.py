@@ -80,8 +80,10 @@ class RecurringTimeline(Timeline[Interval]):
         Args:
             freq: Frequency - "daily", "weekly", "monthly", or "yearly"
             interval: Repeat every N units (default 1)
-            day: Day(s) of week for weekly/monthly patterns ("monday" or ["monday", "wednesday"])
-            week: Which week of month for monthly patterns (1=first, -1=last, 2=second, etc.)
+            day: Day(s) of week for weekly/monthly patterns
+                ("monday" or ["monday", "wednesday"])
+            week: Which week of month for monthly patterns
+                (1=first, -1=last, 2=second, etc.)
             day_of_month: Day(s) of month (1-31, or -1 for last day)
             month: Month(s) for yearly patterns (1-12)
             start: Start time of each occurrence in seconds from midnight (default 0)
@@ -91,10 +93,16 @@ class RecurringTimeline(Timeline[Interval]):
         Examples:
             >>> from calgebra import HOUR, MINUTE
             >>> # Every Monday at 9:30am for 30 min
-            >>> recurring(freq="weekly", day="monday", start=9*HOUR + 30*MINUTE, duration=30*MINUTE)
+            >>> recurring(
+            ...     freq="weekly", day="monday",
+            ...     start=9*HOUR + 30*MINUTE, duration=30*MINUTE
+            ... )
             >>>
             >>> # First Monday of each month at 10am for 1 hour
-            >>> recurring(freq="monthly", week=1, day="monday", start=10*HOUR, duration=HOUR)
+            >>> recurring(
+            ...     freq="monthly", week=1, day="monday",
+            ...     start=10*HOUR, duration=HOUR
+            ... )
             >>>
             >>> # Every other Tuesday (full day)
             >>> recurring(freq="weekly", interval=2, day="tuesday")
@@ -151,8 +159,10 @@ class RecurringTimeline(Timeline[Interval]):
         """Generate recurring intervals within the query range."""
         if start is None or end is None:
             raise ValueError(
-                f"RecurringTimeline requires finite bounds, got start={start}, end={end}.\n"
-                f"Fix: Use explicit bounds when slicing: list(recurring(...)[start:end])\n"
+                f"RecurringTimeline requires finite bounds, "
+                f"got start={start}, end={end}.\n"
+                f"Fix: Use explicit bounds when slicing: "
+                f"list(recurring(...)[start:end])\n"
                 f"Example: list(mondays[1704067200:1735689599])"
             )
 
@@ -293,7 +303,8 @@ def day_of_week(days: Day | list[Day], tz: str = "UTC") -> Timeline[Interval]:
     specified weekday(s).
 
     Args:
-        days: Single day name or list of day names (e.g., "monday", ["tuesday", "thursday"])
+        days: Single day name or list of day names
+            (e.g., "monday", ["tuesday", "thursday"])
         tz: IANA timezone name for day boundaries
 
     Returns:
@@ -306,7 +317,9 @@ def day_of_week(days: Day | list[Day], tz: str = "UTC") -> Timeline[Interval]:
         >>> mondays = day_of_week("monday", tz="UTC")
         >>>
         >>> # Weekdays (Mon-Fri)
-        >>> weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
+        >>> weekdays = day_of_week(
+        ...     ["monday", "tuesday", "wednesday", "thursday", "friday"]
+        ... )
     """
     return recurring(freq="weekly", day=days, tz=tz)
 
@@ -335,7 +348,9 @@ def time_of_day(
         >>> work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
         >>>
         >>> # Combine with day_of_week for business hours
-        >>> weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
+        >>> weekdays = day_of_week(
+        ...     ["monday", "tuesday", "wednesday", "thursday", "friday"]
+        ... )
         >>> business_hours = flatten(weekdays & work_hours)
     """
     # Validate parameters
@@ -354,9 +369,12 @@ def time_of_day(
         raise ValueError(
             f"start + duration cannot exceed 24 hours ({DAY} seconds).\n"
             f"Got: {start} + {duration} = {start + duration}\n"
-            f"time_of_day() cannot span midnight. For overnight windows, use recurring():\n"
+            f"time_of_day() cannot span midnight. "
+            f"For overnight windows, use recurring():\n"
             f"  from calgebra import recurring, HOUR\n"
-            f"  overnight = recurring(freq='daily', start=20*HOUR, duration=5*HOUR, tz='UTC')\n"
+            f"  overnight = recurring(\n"
+            f"      freq='daily', start=20*HOUR, duration=5*HOUR, tz='UTC'\n"
+            f"  )\n"
         )
 
     return recurring(freq="daily", start=start, duration=duration, tz=tz)

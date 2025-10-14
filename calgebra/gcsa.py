@@ -95,7 +95,8 @@ class Calendar(Timeline[Event]):
         start_dt = (
             _timestamp_to_datetime(start, self._zone) if start is not None else None
         )
-        # end bounds are inclusive; add a second so Google returns events touching the end
+        # end bounds are inclusive; add a second so Google returns events
+        # touching the end
         end_dt = (
             _timestamp_to_datetime(end + 1, self._zone) if end is not None else None
         )

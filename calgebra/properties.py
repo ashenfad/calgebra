@@ -19,9 +19,13 @@ class Operator(Filter[IvlIn]):
 
     @override
     def apply(self, event: IvlIn) -> bool:
-        l = self.left.apply(event) if isinstance(self.left, Property) else self.left
-        r = self.right.apply(event) if isinstance(self.right, Property) else self.right
-        return self.operator(l, r)
+        left_val = (
+            self.left.apply(event) if isinstance(self.left, Property) else self.left
+        )
+        right_val = (
+            self.right.apply(event) if isinstance(self.right, Property) else self.right
+        )
+        return self.operator(left_val, right_val)
 
 
 class Property(Generic[IvlIn]):

@@ -303,7 +303,7 @@ class Difference(Timeline[IvlOut]):
     @property
     @override
     def _is_mask(self) -> bool:
-        """Difference preserves the source's maskness (subtractors don't affect type)."""
+        """Difference preserves source's maskness (subtractors don't affect it)."""
         return self.source._is_mask
 
     @override
@@ -412,9 +412,11 @@ class Complement(Timeline[Interval]):
         """
         if start is None or end is None:
             raise ValueError(
-                f"Complement (~) requires finite bounds, got start={start}, end={end}.\n"
+                f"Complement (~) requires finite bounds, "
+                f"got start={start}, end={end}.\n"
                 f"Complement inverts a timeline, which requires a bounded universe.\n"
-                f"Fix: Use explicit bounds when slicing: list((~timeline)[start:end])\n"
+                f"Fix: Use explicit bounds when slicing: "
+                f"list((~timeline)[start:end])\n"
                 f"Example: list((~busy)[1704067200:1735689599])"
             )
 
@@ -470,8 +472,8 @@ def union(*timelines: "Timeline[IvlOut]") -> "Timeline[IvlOut]":
 
     if not timelines:
         raise ValueError(
-            f"union() requires at least one timeline argument.\n"
-            f"Example: union(cal_a, cal_b, cal_c)"
+            "union() requires at least one timeline argument.\n"
+            "Example: union(cal_a, cal_b, cal_c)"
         )
 
     def reducer(acc: "Timeline[IvlOut]", nxt: "Timeline[IvlOut]"):
@@ -487,8 +489,8 @@ def intersection(
 
     if not timelines:
         raise ValueError(
-            f"intersection() requires at least one timeline argument.\n"
-            f"Example: intersection(cal_a, cal_b, cal_c)"
+            "intersection() requires at least one timeline argument.\n"
+            "Example: intersection(cal_a, cal_b, cal_c)"
         )
 
     def reducer(acc: "Timeline[IvlOut]", nxt: "Timeline[IvlOut]"):
