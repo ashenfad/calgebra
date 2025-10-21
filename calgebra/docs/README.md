@@ -70,30 +70,6 @@ Common helpers and aggregates are exposed alongside the core DSL:
 
 **→ [Read the full tutorial](TUTORIAL.md)** for a complete guide to the DSL
 
-## Documentation for Agents
-
-Documentation is available programmatically for AI agents and code-aware tools:
-
-```python
-import calgebra
-
-# Access documentation as structured data
-print(calgebra.docs.keys())  # dict_keys(['readme', 'tutorial', 'api'])
-
-# Discover what the package does
-readme = calgebra.docs["readme"]  # Package overview and quick start
-
-# Learn how to use it
-tutorial = calgebra.docs["tutorial"]  # Comprehensive guide with examples
-api_ref = calgebra.docs["api"]        # API reference
-
-# Example: Use in agex task primers
-@agent.task(calgebra.docs["tutorial"])
-def schedule_meeting(...):
-    pass
-```
-
-This enables agents to access the same documentation humans use. The `readme` helps with package discovery and understanding the library's purpose, while `tutorial` and `api` provide usage guidance at runtime.
 
 ## Status
 
