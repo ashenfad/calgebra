@@ -95,9 +95,9 @@ def schedule_meeting(...):
 
 This enables agents to access the same documentation humans use. The `readme` helps with package discovery and understanding the library's purpose, while `tutorial` and `api` provide usage guidance at runtime.
 
-## Development Status
+## Status
 
-This library is currently under development. The core architecture and API design are being finalized.
+calgebra is in **beta** (v0.1.0). The core API is stable and ready for use. Feedback and contributions are welcome!
 
 ## License
 
