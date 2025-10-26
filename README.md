@@ -65,7 +65,8 @@ Common helpers and aggregates are exposed alongside the core DSL:
 **Integrations**:
 - `calgebra.gcsa.Calendar` provides Google Calendar integration with timezone normalization and automatic paging; it assumes locally stored OAuth credentials
 
-**→ [Read the full tutorial](TUTORIAL.md)** for a complete guide to the DSL
+**→ [Read the full tutorial](TUTORIAL.md)** for a complete guide to the DSL  
+**→ [API Reference](API.md)** for detailed function signatures and parameters
 
 
 ## Status
