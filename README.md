@@ -20,7 +20,13 @@ pip install -e .[google-calendar]
 
 ```python
 from datetime import datetime, timezone
-from calgebra import day_of_week, time_of_day, hours, HOUR
+from calgebra import timeline, day_of_week, time_of_day, hours, HOUR, Interval
+
+# Create timelines from intervals
+alice_cal = timeline(
+    Interval(start=1000, end=2000),
+    Interval(start=5000, end=6000),
+)
 
 # Compose time windows from primitives
 weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
@@ -28,7 +34,7 @@ work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
 business_hours = weekdays & work_hours
 
 # Union: combine multiple calendars
-busy = alice_calendar | bob_calendar | charlie_calendar
+busy = alice_cal | bob_calendar | charlie_calendar
 
 # Difference: find free time during business hours
 free = business_hours - busy

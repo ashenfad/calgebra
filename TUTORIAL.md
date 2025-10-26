@@ -191,34 +191,18 @@ events = list(long_meetings[start:end])
 Here's a realistic example - finding time slots for a team meeting:
 
 ```python
-from calgebra import Timeline, Interval, hours
-from collections.abc import Iterable
-from typing import override
-
-# First, create a simple Timeline implementation
-class SimpleTimeline(Timeline[Interval]):
-    def __init__(self, *events: Interval):
-        self.events = sorted(events, key=lambda e: (e.start, e.end))
-    
-    @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
-        for event in self.events:
-            if start is not None and event.end < start:
-                continue
-            if end is not None and event.start > end:
-                break
-            yield event
+from calgebra import timeline, Interval, hours
 
 # Define some busy periods (Unix timestamps)
-alice_busy = SimpleTimeline(
+alice_busy = timeline(
     Interval(start=1000, end=2000),
     Interval(start=5000, end=6000),
 )
-bob_busy = SimpleTimeline(
+bob_busy = timeline(
     Interval(start=1500, end=2500),
     Interval(start=7000, end=8000),
 )
-charlie_busy = SimpleTimeline(
+charlie_busy = timeline(
     Interval(start=3000, end=4000),
 )
 
@@ -556,26 +540,35 @@ is_standup = name == "standup"
 
 ### Custom Timelines
 
-Implement your own data sources:
+For simple static collections of intervals, use the `timeline()` helper:
+
+```python
+from calgebra import timeline, Interval
+
+# Quick and easy - no subclassing needed
+my_events = timeline(
+    Interval(start=1000, end=2000),
+    Interval(start=5000, end=6000),
+)
+```
+
+For more complex data sources (databases, APIs, generators), implement your own:
 
 ```python
 from collections.abc import Iterable
 from calgebra import Timeline, Interval, flatten, time_of_day, HOUR
 from typing import override
 
-class MyTimeline(Timeline[Interval]):
-    def __init__(self, data):
-        self.data = data
+class DatabaseTimeline(Timeline[Interval]):
+    def __init__(self, db_connection):
+        self.db = db_connection
     
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
-        for interval in self.data:
-            # Filter to bounds
-            if start is not None and interval.end < start:
-                continue
-            if end is not None and interval.start > end:
-                break
-            yield interval
+        # Query database with bounds
+        query = "SELECT start, end FROM events WHERE ..."
+        for row in self.db.execute(query, (start, end)):
+            yield Interval(start=row['start'], end=row['end'])
 
 # When both timelines have metadata, use `flatten` for single coalesced spans:
 coalesced = flatten(calendar_a & calendar_b)
