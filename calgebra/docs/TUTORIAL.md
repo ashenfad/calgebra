@@ -514,28 +514,58 @@ class NamedInterval(Interval):
 
 ### Custom Properties
 
-Extract custom fields using `Property`:
+For simple field access, use the `field()` helper:
+
+```python
+from calgebra import field, one_of
+
+# Quick field access by name
+priority = field('priority')
+name = field('name')
+
+high_priority = priority >= 8
+is_standup = name == "standup"
+
+# Or use lambdas for type safety and IDE support
+priority = field(lambda e: e.priority)
+urgent = timeline & (priority >= 8)
+
+# Computed properties work too
+tag_count = field(lambda e: len(e.tags))
+multi_tagged = timeline & (tag_count >= 2)
+```
+
+For collection fields (sets, lists, tuples), use `has_any()` or `has_all()`:
+
+```python
+from calgebra import field, has_any, has_all
+
+# Match events with ANY of the specified tags
+tags = field('tags')  # tags: set[str]
+work_events = timeline & has_any(tags, {"work", "urgent"})
+
+# Match events with ALL of the specified tags
+critical_work = timeline & has_all(tags, {"work", "urgent"})
+
+# Works with lists too
+labels = field('labels')  # labels: list[str]
+todo_items = timeline & has_any(labels, {"todo", "important"})
+```
+
+**Note:** Use `one_of()` for scalar fields (strings, ints), and `has_any()`/`has_all()` for collection fields (sets, lists, tuples).
+
+For more complex logic, subclass `Property` directly:
 
 ```python
 from calgebra import Property
 from typing import override
 
-class Name(Property[NamedInterval]):
+class IsUrgent(Property[NamedInterval]):
     @override
-    def apply(self, event: NamedInterval) -> str:
-        return event.name
+    def apply(self, event: NamedInterval) -> bool:
+        return event.priority >= 8 and "urgent" in event.tags
 
-class Priority(Property[NamedInterval]):
-    @override
-    def apply(self, event: NamedInterval) -> int:
-        return event.priority
-
-# Use in filters
-name = Name()
-priority = Priority()
-
-high_priority = priority >= 8
-is_standup = name == "standup"
+urgent = timeline & IsUrgent()
 ```
 
 ### Custom Timelines

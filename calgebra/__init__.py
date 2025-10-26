@@ -9,7 +9,19 @@ from .metrics import (
     min_duration,
     total_duration,
 )
-from .properties import Property, days, end, hours, minutes, one_of, seconds, start
+from .properties import (
+    Property,
+    days,
+    end,
+    field,
+    has_all,
+    has_any,
+    hours,
+    minutes,
+    one_of,
+    seconds,
+    start,
+)
 from .recurrence import day_of_week, recurring, time_of_day
 from .transform import buffer, merge_within
 from .util import DAY, HOUR, MINUTE, SECOND
@@ -32,6 +44,9 @@ __all__ = [
     "union",
     "intersection",
     "one_of",
+    "has_any",
+    "has_all",
+    "field",
     "days",
     "start",
     "end",

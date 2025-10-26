@@ -1,6 +1,6 @@
 import operator as op
-from collections.abc import Iterable
-from typing import Any, Callable, Generic, Hashable, Literal
+from collections.abc import Callable, Iterable
+from typing import Any, Generic, Hashable, Literal
 
 from typing_extensions import override
 
@@ -99,3 +99,133 @@ end: End = End()
 
 def one_of(property: Property[IvlIn], values: Iterable[Hashable]) -> Operator[IvlIn]:
     return Operator(set(values), property, op.contains)
+
+
+def has_any(property: Property[IvlIn], values: Iterable[Hashable]) -> Operator[IvlIn]:
+    """Check if a collection property contains any of the given values.
+
+    Useful for filtering intervals with collection fields (sets, lists, etc.)
+    where you want to match if ANY value is present.
+
+    Args:
+        property: A Property that returns a collection (set, list, tuple, etc.)
+        values: Values to check for (will be converted to a set)
+
+    Returns:
+        A filter that matches when the property's collection intersects with values.
+
+    Examples:
+        >>> from dataclasses import dataclass
+        >>> from calgebra import Interval, field, has_any
+        >>>
+        >>> @dataclass(frozen=True, kw_only=True)
+        >>> class Event(Interval):
+        ...     tags: set[str]
+        >>>
+        >>> tags = field('tags')
+        >>> work_events = timeline & has_any(tags, {"work", "urgent"})
+        >>>
+        >>> # With lambda for type safety
+        >>> work_events = timeline & has_any(field(lambda e: e.tags), {"work"})
+    """
+    value_set = set(values)
+
+    def check(prop_val: Any, _: Any) -> bool:
+        try:
+            # Try to convert to set and check intersection
+            return bool(value_set & set(prop_val))
+        except TypeError:
+            # If not iterable, fall back to membership check
+            return prop_val in value_set
+
+    return Operator(property, None, check)
+
+
+def has_all(property: Property[IvlIn], values: Iterable[Hashable]) -> Operator[IvlIn]:
+    """Check if a collection property contains all of the given values.
+
+    Useful for filtering intervals with collection fields (sets, lists, etc.)
+    where you want to match only if ALL values are present.
+
+    Args:
+        property: A Property that returns a collection (set, list, tuple, etc.)
+        values: Values to check for (will be converted to a set)
+
+    Returns:
+        A filter that matches when the property's collection is a superset of values.
+
+    Examples:
+        >>> from dataclasses import dataclass
+        >>> from calgebra import Interval, field, has_all
+        >>>
+        >>> @dataclass(frozen=True, kw_only=True)
+        >>> class Event(Interval):
+        ...     tags: set[str]
+        >>>
+        >>> tags = field('tags')
+        >>> critical_work = timeline & has_all(tags, {"work", "urgent"})
+        >>>
+        >>> # Only matches events with BOTH "work" AND "urgent" tags
+    """
+    value_set = set(values)
+
+    def check(prop_val: Any, _: Any) -> bool:
+        try:
+            # Check if property value is a superset of required values
+            return value_set.issubset(set(prop_val))
+        except TypeError:
+            # If not iterable, check equality
+            return prop_val == value_set if len(value_set) == 1 else False
+
+    return Operator(property, None, check)
+
+
+def field(accessor: str | Callable[[Any], Any]) -> Property[Interval]:
+    """Create a property from a field name or accessor function.
+
+    This helper makes it easy to create properties for custom interval fields
+    without needing to subclass Property.
+
+    Args:
+        accessor: Either a field name string or a function that extracts a value
+            from an interval.
+
+    Returns:
+        A Property that can be used in filters and comparisons.
+
+    Examples:
+        >>> from dataclasses import dataclass
+        >>> from calgebra import Interval, field, one_of
+        >>>
+        >>> @dataclass(frozen=True, kw_only=True)
+        >>> class Event(Interval):
+        ...     tags: set[str]
+        ...     priority: int
+        >>>
+        >>> # Simple field access by name
+        >>> tags = field('tags')
+        >>> work_events = timeline & one_of(tags, {"work"})
+        >>>
+        >>> # Type-safe field access with IDE support
+        >>> tags = field(lambda e: e.tags)
+        >>>
+        >>> # Computed properties
+        >>> high_priority = timeline & (field(lambda e: e.priority) >= 8)
+        >>> tag_count = field(lambda e: len(e.tags))
+    """
+    if isinstance(accessor, str):
+
+        class FieldProperty(Property[Interval]):
+            @override
+            def apply(self, event: Interval) -> Any:
+                return getattr(event, accessor)
+
+        return FieldProperty()
+    else:
+
+        class GetterProperty(Property[Interval]):
+            @override
+            def apply(self, event: Interval) -> Any:
+                return accessor(event)
+
+        return GetterProperty()

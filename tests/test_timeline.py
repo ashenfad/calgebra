@@ -15,7 +15,18 @@ from calgebra.metrics import (
     min_duration,
     total_duration,
 )
-from calgebra.properties import Property, end, hours, minutes, one_of, seconds, start
+from calgebra.properties import (
+    Property,
+    end,
+    field,
+    has_all,
+    has_any,
+    hours,
+    minutes,
+    one_of,
+    seconds,
+    start,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -27,6 +38,18 @@ class Label(Property[LabeledInterval]):
     @override
     def apply(self, event: LabeledInterval) -> str:
         return event.label
+
+
+@dataclass(frozen=True, kw_only=True)
+class TaggedInterval(Interval):
+    category: str
+    priority: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class CollectionInterval(Interval):
+    tags: set[str]
+    labels: list[str]
 
 
 Ivl = TypeVar("Ivl", bound=Interval)
@@ -751,3 +774,209 @@ def test_timeline_helper_respects_bounds() -> None:
         Interval(start=10, end=15),
         Interval(start=20, end=25),
     ]
+
+
+def test_field_helper_with_string_accessor() -> None:
+    """Test that field() helper works with string field names."""
+    tl = DummyTimeline(
+        TaggedInterval(start=0, end=5, category="work", priority=5),
+        TaggedInterval(start=10, end=15, category="personal", priority=3),
+        TaggedInterval(start=20, end=25, category="work", priority=9),
+    )
+
+    # Filter using string field name
+    category_prop = field("category")
+    work_events = tl & one_of(category_prop, {"work"})
+
+    results = list(work_events[:])
+    assert len(results) == 2
+    assert all(event.category == "work" for event in results)
+
+
+def test_field_helper_with_lambda_accessor() -> None:
+    """Test that field() helper works with lambda accessors."""
+    tl = DummyTimeline(
+        TaggedInterval(start=0, end=5, category="work", priority=5),
+        TaggedInterval(start=10, end=15, category="personal", priority=3),
+        TaggedInterval(start=20, end=25, category="work", priority=9),
+    )
+
+    # Filter using lambda accessor
+    priority_prop = field(lambda e: e.priority)
+    high_priority = tl & (priority_prop >= 8)
+
+    results = list(high_priority[:])
+    assert len(results) == 1
+    assert results[0].priority == 9
+
+
+def test_field_helper_with_computed_property() -> None:
+    """Test that field() helper works with computed properties."""
+    tl = DummyTimeline(
+        TaggedInterval(start=0, end=5, category="work", priority=5),
+        TaggedInterval(start=10, end=15, category="personal-health", priority=3),
+        TaggedInterval(start=20, end=25, category="work", priority=9),
+    )
+
+    # Computed property: length of category string
+    category_length = field(lambda e: len(e.category))
+    long_category = tl & (category_length >= 10)
+
+    results = list(long_category[:])
+    assert len(results) == 1
+    assert results[0].category == "personal-health"
+
+
+def test_field_helper_comparison_with_manual_property() -> None:
+    """Test that field() helper produces same results as manual Property subclass."""
+    tl = DummyTimeline(
+        LabeledInterval(start=0, end=5, label="focus"),
+        LabeledInterval(start=10, end=15, label="break"),
+        LabeledInterval(start=20, end=25, label="focus"),
+    )
+
+    # Manual property class
+    manual = tl & (Label() == "focus")
+
+    # field() helper with lambda
+    helper = tl & (field(lambda e: e.label) == "focus")
+
+    assert list(manual[:]) == list(helper[:])
+
+
+def test_has_any_with_set_field() -> None:
+    """Test has_any with set-typed fields."""
+    tl = DummyTimeline(
+        CollectionInterval(start=0, end=5, tags={"work"}, labels=["important"]),
+        CollectionInterval(start=10, end=15, tags={"personal"}, labels=["health"]),
+        CollectionInterval(
+            start=20, end=25, tags={"work", "urgent"}, labels=["critical"]
+        ),
+    )
+
+    # Match events with "work" tag
+    tags = field("tags")
+    work_events = tl & has_any(tags, {"work"})
+
+    results = list(work_events[:])
+    assert len(results) == 2
+    assert all("work" in event.tags for event in results)
+
+
+def test_has_any_with_list_field() -> None:
+    """Test has_any with list-typed fields."""
+    tl = DummyTimeline(
+        CollectionInterval(start=0, end=5, tags={"a"}, labels=["important", "todo"]),
+        CollectionInterval(start=10, end=15, tags={"b"}, labels=["health"]),
+        CollectionInterval(start=20, end=25, tags={"c"}, labels=["todo", "urgent"]),
+    )
+
+    # Match events with "todo" label
+    labels = field("labels")
+    todo_events = tl & has_any(labels, {"todo", "urgent"})
+
+    results = list(todo_events[:])
+    assert len(results) == 2
+    assert all(
+        any(label in ["todo", "urgent"] for label in event.labels) for event in results
+    )
+
+
+def test_has_any_with_multiple_matches() -> None:
+    """Test has_any matches when ANY value is present."""
+    tl = DummyTimeline(
+        CollectionInterval(start=0, end=5, tags={"work"}, labels=[]),
+        CollectionInterval(start=10, end=15, tags={"personal"}, labels=[]),
+        CollectionInterval(start=20, end=25, tags={"work", "urgent"}, labels=[]),
+    )
+
+    tags = field("tags")
+    # Should match both "work" and "work,urgent" events
+    work_or_urgent = tl & has_any(tags, {"work", "urgent"})
+
+    results = list(work_or_urgent[:])
+    assert len(results) == 2
+
+
+def test_has_all_with_set_field() -> None:
+    """Test has_all with set-typed fields."""
+    tl = DummyTimeline(
+        CollectionInterval(start=0, end=5, tags={"work"}, labels=[]),
+        CollectionInterval(start=10, end=15, tags={"work", "urgent"}, labels=[]),
+        CollectionInterval(
+            start=20, end=25, tags={"work", "urgent", "critical"}, labels=[]
+        ),
+    )
+
+    # Match events with BOTH "work" AND "urgent" tags
+    tags = field("tags")
+    critical_work = tl & has_all(tags, {"work", "urgent"})
+
+    results = list(critical_work[:])
+    assert len(results) == 2
+    assert all({"work", "urgent"}.issubset(event.tags) for event in results)
+
+
+def test_has_all_with_single_value() -> None:
+    """Test has_all with a single required value."""
+    tl = DummyTimeline(
+        CollectionInterval(start=0, end=5, tags={"work"}, labels=[]),
+        CollectionInterval(start=10, end=15, tags={"personal"}, labels=[]),
+        CollectionInterval(start=20, end=25, tags={"work", "urgent"}, labels=[]),
+    )
+
+    tags = field("tags")
+    work_events = tl & has_all(tags, {"work"})
+
+    results = list(work_events[:])
+    assert len(results) == 2
+    assert all("work" in event.tags for event in results)
+
+
+def test_has_all_requires_all_values() -> None:
+    """Test has_all only matches when ALL values are present."""
+    tl = DummyTimeline(
+        CollectionInterval(start=0, end=5, tags={"work"}, labels=[]),
+        CollectionInterval(start=10, end=15, tags={"work", "urgent"}, labels=[]),
+        CollectionInterval(
+            start=20, end=25, tags={"work", "urgent", "critical"}, labels=[]
+        ),
+    )
+
+    tags = field("tags")
+    # Should only match events with all three tags
+    triple_tagged = tl & has_all(tags, {"work", "urgent", "critical"})
+
+    results = list(triple_tagged[:])
+    assert len(results) == 1
+    assert results[0].tags == {"work", "urgent", "critical"}
+
+
+def test_has_any_with_lambda_accessor() -> None:
+    """Test has_any works with lambda accessors."""
+    tl = DummyTimeline(
+        CollectionInterval(start=0, end=5, tags={"work"}, labels=[]),
+        CollectionInterval(start=10, end=15, tags={"personal"}, labels=[]),
+    )
+
+    # Use lambda for type-safe access
+    work_events = tl & has_any(field(lambda e: e.tags), {"work"})
+
+    results = list(work_events[:])
+    assert len(results) == 1
+    assert "work" in results[0].tags
+
+
+def test_has_all_with_lambda_accessor() -> None:
+    """Test has_all works with lambda accessors."""
+    tl = DummyTimeline(
+        CollectionInterval(start=0, end=5, tags={"work"}, labels=[]),
+        CollectionInterval(start=10, end=15, tags={"work", "urgent"}, labels=[]),
+    )
+
+    # Use lambda for type-safe access
+    critical = tl & has_all(field(lambda e: e.tags), {"work", "urgent"})
+
+    results = list(critical[:])
+    assert len(results) == 1
+    assert results[0].tags == {"work", "urgent"}
