@@ -38,7 +38,8 @@ dev = [
     "ruff",
     "black",
     "uv",
-    "pytest"
+    "pytest",
+    "gcsa>=2.6.0",
 ]
 google-calendar = [
     "gcsa>=2.6.0",
