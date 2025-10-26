@@ -2,9 +2,8 @@
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import override
 
-import pytest
+from typing_extensions import override
 
 from calgebra import Interval, Timeline, buffer, merge_within, minutes
 
