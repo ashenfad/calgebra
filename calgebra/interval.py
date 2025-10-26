@@ -7,6 +7,12 @@ class Interval:
     start: int
     end: int
 
+    def __post_init__(self) -> None:
+        if self.start > self.end:
+            raise ValueError(
+                f"Interval start ({self.start}) must be <= end ({self.end})"
+            )
+
     def __str__(self) -> str:
         """Human-friendly string showing range and duration."""
         duration = self.end - self.start + 1
