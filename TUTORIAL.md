@@ -411,10 +411,39 @@ board_meetings = recurring(
     duration=3*HOUR,
     tz="US/Pacific"
 )
+
+# Annual events (using yearly frequency)
+# Company anniversary party: June 15th at 5pm for 3 hours
+annual_party = recurring(
+    freq="yearly",
+    month=6,
+    day_of_month=15,
+    start=17*HOUR,
+    duration=3*HOUR,
+    tz="US/Pacific"
+)
+
+# Tax deadlines: April 15th each year
+tax_deadline = recurring(
+    freq="yearly",
+    month=4,
+    day_of_month=15,
+    tz="UTC"
+)
+
+# Multiple annual events: quarterly on specific dates
+quarterly_reviews = recurring(
+    freq="yearly",
+    month=[1, 4, 7, 10],  # Jan, Apr, Jul, Oct
+    day_of_month=1,
+    start=9*HOUR,
+    duration=2*HOUR,
+    tz="UTC"
+)
 ```
 
 The `recurring()` function supports:
-- **freq**: `"daily"`, `"weekly"`, `"monthly"`
+- **freq**: `"daily"`, `"weekly"`, `"monthly"`, `"yearly"`
 - **interval**: Repeat every N units (e.g., `interval=2` for bi-weekly)
 - **day**: Day name(s) for weekly/monthly patterns (`"monday"`, `["tuesday", "thursday"]`)
 - **week**: Nth occurrence for monthly patterns (`1`=first, `-1`=last, `2`=second, etc.)
