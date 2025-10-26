@@ -1,6 +1,8 @@
 import operator as op
 from collections.abc import Iterable
-from typing import Any, Callable, Generic, Hashable, Literal, override
+from typing import Any, Callable, Generic, Hashable, Literal
+
+from typing_extensions import override
 
 from .core import Filter
 from .interval import Interval, IvlIn

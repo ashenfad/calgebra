@@ -6,7 +6,9 @@ while preserving their identity and metadata.
 
 from collections.abc import Iterable
 from dataclasses import replace
-from typing import Generic, TypeVar, override
+from typing import Generic, TypeVar
+
+from typing_extensions import override
 
 from .core import Timeline
 from .interval import Interval
