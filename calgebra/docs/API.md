@@ -2,6 +2,34 @@
 
 ## Core Types (`calgebra.core`)
 
+### `timeline(*intervals)`
+Create a timeline from a static collection of intervals without needing to subclass `Timeline`.
+
+- Automatically sorts intervals by `(start, end)`
+- Preserves subclass types (works with custom interval subclasses)
+- Returns an immutable timeline
+
+**Example:**
+```python
+from calgebra import timeline, Interval
+
+# Simple timeline
+my_events = timeline(
+    Interval(start=1000, end=2000),
+    Interval(start=5000, end=6000),
+)
+
+# Works with subclassed intervals too
+@dataclass(frozen=True, kw_only=True)
+class Event(Interval):
+    title: str
+
+events = timeline(
+    Event(start=1000, end=2000, title="Meeting"),
+    Event(start=5000, end=6000, title="Lunch"),
+)
+```
+
 ### `Timeline[IvlOut]`
 - `fetch(start, end)` → iterable of intervals within bounds (inclusive integer seconds)
 - `__getitem__(slice)` → shorthand for `fetch`, accepts int, datetime, or date slice bounds
@@ -207,6 +235,7 @@ daily_incidents = incidents & day_of_week("monday")
 
 ## Module Exports (`calgebra.__init__`)
 - `Interval`, `Timeline`, `Filter`, `Property`
+- Timeline creation: `timeline`
 - Properties and helpers: `start`, `end`, `seconds`, `minutes`, `hours`, `days`, `one_of`
 - Metrics: `total_duration`, `max_duration`, `min_duration`, `count_intervals`, `coverage_ratio`
 - Utils: `flatten`, `union`, `intersection`

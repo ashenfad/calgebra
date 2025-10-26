@@ -1,6 +1,7 @@
+import bisect
 import heapq
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from datetime import date, datetime, time, timezone
 from functools import reduce
@@ -449,6 +450,92 @@ class Complement(Timeline[Interval]):
                 yield Interval(start=cursor, end=end)
 
         return generate()
+
+
+class _StaticTimeline(Timeline[IvlOut], Generic[IvlOut]):
+    """Timeline backed by a static collection of intervals.
+
+    This is useful for creating timelines from a fixed set of intervals
+    without needing to subclass Timeline.
+    """
+
+    def __init__(self, intervals: Sequence[IvlOut]):
+        self._intervals: tuple[IvlOut, ...] = tuple(
+            sorted(intervals, key=lambda e: (e.start, e.end))
+        )
+
+        # Build max-end prefix array for efficient query pruning
+        # max_end_prefix[i] = max(interval.end for interval in intervals[:i+1])
+        self._max_end_prefix: list[int] = []
+        max_so_far = float("-inf")
+        for interval in self._intervals:
+            max_so_far = max(max_so_far, interval.end)
+            self._max_end_prefix.append(int(max_so_far))
+
+    @override
+    def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
+        # Use binary search to narrow the range of intervals to check
+        # Intervals are sorted by (start, end)
+
+        if not self._intervals:
+            return
+
+        start_idx = 0
+        end_idx = len(self._intervals)
+
+        # Use max-end prefix to skip intervals that definitely can't overlap
+        # Find first position where max_end >= start (all before can be skipped)
+        if start is not None:
+            start_idx = bisect.bisect_left(self._max_end_prefix, start)
+
+        # Use binary search on starts to find where to stop iterating
+        # Find first interval with start > end
+        if end is not None:
+            end_idx = bisect.bisect_right(
+                self._intervals, end, key=lambda interval: interval.start
+            )
+
+        # Iterate only through the narrowed range
+        for interval in self._intervals[start_idx:end_idx]:
+            # Final filter: skip intervals that end before our start bound
+            if start is not None and interval.end < start:
+                continue
+            yield interval
+
+
+def timeline(*intervals: IvlOut) -> Timeline[IvlOut]:
+    """Create a timeline from a collection of intervals.
+
+    This is a convenience function for creating timelines without needing to
+    subclass Timeline. The returned timeline is immutable and sorts intervals
+    by (start, end).
+
+    Args:
+        *intervals: Variable number of interval objects
+
+    Returns:
+        Timeline that yields the provided intervals
+
+    Example:
+        >>> from calgebra import timeline, Interval
+        >>>
+        >>> # Create a simple timeline
+        >>> my_timeline = timeline(
+        ...     Interval(start=1000, end=2000),
+        ...     Interval(start=5000, end=6000),
+        ... )
+        >>>
+        >>> # Works with subclassed intervals too
+        >>> @dataclass(frozen=True, kw_only=True)
+        ... class Event(Interval):
+        ...     title: str
+        >>>
+        >>> events = timeline(
+        ...     Event(start=1000, end=2000, title="Meeting"),
+        ...     Event(start=5000, end=6000, title="Lunch"),
+        ... )
+    """
+    return _StaticTimeline(intervals)
 
 
 def flatten(timeline: "Timeline[Any]") -> "Timeline[Interval]":

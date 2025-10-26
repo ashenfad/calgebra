@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from calgebra.core import Intersection, Timeline, flatten, intersection, union
+from calgebra.core import Intersection, Timeline, flatten, intersection, timeline, union
 from calgebra.interval import Interval
 from calgebra.metrics import (
     count_intervals,
@@ -636,3 +636,118 @@ def test_mixed_int_and_datetime_slicing() -> None:
 
     results = list(timeline[start_dt:end_int])
     assert len(results) == 1
+
+
+def test_timeline_helper_creates_static_timeline() -> None:
+    """Test that timeline() helper creates a working timeline."""
+    tl = timeline(
+        Interval(start=0, end=5),
+        Interval(start=10, end=15),
+        Interval(start=20, end=25),
+    )
+
+    # Should behave like any other timeline
+    results = list(tl[0:30])
+    assert results == [
+        Interval(start=0, end=5),
+        Interval(start=10, end=15),
+        Interval(start=20, end=25),
+    ]
+
+
+def test_timeline_helper_sorts_intervals() -> None:
+    """Test that timeline() helper sorts intervals by (start, end)."""
+    tl = timeline(
+        Interval(start=20, end=25),
+        Interval(start=0, end=5),
+        Interval(start=10, end=15),
+    )
+
+    results = list(tl[:])
+    assert results == [
+        Interval(start=0, end=5),
+        Interval(start=10, end=15),
+        Interval(start=20, end=25),
+    ]
+
+
+def test_timeline_helper_preserves_subclass_type() -> None:
+    """Test that timeline() preserves subclassed interval types."""
+    tl = timeline(
+        LabeledInterval(start=0, end=5, label="first"),
+        LabeledInterval(start=10, end=15, label="second"),
+    )
+
+    results = list(tl[:])
+    assert len(results) == 2
+    assert isinstance(results[0], LabeledInterval)
+    assert results[0].label == "first"
+    assert results[1].label == "second"
+
+
+def test_timeline_helper_works_with_custom_properties() -> None:
+    """Test that timeline() works with custom properties on subclassed intervals."""
+    tl = timeline(
+        LabeledInterval(start=0, end=5, label="focus"),
+        LabeledInterval(start=10, end=15, label="break"),
+        LabeledInterval(start=20, end=25, label="focus"),
+    )
+
+    # Filter using custom property
+    label = Label()
+    focus_only = tl & (label == "focus")
+
+    results = list(focus_only[:])
+    assert len(results) == 2
+    assert all(r.label == "focus" for r in results)
+
+
+def test_timeline_helper_composable() -> None:
+    """Test that timeline() helper results are composable with other operations."""
+    tl1 = timeline(
+        Interval(start=0, end=5),
+        Interval(start=10, end=15),
+    )
+    tl2 = timeline(
+        Interval(start=3, end=12),
+    )
+
+    # Union
+    union_result = list((tl1 | tl2)[:])
+    assert len(union_result) == 3
+
+    # Intersection
+    intersection_result = list((tl1 & tl2)[:])
+    assert len(intersection_result) > 0
+
+    # Difference
+    diff_result = list((tl1 - tl2)[:])
+    assert len(diff_result) > 0
+
+    # Complement
+    complement_result = list((~tl1)[0:20])
+    assert len(complement_result) > 0
+
+
+def test_timeline_helper_respects_bounds() -> None:
+    """Test that timeline() helper respects slice bounds."""
+    tl = timeline(
+        Interval(start=0, end=5),
+        Interval(start=10, end=15),
+        Interval(start=20, end=25),
+    )
+
+    assert list(tl[9:21]) == [
+        Interval(start=10, end=15),
+        Interval(start=20, end=25),
+    ]
+
+    assert list(tl[:15]) == [
+        Interval(start=0, end=5),
+        Interval(start=10, end=15),
+    ]
+
+    assert list(tl[12:]) == [
+        Interval(start=10, end=15),
+        Interval(start=20, end=25),
+    ]

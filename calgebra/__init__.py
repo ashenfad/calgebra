@@ -1,6 +1,6 @@
 from importlib.resources import files
 
-from .core import Filter, Timeline, flatten, intersection, union
+from .core import Filter, Timeline, flatten, intersection, timeline, union
 from .interval import Interval
 from .metrics import (
     count_intervals,
@@ -27,6 +27,7 @@ __all__ = [
     "Timeline",
     "Filter",
     "Property",
+    "timeline",
     "flatten",
     "union",
     "intersection",
