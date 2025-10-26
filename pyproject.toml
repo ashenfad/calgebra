@@ -3,7 +3,7 @@ name = "calgebra"
 version = "0.1.0"
 description = "A tiny DSL for calendar interval algebra - compose, filter, and query time ranges using set operations."
 authors = [{ name = "ashenfad"}]
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 readme = "README.md"
 license = { text = "MIT" }
 classifiers = [
@@ -12,6 +12,8 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Office/Business :: Scheduling",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -19,7 +21,10 @@ classifiers = [
     "Operating System :: OS Independent",
     "Typing :: Typed",
 ]
-dependencies = ["python-dateutil>=2.8.0"]
+dependencies = [
+    "python-dateutil>=2.8.0",
+    "typing-extensions>=4.0.0",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/ashenfad/calgebra"

@@ -1,10 +1,11 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Literal, override
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from gcsa.google_calendar import GoogleCalendar
+from typing_extensions import override
 
 from calgebra.core import Timeline
 from calgebra.interval import Interval

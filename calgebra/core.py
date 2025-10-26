@@ -4,7 +4,9 @@ from collections.abc import Iterable
 from dataclasses import replace
 from datetime import date, datetime, time, timezone
 from functools import reduce
-from typing import Any, Generic, Literal, overload, override
+from typing import Any, Generic, Literal, overload
+
+from typing_extensions import override
 
 from calgebra.interval import Interval, IvlIn, IvlOut
 

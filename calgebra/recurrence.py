@@ -6,7 +6,7 @@ backed by python-dateutil's battle-tested rrule implementation.
 
 from collections.abc import Iterable
 from datetime import datetime, timedelta
-from typing import Any, Literal, TypeAlias, override
+from typing import Any, Literal, TypeAlias
 from zoneinfo import ZoneInfo
 
 from dateutil.rrule import (
@@ -24,6 +24,7 @@ from dateutil.rrule import (
     rrule,
     weekday,
 )
+from typing_extensions import override
 
 from calgebra.core import Timeline
 from calgebra.interval import Interval
