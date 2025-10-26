@@ -5,15 +5,10 @@ A tiny DSL for merging and searching over calendar-like intervals.
 ## Installation
 
 ```bash
-# Create and activate a virtual environment
-python -m venv .venv
-source .venv/bin/activate
+pip install calgebra
 
-# Install the package
-pip install -e .
-
-# Or with Google Calendar support  
-pip install -e .[google-calendar]
+# Or with Google Calendar support
+pip install calgebra[google-calendar]
 ```
 
 ## Quick Start
