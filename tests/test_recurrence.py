@@ -234,3 +234,74 @@ def test_recurring_simplifies_common_patterns():
         tz="UTC",
     )
     assert len(list(quarterly[start:end])) == 4
+
+
+def test_recurring_yearly_single_month():
+    """Test yearly pattern on a specific month."""
+    # 3 years
+    start = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    end = int(datetime(2027, 12, 31, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+
+    # Every January 1st
+    new_years = list(
+        recurring(freq="yearly", month=1, day_of_month=1, tz="UTC")[start:end]
+    )
+
+    # Should get 3 (2025, 2026, 2027)
+    assert len(new_years) == 3
+
+
+def test_recurring_yearly_multiple_months():
+    """Test yearly pattern on multiple months (e.g., quarterly dates)."""
+    # 2 years
+    start = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    end = int(datetime(2026, 12, 31, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+
+    # Jan 1, Apr 1, Jul 1, Oct 1 each year
+    quarterly_dates = list(
+        recurring(freq="yearly", month=[1, 4, 7, 10], day_of_month=1, tz="UTC")[
+            start:end
+        ]
+    )
+
+    # Should get 8 (4 per year × 2 years)
+    assert len(quarterly_dates) == 8
+
+
+def test_recurring_yearly_with_time_window():
+    """Test yearly pattern with specific time window."""
+    # 2 years
+    start = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    end = int(datetime(2026, 12, 31, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+
+    # Company anniversary party: June 15th at 5pm for 3 hours
+    anniversary = list(
+        recurring(
+            freq="yearly",
+            month=6,
+            day_of_month=15,
+            start=17 * HOUR,
+            duration=3 * HOUR,
+            tz="UTC",
+        )[start:end]
+    )
+
+    # Should get 2 (one per year)
+    assert len(anniversary) == 2
+
+    # Check duration is 3 hours
+    duration = anniversary[0].end - anniversary[0].start + 1
+    assert duration == 10800  # 3 hours in seconds
+
+
+def test_recurring_yearly_month_only():
+    """Test yearly pattern on entire month."""
+    # 2 years
+    start = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    end = int(datetime(2026, 12, 31, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+
+    # Every December (full days)
+    december = list(recurring(freq="yearly", month=12, tz="UTC")[start:end])
+
+    # Should get 2 Decembers (2025, 2026) - one event per year starting Dec 1
+    assert len(december) == 2

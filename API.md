@@ -54,7 +54,7 @@ Timezone-aware recurrence pattern generators backed by `python-dateutil`'s RFC 5
 Generate intervals based on recurrence rules with full RFC 5545 support.
 
 **Parameters:**
-- `freq`: Recurrence frequency - `"daily"`, `"weekly"`, or `"monthly"`
+- `freq`: Recurrence frequency - `"daily"`, `"weekly"`, `"monthly"`, or `"yearly"`
 - `interval`: Repeat every N units (default: 1). Examples:
   - `interval=2` with `freq="weekly"` → bi-weekly
   - `interval=3` with `freq="monthly"` → quarterly
@@ -90,6 +90,13 @@ payroll = recurring(freq="monthly", day_of_month=[1, 15], tz="UTC")
 
 # Quarterly (every 3 months)
 quarterly = recurring(freq="monthly", interval=3, day_of_month=1, tz="UTC")
+
+# Annual company party: June 15th at 5pm for 3 hours
+annual_party = recurring(freq="yearly", month=6, day_of_month=15, 
+                         start=17*HOUR, duration=3*HOUR, tz="UTC")
+
+# Tax deadlines: April 15th each year
+tax_deadline = recurring(freq="yearly", month=4, day_of_month=15, tz="UTC")
 ```
 
 ### Convenience Wrappers
