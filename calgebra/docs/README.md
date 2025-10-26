@@ -20,21 +20,17 @@ pip install -e .[google-calendar]
 
 ```python
 from datetime import datetime, timezone
-from calgebra import timeline, day_of_week, time_of_day, hours, HOUR, Interval
-
-# Create timelines from intervals
-alice_cal = timeline(
-    Interval(start=1000, end=2000),
-    Interval(start=5000, end=6000),
-)
+from calgebra import day_of_week, time_of_day, hours, HOUR
 
 # Compose time windows from primitives
 weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
 work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
 business_hours = weekdays & work_hours
 
-# Union: combine multiple calendars (preserves overlaps)
-busy = alice_cal | bob_calendar | charlie_calendar
+# Union: combine busy times (in practice: from Google Calendar, databases, etc.)
+monday_meetings = day_of_week("monday") & time_of_day(start=10*HOUR, duration=2*HOUR)
+friday_focus = day_of_week("friday") & time_of_day(start=14*HOUR, duration=3*HOUR)
+busy = monday_meetings | friday_focus
 
 # Difference: find free time during business hours
 free = business_hours - busy
@@ -44,7 +40,7 @@ long_slots = free & (hours >= 2)
 
 # Fetch results with slice notation (supports int, datetime, or date)
 start = datetime(2025, 1, 1, tzinfo=timezone.utc)
-end = datetime(2025, 12, 31, tzinfo=timezone.utc)
+end = datetime(2025, 1, 31, tzinfo=timezone.utc)
 meeting_options = list(long_slots[start:end])
 ```
 
