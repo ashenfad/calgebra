@@ -33,7 +33,7 @@ weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
 work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
 business_hours = weekdays & work_hours
 
-# Union: combine multiple calendars
+# Union: combine multiple calendars (preserves overlaps)
 busy = alice_cal | bob_calendar | charlie_calendar
 
 # Difference: find free time during business hours
