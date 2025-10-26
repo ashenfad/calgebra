@@ -66,7 +66,77 @@ events = timeline(
   - `seconds`, `minutes`, `hours`, `days`
 - Boundary helpers:
   - `start`, `end`
-- `one_of(property, values)` → membership filter
+
+### Property Helpers
+
+#### `field(accessor)`
+Create a property from a field name or accessor function. Makes it easy to create properties for custom interval fields without subclassing.
+
+**Parameters:**
+- `accessor`: Either a field name string or a function that extracts a value
+
+**Returns:** A `Property` that can be used in filters and comparisons
+
+**Examples:**
+```python
+from calgebra import field, one_of
+
+# Simple field access by name
+priority = field('priority')
+high_priority = timeline & (priority >= 8)
+
+# Type-safe field access with lambda
+priority = field(lambda e: e.priority)
+
+# Computed properties
+tag_count = field(lambda e: len(e.tags))
+multi_tagged = timeline & (tag_count >= 2)
+```
+
+#### `one_of(property, values)`
+Check if a scalar property value is in the given set of values.
+
+**Use for:** String fields, integer fields, enum fields, etc.
+
+**Examples:**
+```python
+category = field('category')
+work_events = timeline & one_of(category, {"work", "planning"})
+```
+
+#### `has_any(property, values)`
+Check if a collection property contains **any** of the given values.
+
+**Use for:** Set fields, list fields, tuple fields, etc.
+
+**Examples:**
+```python
+from calgebra import field, has_any
+
+# Match events with ANY of these tags
+tags = field('tags')  # tags: set[str]
+work_events = timeline & has_any(tags, {"work", "urgent"})
+
+# Works with lists too
+labels = field('labels')  # labels: list[str]
+todo_items = timeline & has_any(labels, {"todo", "important"})
+```
+
+#### `has_all(property, values)`
+Check if a collection property contains **all** of the given values.
+
+**Use for:** Set fields, list fields, tuple fields, etc.
+
+**Examples:**
+```python
+from calgebra import field, has_all
+
+# Match only events with BOTH tags
+tags = field('tags')
+critical_work = timeline & has_all(tags, {"work", "urgent"})
+```
+
+**Note:** Use `one_of()` for scalar fields and `has_any()`/`has_all()` for collection fields.
 
 ## Metrics (`calgebra.metrics`)
 - `total_duration(timeline, start, end)` → inclusive seconds covered (uses `flatten`)
@@ -236,7 +306,7 @@ daily_incidents = incidents & day_of_week("monday")
 ## Module Exports (`calgebra.__init__`)
 - `Interval`, `Timeline`, `Filter`, `Property`
 - Timeline creation: `timeline`
-- Properties and helpers: `start`, `end`, `seconds`, `minutes`, `hours`, `days`, `one_of`
+- Properties and helpers: `start`, `end`, `seconds`, `minutes`, `hours`, `days`, `field`, `one_of`, `has_any`, `has_all`
 - Metrics: `total_duration`, `max_duration`, `min_duration`, `count_intervals`, `coverage_ratio`
 - Utils: `flatten`, `union`, `intersection`
 - Recurring patterns: `recurring`, `day_of_week`, `time_of_day`
