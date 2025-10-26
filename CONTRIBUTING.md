@@ -36,6 +36,24 @@ pytest tests/test_docs.py
 
 ## Development
 
+### Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/ashenfad/calgebra.git
+cd calgebra
+
+# Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install in development mode
+pip install -e .
+
+# Install development dependencies
+pip install -e .[dev]
+```
+
 ### Running Tests
 
 ```bash
