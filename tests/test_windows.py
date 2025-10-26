@@ -3,8 +3,9 @@
 from datetime import datetime, timezone
 
 import pytest
+from typing_extensions import override
 
-from calgebra import HOUR, MINUTE, Interval, day_of_week, time_of_day
+from calgebra import HOUR, MINUTE, Interval, Timeline, day_of_week, flatten, time_of_day
 
 
 def test_day_of_week_single_day():
@@ -138,7 +139,6 @@ def test_time_of_day_fractional_hours():
 
 def test_time_of_day_validates_parameters():
     """Test that time_of_day validates parameters."""
-    from calgebra import DAY
 
     with pytest.raises(ValueError, match="start must be in range"):
         time_of_day(start=-1)
@@ -164,7 +164,6 @@ def test_time_of_day_requires_finite_bounds():
 
 def test_composition_business_hours():
     """Test composing day_of_week and time_of_day for business hours."""
-    from calgebra import flatten
 
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     sunday = int(datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp())
@@ -193,7 +192,6 @@ def test_composition_business_hours():
 
 def test_composition_recurring_meeting():
     """Test composing for a specific recurring meeting time."""
-    from calgebra import flatten
 
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     next_month = int(datetime(2025, 2, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
@@ -220,11 +218,6 @@ def test_composition_recurring_meeting():
 
 def test_composition_with_calendar():
     """Test composing time windows with calendar operations."""
-    from collections.abc import Iterable
-    from typing import override
-
-    from calgebra import flatten
-    from calgebra.core import Timeline
 
     class SimpleTimeline(Timeline[Interval]):
         def __init__(self, *events):

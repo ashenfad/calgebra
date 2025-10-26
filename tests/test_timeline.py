@@ -1,10 +1,11 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import Generic, TypeVar, override
+from typing import Generic, TypeVar
 from zoneinfo import ZoneInfo
 
 import pytest
+from typing_extensions import override
 
 from calgebra.core import Intersection, Timeline, flatten, intersection, timeline, union
 from calgebra.interval import Interval
