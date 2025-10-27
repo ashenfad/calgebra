@@ -1,6 +1,7 @@
 """Tests for unbounded interval support (None start/end values)."""
 
 from calgebra import Interval, hours, timeline
+from calgebra.interval import NEG_INF, POS_INF
 
 
 def test_unbounded_interval_creation():
@@ -28,18 +29,18 @@ def test_unbounded_interval_finite_properties():
     """Test that finite_start/finite_end provide sentinel values."""
     # Unbounded past
     past = Interval(start=None, end=2000)
-    assert past.finite_start < -9e18  # Very negative
+    assert past.finite_start == NEG_INF
     assert past.finite_end == 2000
 
     # Unbounded future
     future = Interval(start=1000, end=None)
     assert future.finite_start == 1000
-    assert future.finite_end > 9e18  # Very positive
+    assert future.finite_end == POS_INF
 
     # All time
     all_time = Interval(start=None, end=None)
-    assert all_time.finite_start < -9e18
-    assert all_time.finite_end > 9e18
+    assert all_time.finite_start == NEG_INF
+    assert all_time.finite_end == POS_INF
 
     # Regular interval unchanged
     regular = Interval(start=1000, end=2000)
