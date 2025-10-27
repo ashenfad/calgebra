@@ -56,19 +56,22 @@ class _MergedWithin(Timeline[Ivl], Generic[Ivl]):
             if current is None:
                 current = interval
             else:
-                # Calculate gap only if both bounds are finite
-                # Unbounded intervals don't merge (gap would be infinite)
-                can_merge = (
-                    interval.start is not None
-                    and current.end is not None
-                    and interval.start - current.end - 1 <= self.gap
-                )
+                if current.end is None or interval.start is None:
+                    can_merge = True
+                else:
+                    gap = interval.start - current.end - 1
+                    can_merge = gap <= self.gap
 
                 if can_merge:
-                    # Merge: extend current to include this interval
-                    current = replace(current, end=interval.end)
+                    # Merge: extend current to include the furthest end
+                    new_end = current.end
+                    if new_end is None or interval.end is None:
+                        new_end = None
+                    elif interval.end > new_end:
+                        new_end = interval.end
+                    current = replace(current, end=new_end)
                 else:
-                    # Gap too large or unbounded, emit current and start new group
+                    # Gap too large, emit current and start new group
                     yield current
                     current = interval
 
