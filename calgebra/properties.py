@@ -82,14 +82,16 @@ class Duration(Property[IvlIn]):
 
 class Start(Property[Interval]):
     @override
-    def apply(self, event: Interval) -> int | None:
-        return event.start
+    def apply(self, event: Interval) -> int:
+        """Return start bound, treating None as very negative int."""
+        return event.finite_start
 
 
 class End(Property[Interval]):
     @override
-    def apply(self, event: Interval) -> int | None:
-        return event.end
+    def apply(self, event: Interval) -> int:
+        """Return end bound, treating None as very positive int."""
+        return event.finite_end
 
 
 days: Duration[Interval] = Duration("days")
