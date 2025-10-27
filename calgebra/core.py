@@ -9,7 +9,7 @@ from typing import Any, Generic, Literal, overload
 
 from typing_extensions import override
 
-from calgebra.interval import Interval, IvlIn, IvlOut
+from calgebra.interval import NEG_INF, POS_INF, Interval, IvlIn, IvlOut
 
 
 class Timeline(ABC, Generic[IvlOut]):
@@ -184,7 +184,8 @@ class Union(Timeline[IvlOut]):
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
         streams = [source.fetch(start, end) for source in self.sources]
-        merged = heapq.merge(*streams, key=lambda e: (e.start, e.end))
+        # Use finite properties for sorting to handle None (unbounded) values
+        merged = heapq.merge(*streams, key=lambda e: (e.finite_start, e.finite_end))
         return merged
 
 
@@ -250,21 +251,23 @@ class Intersection(Timeline[IvlOut]):
 
             while True:
                 # Find overlap region across all current intervals
-                overlap_start = max(event.start for event in current)
-                overlap_end = min(event.end for event in current)
+                # Use finite properties to handle None (unbounded) values
+                overlap_start = max(event.finite_start for event in current)
+                overlap_end = min(event.finite_end for event in current)
 
                 # If there's actual overlap, yield trimmed copy from selected sources
                 if overlap_start <= overlap_end:
                     for idx in emit_indices:
-                        yield replace(
-                            current[idx], start=overlap_start, end=overlap_end
-                        )
+                        # Convert sentinel values back to None for unbounded intervals
+                        start_val = overlap_start if overlap_start != NEG_INF else None
+                        end_val = overlap_end if overlap_end != POS_INF else None
+                        yield replace(current[idx], start=start_val, end=end_val)
 
                 # Advance any interval that ends at the overlap boundary
                 cutoff = overlap_end
                 advanced = False
                 for idx, event in enumerate(current):
-                    if event.end == cutoff:
+                    if event.finite_end == cutoff:
                         try:
                             current[idx] = next(iterators[idx])
                             advanced = True
@@ -326,9 +329,10 @@ class Difference(Timeline[IvlOut]):
                 return
 
             # Merge all subtractor streams into one sorted by (start, end)
+            # Use finite properties to handle None (unbounded) values
             merged = heapq.merge(
                 *(subtractor.fetch(start, end) for subtractor in self.subtractors),
-                key=lambda event: (event.start, event.end),
+                key=lambda event: (event.finite_start, event.finite_end),
             )
             subtractor_iter = iter(merged)
 
@@ -351,11 +355,12 @@ class Difference(Timeline[IvlOut]):
                     continue
 
                 # Track current position within this event as we carve out holes
-                cursor = event.start
-                event_end = event.end
+                # Use finite values for arithmetic operations
+                cursor = event.finite_start
+                event_end = event.finite_end
 
                 # Skip subtractors that end before our cursor position
-                while current_subtractor and current_subtractor.end < cursor:
+                while current_subtractor and current_subtractor.finite_end < cursor:
                     advance_subtractor()
 
                 if current_subtractor is None:
@@ -363,28 +368,40 @@ class Difference(Timeline[IvlOut]):
                     continue
 
                 # Process all subtractors that overlap with this event
-                while current_subtractor and current_subtractor.start <= event_end:
-                    overlap_start = max(cursor, current_subtractor.start)
-                    overlap_end = min(event_end, current_subtractor.end)
+                while (
+                    current_subtractor and current_subtractor.finite_start <= event_end
+                ):
+                    overlap_start = max(cursor, current_subtractor.finite_start)
+                    overlap_end = min(event_end, current_subtractor.finite_end)
 
                     if overlap_start <= overlap_end:
                         # Emit fragment before the hole (if any)
                         if cursor <= overlap_start - 1:
-                            yield replace(event, start=cursor, end=overlap_start - 1)
+                            # Convert back to None if sentinel value
+                            start_val = cursor if cursor != NEG_INF else None
+                            end_val = (
+                                overlap_start - 1
+                                if overlap_start - 1 != NEG_INF
+                                else None
+                            )
+                            yield replace(event, start=start_val, end=end_val)
                         # Move cursor past the hole
                         cursor = overlap_end + 1
                         if cursor > event_end:
                             break
 
                     # Advance if subtractor ends within this event
-                    if current_subtractor.end <= event_end:
+                    if current_subtractor.finite_end <= event_end:
                         advance_subtractor()
                     else:
                         break
 
                 # Emit final fragment after all holes (if any remains)
                 if cursor <= event_end:
-                    yield replace(event, start=cursor, end=event_end)
+                    # Convert back to None if sentinel value
+                    start_val = cursor if cursor != NEG_INF else None
+                    end_val = event_end if event_end != POS_INF else None
+                    yield replace(event, start=start_val, end=end_val)
 
             # Exhaust generator to avoid partially consumed iterators on reuse
             for _ in subtractor_iter:
@@ -408,46 +425,56 @@ class Complement(Timeline[Interval]):
 
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
-        """Generate gaps by inverting the source timeline within finite bounds.
+        """Generate gaps by inverting the source timeline.
 
         Algorithm: Scan through source intervals and emit intervals for the spaces
         between them. Cursor tracks the start of the next potential gap.
+
+        Can now handle unbounded queries (start/end can be None), yielding
+        unbounded gap intervals as needed.
         """
-        if start is None or end is None:
-            raise ValueError(
-                f"Complement (~) requires finite bounds, "
-                f"got start={start}, end={end}.\n"
-                f"Complement inverts a timeline, which requires a bounded universe.\n"
-                f"Fix: Use explicit bounds when slicing: "
-                f"list((~timeline)[start:end])\n"
-                f"Example: list((~busy)[1704067200:1735689599])"
-            )
 
         def generate() -> Iterable[Interval]:
-            cursor = start
+            # Convert None bounds to sentinels for comparisons
+            start_bound = start if start is not None else NEG_INF
+            end_bound = end if end is not None else POS_INF
+            cursor = start_bound
 
             for event in self.source.fetch(start, end):
-                if event.end < start:
+                event_start = event.finite_start
+                event_end = event.finite_end
+
+                if event_end < start_bound:
                     continue
-                if event.start > end:
+                if event_start > end_bound:
                     break
 
-                segment_start = max(event.start, start)
-                segment_end = min(event.end, end)
+                segment_start = max(event_start, start_bound)
+                segment_end = min(event_end, end_bound)
 
                 if segment_end < cursor:
                     continue
 
                 if segment_start > cursor:
-                    yield Interval(start=cursor, end=segment_start - 1)
+                    # Emit gap before this event
+                    # Convert sentinels back to None for unbounded gaps
+                    gap_start = cursor if cursor != NEG_INF else None
+                    gap_end = (
+                        segment_start - 1 if segment_start - 1 != NEG_INF else None
+                    )
+                    yield Interval(start=gap_start, end=gap_end)
 
                 cursor = max(cursor, segment_end + 1)
 
-                if cursor > end:
+                if cursor > end_bound:
                     return
 
-            if cursor <= end:
-                yield Interval(start=cursor, end=end)
+            if cursor <= end_bound:
+                # Emit final gap
+                # Convert sentinels back to None for unbounded gaps
+                gap_start = cursor if cursor != NEG_INF else None
+                gap_end = end if end_bound != POS_INF else None
+                yield Interval(start=gap_start, end=gap_end)
 
         return generate()
 
@@ -460,22 +487,23 @@ class _StaticTimeline(Timeline[IvlOut], Generic[IvlOut]):
     """
 
     def __init__(self, intervals: Sequence[IvlOut]):
+        # Use finite properties for sorting to handle None (unbounded) values
         self._intervals: tuple[IvlOut, ...] = tuple(
-            sorted(intervals, key=lambda e: (e.start, e.end))
+            sorted(intervals, key=lambda e: (e.finite_start, e.finite_end))
         )
 
         # Build max-end prefix array for efficient query pruning
-        # max_end_prefix[i] = max(interval.end for interval in intervals[:i+1])
+        # max_end_prefix[i] = max(interval.finite_end for interval in intervals[:i+1])
         self._max_end_prefix: list[int] = []
         max_so_far = float("-inf")
         for interval in self._intervals:
-            max_so_far = max(max_so_far, interval.end)
+            max_so_far = max(max_so_far, interval.finite_end)
             self._max_end_prefix.append(int(max_so_far))
 
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
         # Use binary search to narrow the range of intervals to check
-        # Intervals are sorted by (start, end)
+        # Intervals are sorted by (finite_start, finite_end)
 
         if not self._intervals:
             return
@@ -489,16 +517,16 @@ class _StaticTimeline(Timeline[IvlOut], Generic[IvlOut]):
             start_idx = bisect.bisect_left(self._max_end_prefix, start)
 
         # Use binary search on starts to find where to stop iterating
-        # Find first interval with start > end
+        # Find first interval with finite_start > end
         if end is not None:
             end_idx = bisect.bisect_right(
-                self._intervals, end, key=lambda interval: interval.start
+                self._intervals, end, key=lambda interval: interval.finite_start
             )
 
         # Iterate only through the narrowed range
         for interval in self._intervals[start_idx:end_idx]:
             # Final filter: skip intervals that end before our start bound
-            if start is not None and interval.end < start:
+            if start is not None and interval.finite_end < start:
                 continue
             yield interval
 
@@ -545,7 +573,7 @@ def flatten(timeline: "Timeline[Any]") -> "Timeline[Interval]":
     Useful before aggregations or when you need simplified coverage.
 
     Note: Returns mask Interval objects (custom metadata is lost).
-          Requires finite bounds when slicing: flatten(tl)[start:end]
+          Supports unbounded queries (start/end can be None).
 
     Example:
         >>> timeline = union(cal_a, cal_b)  # May have overlaps

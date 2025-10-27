@@ -18,6 +18,9 @@ def total_duration(
 
     total = 0
     for event in flatten(timeline)[start:end]:
+        # Skip unbounded intervals (shouldn't happen with finite bounds, but be safe)
+        if event.start is None or event.end is None:
+            continue
         total += event.end - event.start + 1
 
     return total
@@ -35,8 +38,11 @@ def max_duration(
     longest: Ivl | None = None
     longest_len = -1
     for event in timeline[start:end]:
-        clamped_start = max(event.start, start)
-        clamped_end = min(event.end, end)
+        # Use finite properties for clamping to handle None (unbounded) values
+        event_start = event.start if event.start is not None else start
+        event_end = event.end if event.end is not None else end
+        clamped_start = max(event_start, start)
+        clamped_end = min(event_end, end)
         if clamped_start > clamped_end:
             continue
         length = clamped_end - clamped_start + 1
@@ -58,8 +64,11 @@ def min_duration(
     shortest: Ivl | None = None
     shortest_len: int | None = None
     for event in timeline[start:end]:
-        clamped_start = max(event.start, start)
-        clamped_end = min(event.end, end)
+        # Use finite properties for clamping to handle None (unbounded) values
+        event_start = event.start if event.start is not None else start
+        event_end = event.end if event.end is not None else end
+        clamped_start = max(event_start, start)
+        clamped_end = min(event_end, end)
         if clamped_start > clamped_end:
             continue
         length = clamped_end - clamped_start + 1
