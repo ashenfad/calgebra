@@ -338,14 +338,21 @@ def test_filter_slice_not_supported() -> None:
         _ = (start >= 0)[0:1]
 
 
-def test_complement_requires_finite_bounds() -> None:
+def test_complement_supports_unbounded_queries() -> None:
+    """Test that complement now supports unbounded queries."""
     timeline = DummyTimeline(Interval(start=0, end=5))
 
-    with pytest.raises(ValueError):
-        list((~timeline)[:10])
+    # Unbounded end works
+    gaps = list((~timeline)[:10])
+    assert len(gaps) > 0
 
-    with pytest.raises(ValueError):
-        list((~timeline)[0:])
+    # Unbounded start works
+    gaps = list((~timeline)[0:])
+    assert len(gaps) > 0
+
+    # Fully unbounded works
+    gaps = list((~timeline)[:])
+    assert len(gaps) > 0
 
 
 def test_complement_handles_empty_source() -> None:

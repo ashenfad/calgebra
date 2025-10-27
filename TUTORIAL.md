@@ -159,14 +159,17 @@ free_time = list(available[start:end])
 
 ### Complement: `~` (NOT)
 
-Invert a timeline (requires finite bounds):
+Invert a timeline to find gaps:
 
 ```python
 # All times I'm NOT busy
 free = ~my_calendar
 
-# Complement requires finite bounds when slicing
+# Can slice with any bounds (even unbounded!)
 free_intervals = list(free[start:end])
+
+# Works with unbounded queries too
+all_free_time = list(free[None:None])
 ```
 
 ### Filtering: `&` with Filters
@@ -211,11 +214,11 @@ busy = alice_busy | bob_busy | charlie_busy
 free = ~busy
 options = free & (hours >= 1)
 
-# Now fetch the results by slicing (with finite bounds for complement)
+# Now fetch the results by slicing
 meeting_slots = list(options[0:10000])
 ```
 
-**Note**: Complement (`~`) always yields mask `Interval` objects representing gaps, regardless of the source timeline's interval type. Gaps are the absence of events and have no metadata.
+**Note**: Complement (`~`) always yields mask `Interval` objects representing gaps, regardless of the source timeline's interval type. Gaps are the absence of events and have no metadata. Complement can now work with unbounded queries (start/end can be `None`).
 
 ## Recurring Patterns
 
@@ -668,16 +671,27 @@ All standard comparison operators work:
 - You can `&` them together but not `|` them (type error!)
 - `Filter` is exported for type hints but you create filters via property comparisons
 
-### Complement Requires Bounds
+### Unbounded Intervals
+
+Intervals can now have `None` for start or end to represent infinity:
 
 ```python
+# Everything after a certain point
+future = Interval(start=cutoff_time, end=None)
+
+# Everything before a certain point  
+past = Interval(start=None, end=cutoff_time)
+
+# All time
+all_time = Interval(start=None, end=None)
+
+# Complement can work with unbounded queries
 free = ~busy
+all_free_time = list(free[None:None])  # Works!
 
-# ❌ This will raise an error (unbounded slice)
-results = list(free[:])
-
-# ✅ Always provide finite bounds when slicing complement
-results = list(free[start:end])
+# Compose freely - bounds can come from other timelines
+available = (~busy) & business_hours
+slots = list(available[:])  # Bounded by business_hours
 ```
 
 ### Composition is Lazy, Slicing Executes

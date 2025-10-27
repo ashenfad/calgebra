@@ -51,7 +51,7 @@ events = timeline(
   - `filter & timeline` → filtered timeline
 
 ### `flatten(timeline)`
-- Returns a coalesced timeline by complementing twice. Useful before aggregations or rendering availability. Emits mask `Interval`s and requires slicing with finite bounds (e.g. `flattened[start:end]`).
+- Returns a coalesced timeline by complementing twice. Useful before aggregations or rendering availability. Emits mask `Interval`s and supports unbounded queries (start/end can be `None`).
 
 ### `union(*timelines)` / `intersection(*timelines)`
 - Functional counterparts to chaining `|` / `&`; require at least one operand and preserve overlaps. `intersection` emits one interval per source for each overlap; use `flatten` if you want single coalesced spans.
@@ -315,6 +315,7 @@ daily_incidents = incidents & day_of_week("monday")
 
 ## Notes
 - All intervals are inclusive; durations use `end - start + 1`.
-- Complement and flatten require finite bounds when slicing.
+- Intervals support unbounded values: `start` or `end` can be `None` to represent -∞ or +∞.
+- Complement and flatten support unbounded queries (start/end can be `None`).
 - Aggregation helpers clamp to query bounds but preserve metadata via `dataclasses.replace`.
 - Time window helpers are timezone-aware and use stdlib `zoneinfo`.

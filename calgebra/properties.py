@@ -74,18 +74,21 @@ class Duration(Property[IvlIn]):
 
     @override
     def apply(self, event: IvlIn) -> float:
+        # Handle unbounded intervals (None start or end)
+        if event.start is None or event.end is None:
+            return float("inf")
         return (event.end - event.start + 1) / self.scale
 
 
 class Start(Property[Interval]):
     @override
-    def apply(self, event: Interval) -> int:
+    def apply(self, event: Interval) -> int | None:
         return event.start
 
 
 class End(Property[Interval]):
     @override
-    def apply(self, event: Interval) -> int:
+    def apply(self, event: Interval) -> int | None:
         return event.end
 
 
