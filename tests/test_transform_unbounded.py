@@ -1,7 +1,8 @@
 """Tests for transform operations with unbounded intervals."""
 
+import pytest
+
 from calgebra import Interval, buffer, merge_within, timeline
-from calgebra.util import HOUR, MINUTE
 
 
 def test_buffer_with_unbounded_past():
@@ -111,3 +112,19 @@ def test_merge_within_preserves_bounded_merging():
     # Should merge
     assert len(result) == 1
     assert result[0] == Interval(start=1000, end=3000)
+
+
+def test_buffer_rejects_negative_before():
+    """Test that buffer raises ValueError for negative before."""
+    tl = timeline(Interval(start=1000, end=2000))
+
+    with pytest.raises(ValueError, match="before must be non-negative"):
+        buffer(tl, before=-100)
+
+
+def test_buffer_rejects_negative_after():
+    """Test that buffer raises ValueError for negative after."""
+    tl = timeline(Interval(start=1000, end=2000))
+
+    with pytest.raises(ValueError, match="after must be non-negative"):
+        buffer(tl, after=-100)

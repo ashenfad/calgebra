@@ -90,11 +90,14 @@ def buffer(
 
     Args:
         timeline: Source timeline to add buffers to
-        before: Seconds to add before each interval start (default: 0)
-        after: Seconds to add after each interval end (default: 0)
+        before: Seconds to add before each interval start (default: 0, must be >= 0)
+        after: Seconds to add after each interval end (default: 0, must be >= 0)
 
     Returns:
         Timeline with buffered intervals preserving original metadata
+
+    Raises:
+        ValueError: If before or after are negative
 
     Example:
         >>> from calgebra import buffer, HOUR, MINUTE
@@ -108,6 +111,10 @@ def buffer(
         >>> # Check for conflicts with expanded times
         >>> conflicts = blocked & work_calendar
     """
+    if before < 0:
+        raise ValueError(f"before must be non-negative, got {before}.\n")
+    if after < 0:
+        raise ValueError(f"after must be non-negative, got {after}.\n")
     return _Buffered(timeline, before, after)
 
 
