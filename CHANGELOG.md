@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0]
+
+### Added
+- **Unbounded intervals**: `Interval` now supports `None` for `start` or `end` to represent -∞ or +∞
+- `finite_start` and `finite_end` properties on `Interval` that return sentinel values for algorithm use
+- Complement (`~`) now supports unbounded queries (start/end can be `None`)
+- `flatten()` now supports unbounded queries (uses double complement internally)
+- Comprehensive test suite for unbounded interval operations
+
+### Changed
+- **Breaking**: `Interval.start` and `Interval.end` are now `int | None` instead of `int`
+- `Start` and `End` properties may return sentinel values (NEG_INF/POS_INF) instead of `None` for simpler filtering
+- Updated documentation to reflect unbounded interval support
+
 ## [0.1.0] - 2025-10-26
 
 ### Added
