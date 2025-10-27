@@ -877,7 +877,7 @@ def test_has_any_rejects_string_properties() -> None:
         TaggedInterval(start=0, end=5, category="work", priority=5),
     )
 
-    with pytest.raises(TypeError, match=r"has_any\(\) requires the property"):
+    with pytest.raises(TypeError, match=r"has_any\(\) must return an iterable"):
         list((tl & has_any(field("category"), {"work"}))[:])
 
 
@@ -941,7 +941,7 @@ def test_has_all_rejects_string_properties() -> None:
         TaggedInterval(start=0, end=5, category="work", priority=5),
     )
 
-    with pytest.raises(TypeError, match=r"has_all\(\) requires the property"):
+    with pytest.raises(TypeError, match=r"has_all\(\) must return an iterable"):
         list((tl & has_all(field("category"), {"work"}))[:])
 
 

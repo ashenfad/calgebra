@@ -105,7 +105,7 @@ end: End = End()
 def _normalize_collection(op_name: str, prop_val: Any) -> set[Hashable]:
     if isinstance(prop_val, (str, bytes, bytearray)):
         raise TypeError(
-            f"{op_name}() requires the property to return an iterable of hashable values.\n"
+            f"{op_name}() must return an iterable of hashable values.\n"
             f"Got scalar {type(prop_val).__name__!r}: {prop_val!r}\n"
             f"Use set/list/tuple fields (e.g. tags) instead of strings."
         )
@@ -114,7 +114,7 @@ def _normalize_collection(op_name: str, prop_val: Any) -> set[Hashable]:
         return set(prop_val)
     except TypeError as exc:
         raise TypeError(
-            f"{op_name}() requires the property to return an iterable of hashable values.\n"
+            f"{op_name}() must return an iterable of hashable values.\n"
             f"Got {type(prop_val).__name__!r}: {prop_val!r}"
         ) from exc
 
