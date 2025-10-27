@@ -114,6 +114,19 @@ def test_merge_within_preserves_bounded_merging():
     assert result[0] == Interval(start=1000, end=3000)
 
 
+def test_merge_within_absorbs_finite_inside_unbounded_future():
+    """merge_within should absorb finite intervals that lie within an unbounded span."""
+    tl = timeline(
+        Interval(start=0, end=None),
+        Interval(start=100, end=200),
+    )
+
+    merged = merge_within(tl, gap=0)
+    result = list(merged[0:500])
+
+    assert result == [Interval(start=0, end=None)]
+
+
 def test_buffer_rejects_negative_before():
     """Test that buffer raises ValueError for negative before."""
     tl = timeline(Interval(start=1000, end=2000))
