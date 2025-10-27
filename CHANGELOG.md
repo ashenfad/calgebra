@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.1] - 2025-10-27
 
+### Added
+- `buffer()` now validates that `before` and `after` parameters are non-negative
+
 ### Fixed
 - `buffer()` now correctly handles unbounded intervals (None values) instead of raising TypeError
 - `merge_within()` now correctly handles unbounded intervals when calculating gaps
