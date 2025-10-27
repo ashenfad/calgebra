@@ -115,9 +115,9 @@ def buffer(
         >>> conflicts = blocked & work_calendar
     """
     if before < 0:
-        raise ValueError(f"before must be non-negative, got {before}.\n")
+        raise ValueError(f"before must be non-negative, got {before}.")
     if after < 0:
-        raise ValueError(f"after must be non-negative, got {after}.\n")
+        raise ValueError(f"after must be non-negative, got {after}.")
     return _Buffered(timeline, before, after)
 
 
