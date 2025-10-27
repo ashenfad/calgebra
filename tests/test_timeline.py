@@ -871,6 +871,16 @@ def test_has_any_with_set_field() -> None:
     assert all("work" in event.tags for event in results)
 
 
+def test_has_any_rejects_string_properties() -> None:
+    """has_any should reject scalar string properties."""
+    tl = DummyTimeline(
+        TaggedInterval(start=0, end=5, category="work", priority=5),
+    )
+
+    with pytest.raises(TypeError, match=r"has_any\(\) requires the property"):
+        list((tl & has_any(field("category"), {"work"}))[:])
+
+
 def test_has_any_with_list_field() -> None:
     """Test has_any with list-typed fields."""
     tl = DummyTimeline(
@@ -923,6 +933,16 @@ def test_has_all_with_set_field() -> None:
     results = list(critical_work[:])
     assert len(results) == 2
     assert all({"work", "urgent"}.issubset(event.tags) for event in results)
+
+
+def test_has_all_rejects_string_properties() -> None:
+    """has_all should reject scalar string properties."""
+    tl = DummyTimeline(
+        TaggedInterval(start=0, end=5, category="work", priority=5),
+    )
+
+    with pytest.raises(TypeError, match=r"has_all\(\) requires the property"):
+        list((tl & has_all(field("category"), {"work"}))[:])
 
 
 def test_has_all_with_single_value() -> None:

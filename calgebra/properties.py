@@ -102,6 +102,23 @@ start: Start = Start()
 end: End = End()
 
 
+def _normalize_collection(op_name: str, prop_val: Any) -> set[Hashable]:
+    if isinstance(prop_val, (str, bytes, bytearray)):
+        raise TypeError(
+            f"{op_name}() requires the property to return an iterable of hashable values.\n"
+            f"Got scalar {type(prop_val).__name__!r}: {prop_val!r}\n"
+            f"Use set/list/tuple fields (e.g. tags) instead of strings."
+        )
+
+    try:
+        return set(prop_val)
+    except TypeError as exc:
+        raise TypeError(
+            f"{op_name}() requires the property to return an iterable of hashable values.\n"
+            f"Got {type(prop_val).__name__!r}: {prop_val!r}"
+        ) from exc
+
+
 def one_of(property: Property[IvlIn], values: Iterable[Hashable]) -> Operator[IvlIn]:
     return Operator(set(values), property, op.contains)
 
@@ -136,12 +153,8 @@ def has_any(property: Property[IvlIn], values: Iterable[Hashable]) -> Operator[I
     value_set = set(values)
 
     def check(prop_val: Any, _: Any) -> bool:
-        try:
-            # Try to convert to set and check intersection
-            return bool(value_set & set(prop_val))
-        except TypeError:
-            # If not iterable, fall back to membership check
-            return prop_val in value_set
+        prop_collection = _normalize_collection("has_any", prop_val)
+        return bool(value_set & prop_collection)
 
     return Operator(property, None, check)
 
@@ -175,12 +188,8 @@ def has_all(property: Property[IvlIn], values: Iterable[Hashable]) -> Operator[I
     value_set = set(values)
 
     def check(prop_val: Any, _: Any) -> bool:
-        try:
-            # Check if property value is a superset of required values
-            return value_set.issubset(set(prop_val))
-        except TypeError:
-            # If not iterable, check equality
-            return prop_val == value_set if len(value_set) == 1 else False
+        prop_collection = _normalize_collection("has_all", prop_val)
+        return value_set.issubset(prop_collection)
 
     return Operator(property, None, check)
 
