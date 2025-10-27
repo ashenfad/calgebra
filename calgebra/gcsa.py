@@ -26,8 +26,14 @@ class Event(Interval):
     @override
     def __str__(self) -> str:
         """Human-friendly string showing event details and duration."""
-        duration = self.end - self.start + 1
-        return f"Event('{self.summary}', {self.start}→{self.end}, {duration}s)"
+        start_str = str(self.start) if self.start is not None else "-∞"
+        end_str = str(self.end) if self.end is not None else "+∞"
+
+        if self.start is not None and self.end is not None:
+            duration = self.end - self.start + 1
+            return f"Event('{self.summary}', {start_str}→{end_str}, {duration}s)"
+        else:
+            return f"Event('{self.summary}', {start_str}→{end_str}, unbounded)"
 
 
 def list_calendars() -> list[CalendarItem]:
