@@ -234,21 +234,21 @@ standup = time_of_day(start=9*HOUR + 30*MINUTE, duration=30*MINUTE, tz="UTC")  #
 Combine wrappers with `&` to create complex patterns:
 
 ```python
-from calgebra import day_of_week, time_of_day, flatten, HOUR, MINUTE
+from calgebra import day_of_week, time_of_day, HOUR, MINUTE
 
-# Business hours = weekdays & 9-5 (flatten to coalesce)
-business_hours = flatten(
+# Business hours = weekdays & 9-5 (auto-flattened)
+business_hours = (
     day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
     & time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
 )
 
-# Monday standup = Mondays & 9:30-10am
-monday_standup = flatten(
+# Monday standup = Mondays & 9:30-10am (auto-flattened)
+monday_standup = (
     day_of_week("monday") & time_of_day(start=9*HOUR + 30*MINUTE, duration=30*MINUTE)
 )
 ```
 
-**Note:** Recurring patterns require finite bounds when slicing. Intersection yields one interval per source, so use `flatten` to coalesce results.
+**Note:** Recurring patterns require finite bounds when slicing. When intersecting mask timelines (like recurring patterns), the result is automatically flattened to yield one interval per overlap.
 
 ## Transformations (`calgebra.transform`)
 

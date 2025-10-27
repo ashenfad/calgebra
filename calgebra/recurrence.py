@@ -343,7 +343,7 @@ def time_of_day(
         Timeline yielding daily intervals for the specified time window
 
     Example:
-        >>> from calgebra import time_of_day, flatten, HOUR
+        >>> from calgebra import time_of_day, HOUR
         >>>
         >>> # 9am-5pm every day (8 hours)
         >>> work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
@@ -352,7 +352,7 @@ def time_of_day(
         >>> weekdays = day_of_week(
         ...     ["monday", "tuesday", "wednesday", "thursday", "friday"]
         ... )
-        >>> business_hours = flatten(weekdays & work_hours)
+        >>> business_hours = weekdays & work_hours
     """
     # Validate parameters
     if not (0 <= start < DAY):

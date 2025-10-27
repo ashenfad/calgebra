@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 from typing_extensions import override
 
-from calgebra import HOUR, MINUTE, Interval, Timeline, day_of_week, flatten, time_of_day
+from calgebra import HOUR, MINUTE, Interval, Timeline, day_of_week, time_of_day
 
 
 def test_day_of_week_single_day():
@@ -174,8 +174,8 @@ def test_composition_business_hours():
     )
     work_hours = time_of_day(start=9 * HOUR, duration=8 * HOUR, tz="UTC")
 
-    # Intersection yields one interval per source, so flatten to get coalesced results
-    business_hours = flatten(weekdays & work_hours)
+    # Intersection of mask timelines auto-flattens
+    business_hours = weekdays & work_hours
 
     hours = list(business_hours[monday:sunday])
 
@@ -202,8 +202,8 @@ def test_composition_recurring_meeting():
         start=9 * HOUR + 30 * MINUTE, duration=30 * MINUTE, tz="UTC"
     )
 
-    # Flatten to get single intervals (intersection yields one per source)
-    monday_standup = flatten(mondays & standup_time)
+    # Intersection of mask timelines auto-flattens
+    monday_standup = mondays & standup_time
 
     standups = list(monday_standup[monday:next_month])
 
@@ -246,8 +246,8 @@ def test_composition_with_calendar():
     weekdays = day_of_week(["monday"], tz="UTC")
     work_hours = time_of_day(start=9 * HOUR, duration=8 * HOUR, tz="UTC")
 
-    # Flatten the intersection to get single intervals
-    business_hours = flatten(weekdays & work_hours)
+    # Intersection of mask timelines auto-flattens
+    business_hours = weekdays & work_hours
 
     free = business_hours - busy
     free_times = list(free[monday:monday_end])
