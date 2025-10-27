@@ -27,10 +27,17 @@ class _Buffered(Timeline[Ivl], Generic[Ivl]):
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[Ivl]:
         for interval in self.source.fetch(start, end):
+            # Handle unbounded intervals (None values)
+            buffered_start = (
+                interval.start - self.before if interval.start is not None else None
+            )
+            buffered_end = (
+                interval.end + self.after if interval.end is not None else None
+            )
             yield replace(
                 interval,
-                start=interval.start - self.before,
-                end=interval.end + self.after,
+                start=buffered_start,
+                end=buffered_end,
             )
 
 
@@ -48,13 +55,22 @@ class _MergedWithin(Timeline[Ivl], Generic[Ivl]):
         for interval in self.source.fetch(start, end):
             if current is None:
                 current = interval
-            elif interval.start - current.end - 1 <= self.gap:
-                # Merge: extend current to include this interval
-                current = replace(current, end=interval.end)
             else:
-                # Gap too large, emit current and start new group
-                yield current
-                current = interval
+                # Calculate gap only if both bounds are finite
+                # Unbounded intervals don't merge (gap would be infinite)
+                can_merge = (
+                    interval.start is not None
+                    and current.end is not None
+                    and interval.start - current.end - 1 <= self.gap
+                )
+
+                if can_merge:
+                    # Merge: extend current to include this interval
+                    current = replace(current, end=interval.end)
+                else:
+                    # Gap too large or unbounded, emit current and start new group
+                    yield current
+                    current = interval
 
         if current is not None:
             yield current
