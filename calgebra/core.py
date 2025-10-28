@@ -403,10 +403,6 @@ class Difference(Timeline[IvlOut]):
                     end_val = event_end if event_end != POS_INF else None
                     yield replace(event, start=start_val, end=end_val)
 
-            # Exhaust generator to avoid partially consumed iterators on reuse
-            for _ in subtractor_iter:
-                pass
-
         return generate()
 
 
