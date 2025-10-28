@@ -69,10 +69,6 @@ Common helpers and aggregates are exposed alongside the core DSL:
 **→ [API Reference](API.md)** for detailed function signatures and parameters
 
 
-## Status
-
-calgebra is in **beta** (v0.1.0). The core API is stable and ready for use. Feedback and contributions are welcome!
-
 ## License
 
 MIT License - see LICENSE file for details.
