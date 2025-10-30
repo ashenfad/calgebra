@@ -25,7 +25,10 @@ def test_day_of_week_single_day():
 
 
 def test_day_of_week_multiple_days():
-    """Test generating intervals for multiple days of the week."""
+    """Test generating intervals for multiple days of the week.
+    
+    Adjacent days are merged by flatten, so Mon-Fri becomes one interval.
+    """
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     sunday = int(datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp())
 
@@ -35,7 +38,14 @@ def test_day_of_week_multiple_days():
     )
     days = list(weekdays[monday:sunday])
 
-    assert len(days) == 5
+    # Adjacent days are merged into one continuous interval
+    assert len(days) == 1
+    
+    # Verify it covers Monday through Friday
+    monday_start = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    friday_end = int(datetime(2025, 1, 10, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+    assert days[0].start == monday_start
+    assert days[0].end == friday_end
 
 
 def test_day_of_week_case_insensitive():
@@ -77,22 +87,27 @@ def test_day_of_week_respects_timezone():
     assert pacific_mondays[0].start == pacific_monday_start
 
 
-def test_day_of_week_requires_finite_bounds():
-    """Test that day_of_week raises error for unbounded queries."""
-    with pytest.raises(ValueError, match="requires finite bounds"):
+def test_day_of_week_requires_finite_start():
+    """Test that day_of_week requires finite start (but supports unbounded end)."""
+    with pytest.raises(ValueError, match="requires finite start"):
         list(day_of_week("monday")[:100])
 
 
 def test_time_of_day_full_day():
-    """Test time_of_day with default full day."""
+    """Test time_of_day with default full day.
+    
+    Adjacent full days are merged by flatten into one continuous interval.
+    """
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     tuesday = int(datetime(2025, 1, 7, 23, 59, 59, tzinfo=timezone.utc).timestamp())
 
     # Default is all 24 hours
     all_day = list(time_of_day(tz="UTC")[monday:tuesday])
 
-    # Should get 2 full days
-    assert len(all_day) == 2
+    # Adjacent full days are merged into one interval
+    assert len(all_day) == 1
+    assert all_day[0].start == monday
+    assert all_day[0].end == tuesday
 
 
 def test_time_of_day_specific_hours():
@@ -156,9 +171,9 @@ def test_time_of_day_validates_parameters():
         time_of_day(start=20 * HOUR, duration=5 * HOUR)
 
 
-def test_time_of_day_requires_finite_bounds():
-    """Test that time_of_day raises error for unbounded queries."""
-    with pytest.raises(ValueError, match="requires finite bounds"):
+def test_time_of_day_requires_finite_start():
+    """Test that time_of_day requires finite start (but supports unbounded end)."""
+    with pytest.raises(ValueError, match="requires finite start"):
         list(time_of_day()[:100])
 
 
@@ -257,17 +272,24 @@ def test_composition_with_calendar():
 
 
 def test_weekend_pattern():
-    """Test creating weekend pattern with day_of_week."""
+    """Test creating weekend pattern with day_of_week.
+    
+    Adjacent days (Saturday and Sunday) are merged into one continuous interval.
+    """
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     sunday = int(datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp())
 
     weekends = day_of_week(["saturday", "sunday"], tz="UTC")
     days = list(weekends[monday:sunday])
 
-    # Should get 2 days (Sat-Sun)
-    assert len(days) == 2
+    # Adjacent days are merged into one interval
+    assert len(days) == 1
 
     saturday_start = int(
         datetime(2025, 1, 11, 0, 0, 0, tzinfo=timezone.utc).timestamp()
     )
+    sunday_end = int(
+        datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp()
+    )
     assert days[0].start == saturday_start
+    assert days[0].end == sunday_end

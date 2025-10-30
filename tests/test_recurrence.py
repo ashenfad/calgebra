@@ -159,9 +159,9 @@ def test_recurring_daily():
     assert len(daily) == 7
 
 
-def test_recurring_requires_finite_bounds():
-    """Test that recurring requires finite bounds."""
-    with pytest.raises(ValueError, match="requires finite bounds"):
+def test_recurring_requires_finite_start():
+    """Test that recurring requires finite start bound."""
+    with pytest.raises(ValueError, match="requires finite start"):
         list(recurring(freq="weekly", day="monday")[:100])
 
 
@@ -305,3 +305,70 @@ def test_recurring_yearly_month_only():
 
     # Should get 2 Decembers (2025, 2026) - one event per year starting Dec 1
     assert len(december) == 2
+
+
+def test_recurring_unbounded_end():
+    """Test that recurring supports unbounded end queries via itertools."""
+    from itertools import islice
+
+    start = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+
+    # Get next 5 Mondays
+    mondays = recurring(freq="weekly", day="monday", tz="UTC")
+    next_five = list(islice(mondays[start:], 5))
+
+    assert len(next_five) == 5
+    
+    # Verify they're all Mondays
+    for interval in next_five:
+        dt = datetime.fromtimestamp(interval.start, tz=timezone.utc)
+        assert dt.weekday() == 0  # Monday
+
+
+def test_recurring_lookback_bug_fix():
+    """Test that long-duration events starting before query are included."""
+    # Query starts at Jan 10, 2pm
+    query_start = int(datetime(2025, 1, 10, 14, 0, 0, tzinfo=timezone.utc).timestamp())
+    query_end = int(datetime(2025, 1, 20, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+
+    # Weekly event on Fridays at noon, 40-hour duration (extends into Sunday)
+    # Jan 10 is a Friday, so the event runs from Jan 10 noon to Jan 12 4am
+    long_events = recurring(
+        freq="weekly",
+        day="friday",
+        start=12 * HOUR,
+        duration=40 * HOUR,
+        tz="UTC"
+    )
+
+    results = list(long_events[query_start:query_end])
+
+    # Should include:
+    # 1. Jan 10 Friday event (starts at noon, query starts at 2pm - should be clamped)
+    # 2. Jan 17 Friday event
+    assert len(results) >= 2
+    
+    # First event should start at query_start (clamped from Jan 10 noon)
+    assert results[0].start == query_start
+
+
+def test_recurring_paging_merges_fragments():
+    """Test that unbounded queries work and flatten merges properly."""
+    from itertools import islice
+
+    start = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    
+    # Weekly pattern spanning multiple months (will use multiple pages internally for long queries)
+    weekly = recurring(freq="weekly", day="monday", tz="UTC")
+    
+    # Get 10 results
+    results = list(islice(weekly[start:], 10))
+    
+    assert len(results) == 10
+    
+    # Verify they're consecutive weeks (should be 7 days apart)
+    for i in range(len(results) - 1):
+        current_start = results[i].start
+        next_start = results[i + 1].start
+        # Should be exactly 7 days (604800 seconds) apart
+        assert next_start - current_start == 604800
