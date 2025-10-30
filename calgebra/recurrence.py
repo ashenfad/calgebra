@@ -189,9 +189,9 @@ class _RawRecurringTimeline(Timeline[Interval]):
         """
         if start is None:
             raise ValueError(
-                f"Recurring timeline requires finite start, got start=None.\n"
-                f"Fix: Use explicit start when slicing: recurring(...)[start:]\n"
-                f"Example: list(mondays[1704067200:])"
+                "Recurring timeline requires finite start, got start=None.\n"
+                "Fix: Use explicit start when slicing: recurring(...)[start:]\n"
+                "Example: list(mondays[1704067200:])"
             )
 
         # Determine page size based on frequency
@@ -232,7 +232,7 @@ class _RawRecurringTimeline(Timeline[Interval]):
         )
 
     def _generate_page(self, page_start: int, page_end: int) -> Iterable[Interval]:
-        """Generate raw intervals for a single page with lookback for overlapping events.
+        """Generate raw intervals for a single page with lookback.
 
         Uses rrule starting at page_start for correct interval counting, then
         checks for one previous occurrence that might overlap.
