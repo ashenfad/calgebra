@@ -26,7 +26,7 @@ from dateutil.rrule import (
 )
 from typing_extensions import override
 
-from calgebra.core import Timeline
+from calgebra.core import Timeline, flatten
 from calgebra.interval import Interval
 from calgebra.util import DAY
 
@@ -52,8 +52,33 @@ _FREQ_MAP = {
     "yearly": YEARLY,
 }
 
+# Page sizes for unbounded queries (in seconds)
+_PAGE_SIZES = {
+    "daily": 365 * DAY,  # 1 year for daily patterns
+    "weekly": 2 * 365 * DAY,  # 2 years for weekly patterns
+    "monthly": 5 * 365 * DAY,  # 5 years for monthly patterns
+    "yearly": 10 * 365 * DAY,  # 10 years for yearly patterns
+}
 
-class RecurringTimeline(Timeline[Interval]):
+
+class _SingleIntervalTimeline(Timeline[Interval]):
+    """Internal timeline that yields the query bounds as a single interval."""
+
+    @property
+    @override
+    def _is_mask(self) -> bool:
+        return True
+
+    @override
+    def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
+        yield Interval(start=start, end=end)
+
+
+# Single shared instance for clamping recurring patterns
+_solid = _SingleIntervalTimeline()
+
+
+class _RawRecurringTimeline(Timeline[Interval]):
     """Generate recurring intervals based on RFC 5545 recurrence rules."""
 
     @property
@@ -157,48 +182,78 @@ class RecurringTimeline(Timeline[Interval]):
 
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
-        """Generate recurring intervals within the query range."""
-        if start is None or end is None:
+        """Generate raw recurring intervals with paging and lookback.
+
+        Supports unbounded end queries via automatic paging.
+        Generates intervals that may extend beyond query bounds (no clamping).
+        """
+        if start is None:
             raise ValueError(
-                f"RecurringTimeline requires finite bounds, "
-                f"got start={start}, end={end}.\n"
-                f"Fix: Use explicit bounds when slicing: "
-                f"list(recurring(...)[start:end])\n"
-                f"Example: list(mondays[1704067200:1735689599])"
+                f"Recurring timeline requires finite start, got start=None.\n"
+                f"Fix: Use explicit start when slicing: recurring(...)[start:]\n"
+                f"Example: list(mondays[1704067200:])"
             )
 
-        # Convert bounds to datetime in timezone
-        start_dt = datetime.fromtimestamp(start, tz=self.zone)
-        end_dt = datetime.fromtimestamp(end, tz=self.zone)
+        # Determine page size based on frequency
+        page_size = _PAGE_SIZES[self.freq]
 
-        # Create rrule with dtstart at beginning of query range
-        # Normalize to start of day for consistent behavior
+        # Page through time
+        page_start = start
+        while True:
+            # Calculate page end (bounded by query end if provided)
+            page_end = page_start + page_size - 1
+            if end is not None:
+                page_end = min(page_end, end)
+
+            # Generate raw intervals for this page
+            yield from self._generate_page(page_start, page_end)
+
+            # Stop if we've covered bounded range
+            if end is not None and page_end >= end:
+                break
+
+            page_start = page_end + 1
+
+    def _occurrence_to_interval(self, occurrence: datetime) -> Interval:
+        """Convert an rrule occurrence to an Interval with time window applied."""
+        start_hour_int = self.start_seconds // 3600
+        remaining = self.start_seconds % 3600
+        start_minute = remaining // 60
+        start_second = remaining % 60
+
+        window_start = occurrence.replace(
+            hour=start_hour_int, minute=start_minute, second=start_second
+        )
+        # Subtract 1 because intervals are inclusive of both start and end bounds
+        window_end = window_start + timedelta(seconds=self.duration_seconds - 1)
+
+        return Interval(
+            start=int(window_start.timestamp()), end=int(window_end.timestamp())
+        )
+
+    def _generate_page(self, page_start: int, page_end: int) -> Iterable[Interval]:
+        """Generate raw intervals for a single page with lookback for overlapping events.
+
+        Uses rrule starting at page_start for correct interval counting, then
+        checks for one previous occurrence that might overlap.
+        """
+        start_dt = datetime.fromtimestamp(page_start, tz=self.zone)
+        end_dt = datetime.fromtimestamp(page_end, tz=self.zone)
+
+        # Set dtstart at page start for correct interval counting
         dtstart = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
 
         r = rrule(dtstart=dtstart, until=end_dt, cache=True, **self.rrule_kwargs)
 
-        # Generate intervals for each occurrence
+        # Check if there's a previous occurrence that might overlap with page_start
+        # This catches events that start before the page but extend into it
+        prev_occurrence = r.before(dtstart, inc=False)
+        if prev_occurrence:
+            yield self._occurrence_to_interval(prev_occurrence)
+
+        # Generate raw intervals for each occurrence
         for occurrence in r:
-            # Calculate time window for this occurrence
-            # Convert start_seconds (seconds from midnight) to hours/minutes/seconds
-            start_hour_int = self.start_seconds // 3600
-            remaining = self.start_seconds % 3600
-            start_minute = remaining // 60
-            start_second = remaining % 60
-
-            window_start = occurrence.replace(
-                hour=start_hour_int, minute=start_minute, second=start_second
-            )
-            # Subtract 1 because intervals are inclusive of both start and end bounds
-            # Example: 9am-10am is [9:00:00, 9:59:59] = 3600 seconds total
-            window_end = window_start + timedelta(seconds=self.duration_seconds - 1)
-
-            # Clamp to query bounds
-            interval_start = max(int(window_start.timestamp()), start)
-            interval_end = min(int(window_end.timestamp()), end)
-
-            if interval_start <= interval_end:
-                yield Interval(start=interval_start, end=interval_end)
+            yield self._occurrence_to_interval(occurrence)
 
 
 def recurring(
@@ -215,6 +270,8 @@ def recurring(
 ) -> Timeline[Interval]:
     """
     Create a timeline with recurring intervals based on frequency and constraints.
+
+    Supports unbounded end queries (e.g., recurring(...)[start:]) via automatic paging.
 
     Args:
         freq: Frequency - "daily", "weekly", "monthly", or "yearly"
@@ -282,8 +339,14 @@ def recurring(
         ...     day_of_month=1,
         ...     tz="UTC"
         ... )
+        >>>
+        >>> # Unbounded queries (with itertools)
+        >>> from itertools import islice
+        >>> mondays = recurring(freq="weekly", day="monday", tz="UTC")
+        >>> next_five = list(islice(mondays[start:], 5))
     """
-    return RecurringTimeline(
+    # Generate raw recurring intervals with paging and lookback
+    raw = _RawRecurringTimeline(
         freq,
         interval=interval,
         day=day,
@@ -294,6 +357,9 @@ def recurring(
         duration=duration,
         tz=tz,
     )
+
+    # Compose: merge recurring pattern, then clamp to query bounds
+    return _solid & flatten(raw)
 
 
 def day_of_week(days: Day | list[Day], tz: str = "UTC") -> Timeline[Interval]:
