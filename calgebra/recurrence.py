@@ -28,7 +28,7 @@ from typing_extensions import override
 
 from calgebra.core import Timeline, flatten
 from calgebra.interval import Interval
-from calgebra.util import DAY
+from calgebra.util import DAY, MONTH, WEEK, YEAR
 
 Day: TypeAlias = Literal[
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
@@ -50,6 +50,13 @@ _FREQ_MAP = {
     "weekly": WEEKLY,
     "monthly": MONTHLY,
     "yearly": YEARLY,
+}
+
+_FREQ_SIZE = {
+    DAILY: DAY,
+    WEEKLY: WEEK,
+    MONTHLY: MONTH,
+    YEARLY: YEAR,
 }
 
 # Page sizes for unbounded queries (in seconds)
@@ -234,24 +241,44 @@ class _RawRecurringTimeline(Timeline[Interval]):
     def _generate_page(self, page_start: int, page_end: int) -> Iterable[Interval]:
         """Generate raw intervals for a single page with lookback.
 
-        Uses rrule starting at page_start for correct interval counting, then
-        checks for one previous occurrence that might overlap.
+        Creates rrule with dtstart at page start, then looks back for overlapping events.
+        For lookback, creates a second rrule with dtstart moved back by interval periods
+        to maintain phase consistency.
         """
         start_dt = datetime.fromtimestamp(page_start, tz=self.zone)
         end_dt = datetime.fromtimestamp(page_end, tz=self.zone)
 
-        # Set dtstart at page start for correct interval counting
+        # Main rrule starts at page start (preserves original phase behavior)
         dtstart = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-
         r = rrule(dtstart=dtstart, until=end_dt, cache=True, **self.rrule_kwargs)
 
-        # Check if there's a previous occurrence that might overlap with page_start
-        # This catches events that start before the page but extend into it
-        prev_occurrence = r.before(dtstart, inc=False)
-        if prev_occurrence:
-            yield self._occurrence_to_interval(prev_occurrence)
+        # For lookback: go back enough to capture overlapping events
+        # Move back by duration AND enough interval periods to ensure we catch everything
+        interval = self.rrule_kwargs.get("interval", 1)
 
-        # Generate raw intervals for each occurrence
+        # Calculate how far back to look
+        period_seconds = _FREQ_SIZE[self.rrule_kwargs["freq"]] * interval
+
+        # Go back by duration + one interval period (to catch all overlaps)
+        lookback_seconds = self.duration_seconds + period_seconds
+        lookback_dt = start_dt - timedelta(seconds=lookback_seconds)
+        lookback_dtstart = lookback_dt.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+
+        # Create separate rrule for lookback
+        r_lookback = rrule(
+            dtstart=lookback_dtstart, until=dtstart, cache=True, **self.rrule_kwargs
+        )
+
+        # Yield lookback intervals that overlap with page_start
+        for occurrence in r_lookback:
+            interval = self._occurrence_to_interval(occurrence)
+            # Only yield if this interval extends into the page
+            if interval.end is not None and interval.end >= page_start:
+                yield interval
+
+        # Yield main intervals
         for occurrence in r:
             yield self._occurrence_to_interval(occurrence)
 

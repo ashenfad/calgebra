@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from calgebra import HOUR, MINUTE, Interval, recurring
+from calgebra import HOUR, MINUTE, recurring
 
 
 def test_recurring_weekly_single_day():
@@ -54,6 +54,7 @@ def test_recurring_weekly_with_time_window():
     assert len(standup) == 1
 
     # Check duration is 30 minutes
+    assert standup[0].start is not None and standup[0].end is not None
     duration = standup[0].end - standup[0].start + 1
     assert duration == 1800  # 30 minutes in seconds
 
@@ -290,6 +291,7 @@ def test_recurring_yearly_with_time_window():
     assert len(anniversary) == 2
 
     # Check duration is 3 hours
+    assert anniversary[0].start is not None and anniversary[0].end is not None
     duration = anniversary[0].end - anniversary[0].start + 1
     assert duration == 10800  # 3 hours in seconds
 
@@ -318,9 +320,10 @@ def test_recurring_unbounded_end():
     next_five = list(islice(mondays[start:], 5))
 
     assert len(next_five) == 5
-    
+
     # Verify they're all Mondays
     for interval in next_five:
+        assert interval.start is not None
         dt = datetime.fromtimestamp(interval.start, tz=timezone.utc)
         assert dt.weekday() == 0  # Monday
 
@@ -334,11 +337,7 @@ def test_recurring_lookback_bug_fix():
     # Weekly event on Fridays at noon, 40-hour duration (extends into Sunday)
     # Jan 10 is a Friday, so the event runs from Jan 10 noon to Jan 12 4am
     long_events = recurring(
-        freq="weekly",
-        day="friday",
-        start=12 * HOUR,
-        duration=40 * HOUR,
-        tz="UTC"
+        freq="weekly", day="friday", start=12 * HOUR, duration=40 * HOUR, tz="UTC"
     )
 
     results = list(long_events[query_start:query_end])
@@ -347,7 +346,7 @@ def test_recurring_lookback_bug_fix():
     # 1. Jan 10 Friday event (starts at noon, query starts at 2pm - should be clamped)
     # 2. Jan 17 Friday event
     assert len(results) >= 2
-    
+
     # First event should start at query_start (clamped from Jan 10 noon)
     assert results[0].start == query_start
 
@@ -357,18 +356,175 @@ def test_recurring_paging_merges_fragments():
     from itertools import islice
 
     start = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    
+
     # Weekly pattern spanning multiple months (will use multiple pages internally for long queries)
     weekly = recurring(freq="weekly", day="monday", tz="UTC")
-    
+
     # Get 10 results
     results = list(islice(weekly[start:], 10))
-    
+
     assert len(results) == 10
-    
+
     # Verify they're consecutive weeks (should be 7 days apart)
     for i in range(len(results) - 1):
         current_start = results[i].start
         next_start = results[i + 1].start
+        assert current_start is not None and next_start is not None
         # Should be exactly 7 days (604800 seconds) apart
         assert next_start - current_start == 604800
+
+
+def test_recurring_duration_exceeds_interval():
+    """Test recurring patterns where duration > interval_between_occurrences.
+
+    This is the edge case where multiple previous occurrences overlap with
+    the query start. The lookback should find all of them, and after flattening
+    they should create continuous coverage.
+    """
+    from calgebra import DAY
+
+    # Daily events with 3-day duration: each event overlaps with next 2
+    # Query starts on Jan 5
+    query_start = int(datetime(2025, 1, 5, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    query_end = int(datetime(2025, 1, 10, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+
+    long_events = recurring(freq="daily", duration=3 * DAY, tz="UTC")
+
+    results = list(long_events[query_start:query_end])
+
+    # recurring() returns flattened intervals, so overlapping events merge
+    # Daily events with 3-day duration create continuous coverage
+    # Should get one continuous interval covering the entire query range
+    assert len(results) == 1
+
+    # Should span the entire query range
+    assert results[0].start == query_start
+    assert results[0].end == query_end
+
+
+def test_recurring_weekly_with_multi_day_duration():
+    """Test weekly events that span multiple days."""
+    # Weekly events on Fridays with 3-day duration (Fri-Sun)
+    query_start = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    query_end = int(datetime(2025, 1, 31, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+
+    weekend_events = recurring(
+        freq="weekly", day="friday", duration=3 * 86400, tz="UTC"
+    )
+
+    results = list(weekend_events[query_start:query_end])
+
+    # January 2025: Fridays are Jan 3, 10, 17, 24, 31
+    assert len(results) == 5
+
+    # First 4 events should be 3 days long
+    for interval in results[:4]:
+        assert interval.start is not None and interval.end is not None
+        duration = interval.end - interval.start + 1
+        assert duration == 3 * 86400, f"Expected 3 days, got {duration/86400:.2f} days"
+
+    # Last event (Jan 31) extends beyond query range and gets clamped
+    # Just verify it starts on Jan 31
+    jan_31 = int(datetime(2025, 1, 31, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    assert results[4].start == jan_31
+
+
+def test_recurring_flatten_merges_overlapping_durations():
+    """Test that overlapping recurring events are already flattened by recurring()."""
+    from calgebra import DAY, recurring
+    from calgebra.recurrence import _RawRecurringTimeline
+
+    query_start = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    query_end = int(datetime(2025, 1, 10, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+
+    # Daily events with 2-day duration: creates continuous coverage
+    # recurring() already applies flatten(), so check raw timeline first
+    raw = _RawRecurringTimeline(freq="daily", duration=2 * DAY, tz="UTC")
+    raw_results = list(raw.fetch(query_start, query_end))
+
+    # Raw should have many overlapping intervals (one per day)
+    assert len(raw_results) >= 10
+
+    # recurring() returns flattened results
+    flattened = recurring(freq="daily", duration=2 * DAY, tz="UTC")
+    flattened_results = list(flattened[query_start:query_end])
+
+    # After flatten: should be one continuous interval
+    assert len(flattened_results) == 1
+
+    # Should cover the entire query range
+    assert flattened_results[0].start == query_start
+    assert flattened_results[0].end == query_end
+
+
+def test_recurring_lookback_multiple_previous():
+    """Test that lookback correctly finds multiple previous occurrences.
+
+    Without proper lookback, events starting before the query but extending
+    into it would be missed, causing gaps in coverage.
+    """
+    from calgebra import DAY
+
+    # Start query on Jan 10
+    query_start = int(datetime(2025, 1, 10, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    query_end = int(datetime(2025, 1, 15, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+
+    # Daily events with 5-day duration
+    # Jan 6 extends to Jan 11 (overlaps with query start)
+    # Jan 7 extends to Jan 12 (overlaps with query start)
+    # Jan 8 extends to Jan 13 (overlaps with query start)
+    # Jan 9 extends to Jan 14 (overlaps with query start)
+    # Jan 10+ extends to Jan 15+ (starts at/after query start)
+    long_events = recurring(freq="daily", duration=5 * DAY, tz="UTC")
+
+    results = list(long_events[query_start:query_end])
+
+    # After flattening, should have continuous coverage
+    # (if lookback missed previous events, there would be gaps)
+    assert len(results) == 1, "Should be one continuous interval after flattening"
+
+    # Should cover the entire query range
+    assert results[0].start == query_start
+    assert results[0].end == query_end
+
+
+def test_recurring_raw_lookback_captures_all_overlaps():
+    """Test that raw recurring timeline (before flatten) captures all overlapping events.
+
+    This directly tests the _generate_page lookback logic.
+    """
+    from calgebra import DAY
+    from calgebra.recurrence import _RawRecurringTimeline
+
+    # Create raw timeline (bypasses the flatten in recurring())
+    raw = _RawRecurringTimeline(
+        freq="daily", duration=4 * DAY, tz="UTC"  # 4-day duration on daily events
+    )
+
+    # Query starts on Jan 10
+    query_start = int(datetime(2025, 1, 10, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    query_end = int(datetime(2025, 1, 15, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+
+    results = list(raw.fetch(query_start, query_end))
+
+    # Should capture events from Jan 7, 8, 9, 10, 11, 12, 13, 14, 15
+    # (Jan 7 extends to Jan 11, overlapping with query start)
+    jan_7 = int(datetime(2025, 1, 7, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    jan_8 = int(datetime(2025, 1, 8, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    jan_9 = int(datetime(2025, 1, 9, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+
+    event_starts = {r.start for r in results}
+
+    # Verify we captured the previous overlapping events
+    assert (
+        jan_7 in event_starts
+    ), "Should include Jan 7 (extends to Jan 11, overlaps query)"
+    assert (
+        jan_8 in event_starts
+    ), "Should include Jan 8 (extends to Jan 12, overlaps query)"
+    assert (
+        jan_9 in event_starts
+    ), "Should include Jan 9 (extends to Jan 13, overlaps query)"
+
+    # Should have at least 9 events (Jan 7-15)
+    assert len(results) >= 9
