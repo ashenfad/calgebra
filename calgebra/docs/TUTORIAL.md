@@ -85,6 +85,28 @@ timeline[datetime(2025, 1, 1, tzinfo=timezone.utc):datetime(2025, 12, 31, tzinfo
 
 Date objects are converted to full-day boundaries (00:00:00 to 23:59:59) in UTC.
 
+### Automatic Clipping
+
+**Important behavior**: Intervals are automatically clipped to your query bounds. When you slice `timeline[start:end]`, any intervals extending beyond those bounds are trimmed to fit within the query range:
+
+```python
+from calgebra import timeline, Interval
+
+# Create a timeline with an interval that extends past our query
+t = timeline([Interval(start=100, end=500)])
+
+# Query for [0:300] - the interval will be clipped
+result = list(t[0:300])
+# Result: [Interval(start=100, end=300)]  # Clipped to query end
+```
+
+This automatic clipping ensures:
+- **Accurate aggregations**: `total_duration()` reflects only the portion within your query window
+- **Consistent set operations**: Intersection, union, and difference work correctly within bounds
+- **Predictable behavior**: You always get intervals that fit your query range
+
+This behavior applies to all timelines, including recurring patterns, transformations, and set operations.
+
 ### Filters
 
 A `Filter` is a predicate that tests whether an interval meets some condition. Filters are created using `Property` comparisons:

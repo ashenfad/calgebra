@@ -37,6 +37,7 @@ events = timeline(
   - Timezone-aware datetime: `timeline[datetime(2025, 1, 1, tzinfo=timezone.utc):...]`
   - Date objects: `timeline[date(2025, 1, 1):date(2025, 12, 31)]`
   - Naive datetimes are rejected with TypeError
+  - **Automatic clipping**: Intervals are automatically clipped to query bounds. Any interval extending beyond `[start:end]` will be trimmed to fit. This ensures accurate aggregations and consistent set operations.
 - Set-like operators:
   - `timeline | other` → `Union`
   - `timeline & other` → `Intersection` or `Filtered`

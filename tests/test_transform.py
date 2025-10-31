@@ -151,14 +151,14 @@ def test_buffer_respects_query_bounds() -> None:
 
     buffered = buffer(timeline, before=50, after=50)
 
-    # Query subset
+    # Query subset - intervals are clipped to query bounds
     result = list(buffered[200:350])
 
-    # First interval extends to 250 (overlaps query start)
-    # Second interval starts at 250 (within query)
+    # First interval extends to 250 (overlaps query start), clipped to start at 200
+    # Second interval starts at 250 (within query), clipped to end at 350
     assert result == [
-        Interval(start=50, end=250),  # Starts before query, included
-        Interval(start=250, end=450),  # Starts in query, included
+        Interval(start=200, end=250),  # Clipped to query start
+        Interval(start=250, end=350),  # Clipped to query end
     ]
 
 

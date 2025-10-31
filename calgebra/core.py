@@ -5,7 +5,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from datetime import date, datetime, time, timezone
 from functools import reduce
-from typing import Any, Generic, Literal, overload
+from typing import Any, Generic, Literal, cast, overload
 
 from typing_extensions import override
 
@@ -32,7 +32,15 @@ class Timeline(ABC, Generic[IvlOut]):
     def __getitem__(self, item: slice) -> Iterable[IvlOut]:
         start = self._coerce_bound(item.start, "start")
         end = self._coerce_bound(item.stop, "end")
-        return self.fetch(start, end)
+
+        # Automatically clip intervals to query bounds via intersection with solid
+        # timeline
+        # This ensures correct behavior for aggregations and set operations
+        # Skip clipping if both bounds are unbounded (no clipping needed)
+        if start is None and end is None:
+            return self.fetch(start, end)
+        # Cast solid to compatible type since intersection preserves self's type
+        return (self & cast("Timeline[IvlOut]", solid)).fetch(start, end)
 
     def _coerce_bound(self, bound: Any, edge: Literal["start", "end"]) -> int | None:
         """Convert slice bounds to integer seconds (Unix timestamps).
@@ -169,6 +177,26 @@ class And(Filter[IvlIn]):
     @override
     def apply(self, event: IvlIn) -> bool:
         return all(f.apply(event) for f in self.filters)
+
+
+class _SolidTimeline(Timeline[Interval]):
+    """Internal timeline that yields query bounds as a single interval.
+
+    Used for automatic clipping via intersection in Timeline.__getitem__.
+    """
+
+    @property
+    @override
+    def _is_mask(self) -> bool:
+        return True
+
+    @override
+    def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
+        yield Interval(start=start, end=end)
+
+
+# Singleton instance for clipping operations
+solid: Timeline[Interval] = _SolidTimeline()
 
 
 class Union(Timeline[IvlOut]):

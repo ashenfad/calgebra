@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3]
+
+### Added
+- **Automatic interval clipping**: All timelines now automatically clip intervals to query bounds in `Timeline.__getitem__`. When you slice `timeline[start:end]`, any intervals extending beyond those bounds are trimmed to fit.
+
 ## [0.2.2] - 2025-10-30
 
 ### Added

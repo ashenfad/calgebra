@@ -26,7 +26,7 @@ from dateutil.rrule import (
 )
 from typing_extensions import override
 
-from calgebra.core import Timeline, flatten
+from calgebra.core import Timeline, flatten, solid
 from calgebra.interval import Interval
 from calgebra.util import DAY, MONTH, WEEK, YEAR
 
@@ -66,23 +66,6 @@ _PAGE_SIZES = {
     "monthly": 5 * 365 * DAY,  # 5 years for monthly patterns
     "yearly": 10 * 365 * DAY,  # 10 years for yearly patterns
 }
-
-
-class _SingleIntervalTimeline(Timeline[Interval]):
-    """Internal timeline that yields the query bounds as a single interval."""
-
-    @property
-    @override
-    def _is_mask(self) -> bool:
-        return True
-
-    @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
-        yield Interval(start=start, end=end)
-
-
-# Single shared instance for clamping recurring patterns
-_solid = _SingleIntervalTimeline()
 
 
 class _RawRecurringTimeline(Timeline[Interval]):
@@ -241,7 +224,8 @@ class _RawRecurringTimeline(Timeline[Interval]):
     def _generate_page(self, page_start: int, page_end: int) -> Iterable[Interval]:
         """Generate raw intervals for a single page with lookback.
 
-        Creates rrule with dtstart at page start, then looks back for overlapping events.
+        Creates rrule with dtstart at page start, then looks back for overlapping
+        events.
         For lookback, creates a second rrule with dtstart moved back by interval periods
         to maintain phase consistency.
         """
@@ -253,7 +237,8 @@ class _RawRecurringTimeline(Timeline[Interval]):
         r = rrule(dtstart=dtstart, until=end_dt, cache=True, **self.rrule_kwargs)
 
         # For lookback: go back enough to capture overlapping events
-        # Move back by duration AND enough interval periods to ensure we catch everything
+        # Move back by duration AND enough interval periods to ensure we catch
+        # everything
         interval = self.rrule_kwargs.get("interval", 1)
 
         # Calculate how far back to look
@@ -386,7 +371,7 @@ def recurring(
     )
 
     # Compose: merge recurring pattern, then clamp to query bounds
-    return _solid & flatten(raw)
+    return solid & flatten(raw)
 
 
 def day_of_week(days: Day | list[Day], tz: str = "UTC") -> Timeline[Interval]:
