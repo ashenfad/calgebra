@@ -1,4 +1,3 @@
-from dataclasses import replace
 from typing import TypeVar
 
 from .core import Timeline, flatten
@@ -31,23 +30,19 @@ def max_duration(
     start: int,
     end: int,
 ) -> Ivl | None:
-    """Return the longest interval (clamped to the bounds) within the slice."""
+    """Return the longest interval within the slice."""
     if start > end:
         return None
 
     longest: Ivl | None = None
     longest_len = -1
     for event in timeline[start:end]:
-        # Use finite properties for clamping to handle None (unbounded) values
-        event_start = event.start if event.start is not None else start
-        event_end = event.end if event.end is not None else end
-        clamped_start = max(event_start, start)
-        clamped_end = min(event_end, end)
-        if clamped_start > clamped_end:
+        # Skip unbounded intervals (shouldn't happen with finite bounds, but be safe)
+        if event.start is None or event.end is None:
             continue
-        length = clamped_end - clamped_start + 1
+        length = event.end - event.start + 1
         if length > longest_len:
-            longest = replace(event, start=clamped_start, end=clamped_end)
+            longest = event
             longest_len = length
     return longest
 
@@ -57,23 +52,19 @@ def min_duration(
     start: int,
     end: int,
 ) -> Ivl | None:
-    """Return the shortest interval (clamped to the bounds) within the slice."""
+    """Return the shortest interval within the slice."""
     if start > end:
         return None
 
     shortest: Ivl | None = None
     shortest_len: int | None = None
     for event in timeline[start:end]:
-        # Use finite properties for clamping to handle None (unbounded) values
-        event_start = event.start if event.start is not None else start
-        event_end = event.end if event.end is not None else end
-        clamped_start = max(event_start, start)
-        clamped_end = min(event_end, end)
-        if clamped_start > clamped_end:
+        # Skip unbounded intervals (shouldn't happen with finite bounds, but be safe)
+        if event.start is None or event.end is None:
             continue
-        length = clamped_end - clamped_start + 1
+        length = event.end - event.start + 1
         if shortest_len is None or length < shortest_len:
-            shortest = replace(event, start=clamped_start, end=clamped_end)
+            shortest = event
             shortest_len = length
     return shortest
 

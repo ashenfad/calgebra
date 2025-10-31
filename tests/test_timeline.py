@@ -87,9 +87,10 @@ def test_fetch_respects_bounds() -> None:
         Interval(start=20, end=25),
     ]
 
+    # Intervals are clipped to query bounds
     assert list(timeline[9:21]) == [
         Interval(start=10, end=15),
-        Interval(start=20, end=25),
+        Interval(start=20, end=21),  # Clipped to query end
     ]
 
     assert list(timeline[:15]) == [
@@ -97,8 +98,9 @@ def test_fetch_respects_bounds() -> None:
         Interval(start=10, end=15),
     ]
 
+    # Intervals are clipped to query bounds
     assert list(timeline[12:]) == [
-        Interval(start=10, end=15),
+        Interval(start=12, end=15),  # Clipped to query start
         Interval(start=20, end=25),
     ]
 
@@ -768,9 +770,10 @@ def test_timeline_helper_respects_bounds() -> None:
         Interval(start=20, end=25),
     )
 
+    # Intervals are clipped to query bounds
     assert list(tl[9:21]) == [
         Interval(start=10, end=15),
-        Interval(start=20, end=25),
+        Interval(start=20, end=21),  # Clipped to query end
     ]
 
     assert list(tl[:15]) == [
@@ -778,8 +781,9 @@ def test_timeline_helper_respects_bounds() -> None:
         Interval(start=10, end=15),
     ]
 
+    # Intervals are clipped to query bounds
     assert list(tl[12:]) == [
-        Interval(start=10, end=15),
+        Interval(start=12, end=15),  # Clipped to query start
         Interval(start=20, end=25),
     ]
 

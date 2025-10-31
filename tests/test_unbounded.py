@@ -157,17 +157,19 @@ def test_union_with_unbounded_intervals():
     unbounded_future = timeline(Interval(start=5000, end=None))
 
     # Union should sort correctly using finite_start/finite_end
+    # Query with finite bounds clips to query bounds
     combined = bounded | unbounded_past | unbounded_future
     intervals = list(combined[0:10000])
 
     # Should be sorted: unbounded_past, bounded, unbounded_future
+    # All clipped to query bounds
     assert len(intervals) == 3
-    assert intervals[0].start is None
+    assert intervals[0].start == 0  # Clipped to query start
     assert intervals[0].end == 500
     assert intervals[1].start == 1000
     assert intervals[1].end == 2000
     assert intervals[2].start == 5000
-    assert intervals[2].end is None
+    assert intervals[2].end == 10000  # Clipped to query end
 
 
 def test_intersection_with_unbounded_intervals():
@@ -207,17 +209,18 @@ def test_difference_with_unbounded_intervals():
     )
 
     # Difference should carve out the busy times
+    # Query with finite bounds clips to query bounds
     free = all_time - busy
     gaps = list(free[0:10000])
 
-    # Should get: [-∞, 999], [2001, 4999], [6001, +∞]
-    # These preserve their unbounded nature
+    # Should get: [0, 999], [2001, 4999], [6001, 10000]
+    # All clipped to query bounds
     assert len(gaps) == 3
-    assert gaps[0].start is None  # Unbounded past
+    assert gaps[0].start == 0  # Clipped to query start
     assert gaps[0].end == 999
     assert gaps[1] == Interval(start=2001, end=4999)
     assert gaps[2].start == 6001
-    assert gaps[2].end is None  # Unbounded future
+    assert gaps[2].end == 10000  # Clipped to query end
 
 
 def test_difference_subtract_unbounded_from_bounded():
@@ -287,14 +290,15 @@ def test_static_timeline_with_unbounded_intervals():
     )
 
     # Should sort correctly using finite_start/finite_end
+    # Query with finite bounds clips to query bounds
     intervals = list(tl[0:10000])
 
     assert len(intervals) == 3
-    assert intervals[0].start is None
+    assert intervals[0].start == 0  # Clipped to query start
     assert intervals[0].end == 1000
     assert intervals[1] == Interval(start=2000, end=3000)
     assert intervals[2].start == 5000
-    assert intervals[2].end is None
+    assert intervals[2].end == 10000  # Clipped to query end
 
 
 def test_unbounded_interval_validation():

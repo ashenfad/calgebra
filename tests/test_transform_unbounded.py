@@ -9,12 +9,12 @@ def test_buffer_with_unbounded_past():
     """Test that buffer handles unbounded past intervals."""
     tl = timeline(Interval(start=None, end=1000))
 
-    # Buffering unbounded past should keep start as None
+    # Buffering unbounded past, then querying with finite bounds clips to query bounds
     buffered = buffer(tl, before=100, after=100)
     result = list(buffered[0:2000])
 
     assert len(result) == 1
-    assert result[0].start is None  # Still unbounded
+    assert result[0].start == 0  # Clipped to query start
     assert result[0].end == 1100  # End gets buffered
 
 
@@ -22,26 +22,26 @@ def test_buffer_with_unbounded_future():
     """Test that buffer handles unbounded future intervals."""
     tl = timeline(Interval(start=1000, end=None))
 
-    # Buffering unbounded future should keep end as None
+    # Buffering unbounded future, then querying with finite bounds clips to query bounds
     buffered = buffer(tl, before=100, after=100)
     result = list(buffered[0:2000])
 
     assert len(result) == 1
     assert result[0].start == 900  # Start gets buffered
-    assert result[0].end is None  # Still unbounded
+    assert result[0].end == 2000  # Clipped to query end
 
 
 def test_buffer_with_all_time():
     """Test that buffer handles fully unbounded intervals."""
     tl = timeline(Interval(start=None, end=None))
 
-    # Buffering all time keeps it unbounded
+    # Buffering all time, then querying with finite bounds clips to query bounds
     buffered = buffer(tl, before=100, after=100)
     result = list(buffered[0:2000])
 
     assert len(result) == 1
-    assert result[0].start is None
-    assert result[0].end is None
+    assert result[0].start == 0  # Clipped to query start
+    assert result[0].end == 2000  # Clipped to query end
 
 
 def test_buffer_mixed_bounded_unbounded():
@@ -56,15 +56,15 @@ def test_buffer_mixed_bounded_unbounded():
     result = list(buffered[0:10000])
 
     assert len(result) == 3
-    # First interval: unbounded past
-    assert result[0].start is None
+    # First interval: unbounded past, clipped to query start
+    assert result[0].start == 0  # Clipped to query start
     assert result[0].end == 1100
     # Second interval: bounded
     assert result[1].start == 1900
     assert result[1].end == 3100
-    # Third interval: unbounded future
+    # Third interval: unbounded future, clipped to query end
     assert result[2].start == 4900
-    assert result[2].end is None
+    assert result[2].end == 10000  # Clipped to query end
 
 
 def test_merge_within_merges_unbounded_with_bounded():
@@ -75,11 +75,12 @@ def test_merge_within_merges_unbounded_with_bounded():
     )
 
     # Gap is 99 seconds, which is <= 1000, so they merge
+    # Query with finite bounds clips to query bounds
     merged = merge_within(tl, gap=1000)
     result = list(merged[0:3000])
 
     assert len(result) == 1
-    assert result[0].start is None  # Preserves unbounded start
+    assert result[0].start == 0  # Clipped to query start
     assert result[0].end == 2000  # Extends to end of second interval
 
 
@@ -91,12 +92,13 @@ def test_merge_within_unbounded_future():
     )
 
     # Gap is 99 seconds, which is <= 1000, so they merge
+    # Query with finite bounds clips to query bounds
     merged = merge_within(tl, gap=1000)
     result = list(merged[0:3000])
 
     assert len(result) == 1
     assert result[0].start == 1000  # Preserves bounded start
-    assert result[0].end is None  # Extends to unbounded end
+    assert result[0].end == 3000  # Clipped to query end
 
 
 def test_merge_within_preserves_bounded_merging():
@@ -121,10 +123,12 @@ def test_merge_within_absorbs_finite_inside_unbounded_future():
         Interval(start=100, end=200),
     )
 
+    # The unbounded interval absorbs the bounded one
+    # Query with finite bounds clips to query bounds
     merged = merge_within(tl, gap=0)
     result = list(merged[0:500])
 
-    assert result == [Interval(start=0, end=None)]
+    assert result == [Interval(start=0, end=500)]  # Clipped to query end
 
 
 def test_buffer_rejects_negative_before():

@@ -39,7 +39,9 @@ end = datetime(2025, 1, 31, tzinfo=timezone.utc)
 meeting_options = list(long_slots[start:end])
 ```
 
-Intervals in `calgebra` are inclusive of both `start` and `end`—durations therefore reflect every second covered by an interval. Timeline slices accept integer seconds (Unix timestamps), timezone-aware datetime objects, or date objects. When you subclass `Interval`, define your subclass as a dataclass (ideally `frozen=True`) so the algebra can clone and clamp events internally.
+Intervals in `calgebra` are inclusive of both `start` and `end`—durations therefore reflect every second covered by an interval. Timeline slices accept integer seconds (Unix timestamps), timezone-aware datetime objects, or date objects.
+
+**Important:** Intervals are automatically clipped to your query bounds. When you slice `timeline[start:end]`, any intervals extending beyond those bounds are trimmed to fit. This ensures aggregations like `total_duration()` and set operations work correctly within your query window. When you subclass `Interval`, define your subclass as a dataclass (ideally `frozen=True`) so the algebra can clone and clamp events internally.
 
 Common helpers and aggregates are exposed alongside the core DSL:
 
@@ -68,10 +70,6 @@ Common helpers and aggregates are exposed alongside the core DSL:
 **→ [Read the full tutorial](TUTORIAL.md)** for a complete guide to the DSL  
 **→ [API Reference](API.md)** for detailed function signatures and parameters
 
-
-## Status
-
-calgebra is in **beta** (v0.1.0). The core API is stable and ready for use. Feedback and contributions are welcome!
 
 ## License
 
