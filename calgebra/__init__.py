@@ -24,7 +24,7 @@ from .properties import (
 )
 from .recurrence import day_of_week, recurring, time_of_day
 from .transform import buffer, merge_within
-from .util import DAY, HOUR, MINUTE, SECOND
+from .util import DAY, HOUR, MINUTE, SECOND, at_tz
 
 # Load documentation files for programmatic access by agents and code-aware tools
 _docs_path = files(__package__) / "docs"
@@ -67,5 +67,6 @@ __all__ = [
     "MINUTE",
     "HOUR",
     "DAY",
+    "at_tz",
     "docs",
 ]

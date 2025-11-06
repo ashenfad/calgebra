@@ -14,8 +14,7 @@ pip install calgebra[google-calendar]
 ## Quick Start
 
 ```python
-from datetime import datetime, timezone
-from calgebra import day_of_week, time_of_day, hours, HOUR
+from calgebra import day_of_week, time_of_day, hours, at_tz, HOUR
 
 # Compose time windows from primitives
 weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
@@ -33,13 +32,12 @@ free = business_hours - busy
 # Filter: only slots >= 2 hours
 long_slots = free & (hours >= 2)
 
-# Fetch results with slice notation (supports int or timezone-aware datetime)
-start = datetime(2025, 1, 1, tzinfo=timezone.utc)
-end = datetime(2025, 1, 31, tzinfo=timezone.utc)
-meeting_options = list(long_slots[start:end])
+# Fetch results with ergonomic date syntax
+at = at_tz("US/Pacific")
+meeting_options = list(long_slots[at("2025-01-01"):at("2025-01-31")])
 ```
 
-Intervals in `calgebra` are inclusive of both `start` and `end`—durations therefore reflect every second covered by an interval. Timeline slices accept integer seconds (Unix timestamps) or timezone-aware datetime objects.
+Intervals in `calgebra` are inclusive of both `start` and `end`—durations therefore reflect every second covered by an interval. Timeline slices accept date strings via `at_tz()`, timezone-aware datetime objects, or integer timestamps.
 
 **Important:** Intervals are automatically clipped to your query bounds. When you slice `timeline[start:end]`, any intervals extending beyond those bounds are trimmed to fit. This ensures aggregations like `total_duration()` and set operations work correctly within your query window. When you subclass `Interval`, define your subclass as a dataclass (ideally `frozen=True`) so the algebra can clone and clamp events internally.
 

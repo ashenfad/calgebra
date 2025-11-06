@@ -40,22 +40,33 @@ Timelines are **composable** - you can combine them using operators to create co
 
 > **Note:** Implementations should yield events sorted by `(start, end)` so that set operations can merge them efficiently.
 
-### Slicing with Datetime and Date
+### Slicing Timelines
 
-Timelines accept three types of slice bounds:
-
-1. **Integer seconds** (Unix timestamps): `timeline[1735689600:1767225600]`
-2. **Timezone-aware datetime objects**: `timeline[datetime(2025, 1, 1, tzinfo=timezone.utc):...]`
-3. **Date objects**: `timeline[date(2025, 1, 1):date(2025, 12, 31)]`
+The most ergonomic way to slice timelines is using `at_tz()` with date strings:
 
 ```python
-from datetime import date, datetime, timezone
+from calgebra import at_tz
+
+# Create a timezone-aware datetime factory
+at = at_tz("US/Pacific")
+
+# Query with simple date strings
+events = timeline[at("2025-01-01"):at("2025-12-31")]
+
+# Also works with datetime strings
+events = timeline[at("2025-01-01T09:00:00"):at("2025-01-01T17:00:00")]
+
+# Or with components
+events = timeline[at(2025, 1, 1):at(2025, 12, 31)]
+```
+
+**Alternative methods** (more verbose but sometimes needed):
+
+```python
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-# Integer timestamps (Unix seconds)
-events = timeline[1735689600:1767225600]
-
-# Timezone-aware datetimes (any timezone)
+# Explicit timezone-aware datetime objects
 utc_events = timeline[
     datetime(2025, 1, 1, tzinfo=timezone.utc):
     datetime(2025, 12, 31, tzinfo=timezone.utc)
@@ -66,24 +77,48 @@ pacific_events = timeline[
     datetime(2025, 12, 31, tzinfo=ZoneInfo("US/Pacific"))
 ]
 
-# Date objects (converted to full-day boundaries in UTC)
-date_events = timeline[date(2025, 1, 1):date(2025, 12, 31)]
-
-# Mix and match
-mixed = timeline[datetime(2025, 1, 1, tzinfo=timezone.utc):1767225600]
+# Integer timestamps (Unix seconds) for low-level use
+events = timeline[1735689600:1767225600]
 ```
 
-**Important**: Datetime objects **must be timezone-aware**. Naive datetimes (without timezone info) will raise an error:
+**Important**: All datetime objects **must be timezone-aware**. Naive datetimes (without timezone info) will raise an error:
 
 ```python
 # ❌ This will raise TypeError
 timeline[datetime(2025, 1, 1):datetime(2025, 12, 31)]
 
-# ✅ Always add timezone info
-timeline[datetime(2025, 1, 1, tzinfo=timezone.utc):datetime(2025, 12, 31, tzinfo=timezone.utc)]
+# ✅ Use at_tz() or add timezone info explicitly
+at = at_tz("UTC")
+timeline[at("2025-01-01"):at("2025-12-31")]
 ```
 
-Date objects are converted to full-day boundaries (00:00:00 to 23:59:59) in UTC.
+### More `at_tz()` Examples
+
+The `at_tz()` helper accepts multiple input formats:
+
+```python
+from calgebra import at_tz
+
+at = at_tz("US/Pacific")
+
+# Date strings → midnight in timezone
+at("2024-01-01")  # datetime(2024, 1, 1, 0, 0, tzinfo=ZoneInfo('US/Pacific'))
+
+# Datetime strings → specific time
+at("2024-01-01T15:30:00")  # 3:30 PM Pacific
+at("2024-01-01T15:30:45")  # With seconds
+
+# Components → build datetime
+at(2024, 1, 1)              # Midnight
+at(2024, 1, 1, 15, 30)      # 3:30 PM
+at(2024, 1, 1, 15, 30, 45)  # With seconds
+
+# Mix timezones if needed
+eastern = at_tz("US/Eastern")
+timeline[at("2024-01-01"):eastern("2024-12-31")]
+```
+
+This pattern is especially useful for interactive queries and scripts where you're working in a consistent timezone.
 
 ### Automatic Clipping
 
