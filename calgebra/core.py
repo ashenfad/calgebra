@@ -60,7 +60,7 @@ class Timeline(ABC, Generic[IvlOut]):
         if isinstance(bound, datetime):
             if bound.tzinfo is None:
                 raise TypeError(
-                    f"Timeline slice {edge} bound must be a timezone-aware datetime.\n"
+                    f"Timeline slice {edge} must be a timezone-aware datetime.\n"
                     f"Got naive datetime: {bound!r}\n"
                     f"Hint: Add timezone info:\n"
                     f"  dt = datetime(..., tzinfo=timezone.utc)\n"
@@ -69,16 +69,12 @@ class Timeline(ABC, Generic[IvlOut]):
                 )
             return int(bound.timestamp())
         raise TypeError(
-            f"Timeline slice {edge} bound must be int, timezone-aware datetime, or None.\n"
+            f"Timeline slice {edge} must be int, timezone-aware datetime, or None.\n"
             f"Got {type(bound).__name__!r}: {bound!r}\n"
             f"Examples:\n"
             f"  timeline[start_ts:end_ts]  # int (Unix seconds)\n"
             f"  timeline[datetime(2025,1,1,tzinfo=timezone.utc):]  "
             f"# timezone-aware datetime\n"
-            f"Note: date objects are no longer supported. Use timezone-aware datetime instead:\n"
-            f"  from datetime import datetime, timezone\n"
-            f"  from zoneinfo import ZoneInfo\n"
-            f"  timeline[datetime(2025,1,1,tzinfo=ZoneInfo('US/Pacific')):...]"
         )
 
     @overload
