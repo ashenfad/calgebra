@@ -15,12 +15,14 @@ class _StubEvent:
         start: datetime | date,
         end: datetime | date,
         description: str | None = None,
+        timezone: str | None = None,
     ) -> None:
         self.id = id
         self.summary = summary
         self.start = start
         self.end = end
         self.description = description
+        self.timezone = timezone
 
 
 class _StubGoogleCalendar:
@@ -34,10 +36,10 @@ class _StubGoogleCalendar:
 
 
 def _build_calendar(
-    events: list[_StubEvent], *, zone: str
+    events: list[_StubEvent]
 ) -> tuple[Calendar, _StubGoogleCalendar]:
     client = _StubGoogleCalendar(events)
-    calendar = Calendar("primary", client=client, timezone_name=zone)
+    calendar = Calendar("primary", client=client)
     return calendar, client
 
 
@@ -47,7 +49,7 @@ def test_fetch_converts_exact_second_end_to_inclusive_previous_second() -> None:
     end = datetime(2025, 1, 1, 10, 30, 0, tzinfo=zone)
 
     event = _StubEvent(id="evt-1", summary="Meeting", start=start, end=end)
-    calendar, client = _build_calendar([event], zone="UTC")
+    calendar, client = _build_calendar([event])
 
     start_ts = int(start.timestamp())
     end_ts = int(end.timestamp())
@@ -60,9 +62,10 @@ def test_fetch_converts_exact_second_end_to_inclusive_previous_second() -> None:
     assert fetched.end == end_ts - 1
     assert fetched.end - fetched.start + 1 == 30 * 60
 
+    # Verify API call parameters (now in UTC)
     kwargs = client.calls[0]
-    assert kwargs["time_min"] == start
-    assert kwargs["time_max"] == end + timedelta(seconds=1)
+    assert kwargs["time_min"] == start.astimezone(ZoneInfo("UTC"))
+    assert kwargs["time_max"] == end.astimezone(ZoneInfo("UTC")) + timedelta(seconds=1)
 
 
 def test_fetch_keeps_fractional_second_end_within_elapsed_second() -> None:
@@ -71,7 +74,7 @@ def test_fetch_keeps_fractional_second_end_within_elapsed_second() -> None:
     end = datetime(2025, 1, 1, 10, 30, 0, 500_000, tzinfo=zone)
 
     event = _StubEvent(id="evt-2", summary="Partial", start=start, end=end)
-    calendar, _ = _build_calendar([event], zone="UTC")
+    calendar, _ = _build_calendar([event])
 
     start_ts = int(start.timestamp())
     end_ts = int(end.timestamp())
@@ -88,8 +91,15 @@ def test_fetch_supports_all_day_events_from_dates() -> None:
     start_date = date(2025, 1, 1)
     end_date = date(2025, 1, 2)
 
-    event = _StubEvent(id="evt-3", summary="All Day", start=start_date, end=end_date)
-    calendar, _ = _build_calendar([event], zone=zone_name)
+    # Event has its own timezone specified
+    event = _StubEvent(
+        id="evt-3", 
+        summary="All Day", 
+        start=start_date, 
+        end=end_date,
+        timezone=zone_name
+    )
+    calendar, _ = _build_calendar([event])
 
     expected_start_ts = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=zone).timestamp())
     expected_end_ts = int(datetime(2025, 1, 1, 23, 59, 59, tzinfo=zone).timestamp())

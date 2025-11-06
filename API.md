@@ -32,10 +32,9 @@ events = timeline(
 
 ### `Timeline[IvlOut]`
 - `fetch(start, end)` → iterable of intervals within bounds (inclusive integer seconds)
-- `__getitem__(slice)` → shorthand for `fetch`, accepts int, datetime, or date slice bounds
+- `__getitem__(slice)` → shorthand for `fetch`, accepts int or timezone-aware datetime slice bounds
   - Integer seconds (Unix timestamps): `timeline[1735689600:1767225600]`
   - Timezone-aware datetime: `timeline[datetime(2025, 1, 1, tzinfo=timezone.utc):...]`
-  - Date objects: `timeline[date(2025, 1, 1):date(2025, 12, 31)]`
   - Naive datetimes are rejected with TypeError
   - **Automatic clipping**: Intervals are automatically clipped to query bounds. Any interval extending beyond `[start:end]` will be trimmed to fit. This ensures accurate aggregations and consistent set operations.
 - Set-like operators:
