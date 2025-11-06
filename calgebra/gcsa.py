@@ -73,19 +73,20 @@ def _to_timestamp(
 ) -> int:
     """Convert a datetime or date to a Unix timestamp.
 
-    For end times, ensures inclusive semantics (subtracts 1 second from exclusive boundaries).
+    For end times, ensures inclusive semantics.
     """
     normalized = _normalize_datetime(dt, edge, zone)
 
     if edge == "start":
         return int(normalized.replace(microsecond=0).timestamp())
 
-    # For end times: Google Calendar uses exclusive end times, but calgebra uses inclusive
+    # For end times: Google Calendar uses exclusive end times, but calgebra uses
+    # inclusive
     # So we subtract 1 second to make the end inclusive
     if not isinstance(dt, datetime):
-        # Date object: already at end of day (23:59:59), but normalize returns start of next day
+        # Date object: already at end of day, but normalize returns start of next day
         start_of_day = _normalize_datetime(dt, "start", zone)
-        inclusive = start_of_day + timedelta(days=1) - timedelta(seconds=1)
+        inclusive = start_of_day + timedelta(days=1, seconds=-1)
         return int(inclusive.replace(microsecond=0).timestamp())
 
     # Datetime object: subtract 1 second if on exact second boundary

@@ -8,6 +8,8 @@ from datetime import datetime, time
 from typing import Callable, overload
 from zoneinfo import ZoneInfo
 
+from dateutil.parser import isoparse
+
 # Time unit constants (all values in seconds)
 SECOND = 1
 MINUTE = 60
@@ -78,7 +80,7 @@ def at_tz(tz: str) -> Callable[..., datetime]:
         """Create a timezone-aware datetime in the factory's timezone.
 
         Accepts either:
-        - A date/datetime string in ISO 8601 format: "2024-01-01" or "2024-01-01T15:30:00"
+        - A date/datetime string in ISO 8601: "2024-01-01" or "2024-01-01T15:30:00"
         - Datetime components: (year, month, day, hour=0, minute=0, second=0)
 
         Returns:
@@ -92,13 +94,11 @@ def at_tz(tz: str) -> Callable[..., datetime]:
         if len(args) == 1 and isinstance(args[0], str):
             dt_str = args[0]
             try:
-                from dateutil.parser import isoparse
-
                 parsed = isoparse(dt_str)
             except ValueError as e:
                 raise ValueError(
                     f"Invalid date/datetime string: {dt_str!r}\n"
-                    f"Expected ISO 8601 format like 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS'\n"
+                    f"Expected ISO 8601 like 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS'\n"
                     f"Error: {e}"
                 ) from e
 
@@ -106,9 +106,9 @@ def at_tz(tz: str) -> Callable[..., datetime]:
             if isinstance(parsed, datetime) and parsed.tzinfo is not None:
                 raise ValueError(
                     f"Date/datetime string already has timezone: {dt_str!r}\n"
-                    f"at_tz() is for creating timezone-aware datetimes, not converting them.\n"
+                    f"at_tz() creates timezone-aware datetimes, not conversion.\n"
                     f"Either:\n"
-                    f"  - Remove timezone from string: '{dt_str.split('+')[0].split('Z')[0]}'\n"
+                    f"  - Remove tz from string\n"
                     f"  - Use datetime.fromisoformat() directly for conversion"
                 )
 
@@ -131,8 +131,8 @@ def at_tz(tz: str) -> Callable[..., datetime]:
 
         raise TypeError(
             f"at() accepts either:\n"
-            f"  - A date/datetime string: at('2024-01-01') or at('2024-01-01T15:30:00')\n"
-            f"  - Datetime components: at(2024, 1, 1) or at(2024, 1, 1, 15, 30)\n"
+            f"  - Date/datetime string: at('2024-01-01'), at('2024-01-01T15:30:00')\n"
+            f"  - Datetime components: at(2024, 1, 1), at(2024, 1, 1, 15, 30)\n"
             f"Got: {args}"
         )
 
