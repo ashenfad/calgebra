@@ -3,7 +3,7 @@ import heapq
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import replace
-from datetime import date, datetime, time, timezone
+from datetime import datetime
 from functools import reduce
 from typing import Any, Generic, Literal, cast, overload
 
@@ -48,7 +48,6 @@ class Timeline(ABC, Generic[IvlOut]):
         Accepts:
         - int: Passed through as-is (Unix timestamp)
         - datetime: Must be timezone-aware, converted to timestamp
-        - date: Converted to start/end of day in UTC
         - None: Unbounded (passed through)
 
         Raises:
@@ -64,24 +63,22 @@ class Timeline(ABC, Generic[IvlOut]):
                     f"Timeline slice {edge} bound must be a timezone-aware datetime.\n"
                     f"Got naive datetime: {bound!r}\n"
                     f"Hint: Add timezone info:\n"
-                    f"  dt = datetime(..., tzinfo=timezone.utc)"
+                    f"  dt = datetime(..., tzinfo=timezone.utc)\n"
+                    f"  from zoneinfo import ZoneInfo\n"
+                    f"  dt = datetime(..., tzinfo=ZoneInfo('US/Pacific'))"
                 )
             return int(bound.timestamp())
-        if isinstance(bound, date):
-            # Convert date to datetime at start/end of day in UTC
-            if edge == "start":
-                dt = datetime.combine(bound, time.min, tzinfo=timezone.utc)
-            else:  # edge == "end"
-                dt = datetime.combine(bound, time.max, tzinfo=timezone.utc)
-            return int(dt.timestamp())
         raise TypeError(
-            f"Timeline slice {edge} bound must be int, datetime, date, or None.\n"
+            f"Timeline slice {edge} bound must be int, timezone-aware datetime, or None.\n"
             f"Got {type(bound).__name__!r}: {bound!r}\n"
             f"Examples:\n"
             f"  timeline[start_ts:end_ts]  # int (Unix seconds)\n"
             f"  timeline[datetime(2025,1,1,tzinfo=timezone.utc):]  "
             f"# timezone-aware datetime\n"
-            f"  timeline[date(2025,1,1):date(2025,12,31)]  # date objects"
+            f"Note: date objects are no longer supported. Use timezone-aware datetime instead:\n"
+            f"  from datetime import datetime, timezone\n"
+            f"  from zoneinfo import ZoneInfo\n"
+            f"  timeline[datetime(2025,1,1,tzinfo=ZoneInfo('US/Pacific')):...]"
         )
 
     @overload

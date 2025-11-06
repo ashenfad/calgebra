@@ -578,20 +578,18 @@ def test_timeline_accepts_timezone_aware_datetime_slicing() -> None:
     assert results[1].end == 1738367999
 
 
-def test_timeline_accepts_date_slicing() -> None:
-    """Test that timelines accept date objects in slices."""
-    # Create timeline spanning January 2025
+def test_timeline_rejects_date_objects() -> None:
+    """Test that timelines reject date objects (require timezone-aware datetime)."""
     timeline = DummyTimeline(
         Interval(start=1735689600, end=1735776000),  # Jan 1-2, 2025
-        Interval(start=1738281600, end=1738367999),  # Jan 30-31, 2025
     )
 
-    # Slice with date objects
+    # Date objects are no longer supported
     start_date = date(2025, 1, 1)
     end_date = date(2025, 1, 31)
 
-    results = list(timeline[start_date:end_date])
-    assert len(results) == 2
+    with pytest.raises(TypeError, match="timezone-aware datetime"):
+        list(timeline[start_date:end_date])
 
 
 def test_timeline_rejects_naive_datetime() -> None:
@@ -641,8 +639,8 @@ def test_composed_timeline_accepts_datetime_slicing() -> None:
     assert len(intersection_results) > 0
 
 
-def test_date_slicing_uses_full_day_boundaries() -> None:
-    """Test that date slicing includes the full day (00:00:00 to 23:59:59 UTC)."""
+def test_datetime_slicing_uses_full_day_boundaries() -> None:
+    """Test that datetime slicing with day boundaries works correctly."""
     # Create interval that starts at midnight and ends at 23:59:59
     # Jan 1, 2025 00:00:00 UTC = 1735689600
     # Jan 1, 2025 23:59:59 UTC = 1735775999
@@ -650,8 +648,10 @@ def test_date_slicing_uses_full_day_boundaries() -> None:
         Interval(start=1735689600, end=1735775999),
     )
 
-    # Slice with date should include the full day
-    results = list(timeline[date(2025, 1, 1) : date(2025, 1, 1)])
+    # Slice with datetime at day boundaries should include the full day
+    start_dt = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    end_dt = datetime(2025, 1, 1, 23, 59, 59, tzinfo=timezone.utc)
+    results = list(timeline[start_dt:end_dt])
     assert len(results) == 1
     assert results[0].start == 1735689600
     assert results[0].end == 1735775999

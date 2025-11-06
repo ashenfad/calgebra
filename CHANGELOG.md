@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-11-06
+
+### Changed
+- **Removed `date` object support in Timeline slicing**: Timeline slices now only accept `int` (Unix timestamps) or timezone-aware `datetime` objects.
+- **Removed `timezone_name` parameter from `Calendar`**: The Calendar class no longer accepts a `timezone_name` parameter.
+
 ## [0.2.3] - 2025-10-30
 
 ### Added
@@ -62,4 +68,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.2.1]: https://github.com/ashenfad/calgebra/releases/tag/v0.2.1
 [0.2.2]: https://github.com/ashenfad/calgebra/releases/tag/v0.2.2
 [0.2.3]: https://github.com/ashenfad/calgebra/releases/tag/v0.2.3
+[0.3.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.3.0
 
