@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.0] - 2025-11-06
 
+### Added
+- **`at_tz()` helper function**: Ergonomic timezone-aware datetime factory for timeline slicing
+  - Create datetime factories: `at = at_tz("US/Pacific")`
+  - Parse date strings: `at("2024-01-01")` → midnight in timezone
+  - Use with slicing: `timeline[at("2024-01-01"):at("2024-12-31")]`
+
 ### Changed
 - **Removed `date` object support in Timeline slicing**: Timeline slices now only accept `int` (Unix timestamps) or timezone-aware `datetime` objects.
 - **Removed `timezone_name` parameter from `Calendar`**: The Calendar class no longer accepts a `timezone_name` parameter.
