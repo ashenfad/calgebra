@@ -11,16 +11,11 @@ from calgebra.core import Timeline
 from calgebra.interval import Interval
 
 
-@dataclass(frozen=True)
-class CalendarItem:
-    id: str
-    summary: str
-
-
 @dataclass(frozen=True, kw_only=True)
 class Event(Interval):
     id: str
     calendar_id: str
+    calendar_summary: str
     summary: str
     description: str | None
 
@@ -35,15 +30,6 @@ class Event(Interval):
             return f"Event('{self.summary}', {start_str}→{end_str}, {duration}s)"
         else:
             return f"Event('{self.summary}', {start_str}→{end_str}, unbounded)"
-
-
-def list_calendars() -> list[CalendarItem]:
-    """Return calendars accessible to the locally authenticated user."""
-    return [
-        CalendarItem(e.id, e.summary)
-        for e in GoogleCalendar().get_calendar_list()
-        if e.id is not None and e.summary is not None
-    ]
 
 
 def _normalize_datetime(
@@ -111,17 +97,20 @@ class Calendar(Timeline[Event]):
 
     def __init__(
         self,
-        calendar: CalendarItem | str,
+        calendar_id: str,
+        calendar_summary: str,
         *,
         client: GoogleCalendar | None = None,
     ) -> None:
         """Initialize a Calendar timeline.
 
         Args:
-            calendar: Calendar ID string or CalendarItem object
+            calendar_id: Calendar ID string
+            calendar_summary: Calendar summary string
             client: Optional GoogleCalendar client instance (for testing/reuse)
         """
-        self.calendar_id: str = calendar if isinstance(calendar, str) else calendar.id
+        self.calendar_id: str = calendar_id
+        self.calendar_summary: str = calendar_summary
         self.calendar: GoogleCalendar = (
             client if client is not None else GoogleCalendar(self.calendar_id)
         )
@@ -139,6 +128,7 @@ class Calendar(Timeline[Event]):
                 time_max=end_dt,
                 single_events=True,
                 order_by="startTime",
+                calendar_id=self.calendar_id,
             )
         )
 
@@ -152,8 +142,19 @@ class Calendar(Timeline[Event]):
             yield Event(
                 id=e.id,
                 calendar_id=self.calendar_id,
+                calendar_summary=self.calendar_summary,
                 summary=e.summary,
                 description=e.description,
                 start=_to_timestamp(e.start, "start", event_zone),
                 end=_to_timestamp(e.end, "end", event_zone),
             )
+
+
+def calendars() -> list[Calendar]:
+    """Return calendars accessible to the locally authenticated user."""
+    client = GoogleCalendar()
+    return [
+        Calendar(e.id, e.summary, client=client)
+        for e in client.get_calendar_list()
+        if e.id is not None and e.summary is not None
+    ]

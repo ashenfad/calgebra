@@ -36,10 +36,13 @@ class _StubGoogleCalendar:
 
 
 def _build_calendar(
-    events: list[_StubEvent]
+    events: list[_StubEvent],
+    *,
+    calendar_id: str = "primary",
+    calendar_summary: str = "Primary",
 ) -> tuple[Calendar, _StubGoogleCalendar]:
     client = _StubGoogleCalendar(events)
-    calendar = Calendar("primary", client=client)
+    calendar = Calendar(calendar_id, calendar_summary, client=client)
     return calendar, client
 
 
@@ -61,11 +64,14 @@ def test_fetch_converts_exact_second_end_to_inclusive_previous_second() -> None:
     assert fetched.start == start_ts
     assert fetched.end == end_ts - 1
     assert fetched.end - fetched.start + 1 == 30 * 60
+    assert fetched.calendar_id == "primary"
+    assert fetched.calendar_summary == "Primary"
 
     # Verify API call parameters (now in UTC)
     kwargs = client.calls[0]
     assert kwargs["time_min"] == start.astimezone(ZoneInfo("UTC"))
     assert kwargs["time_max"] == end.astimezone(ZoneInfo("UTC")) + timedelta(seconds=1)
+    assert kwargs["calendar_id"] == "primary"
 
 
 def test_fetch_keeps_fractional_second_end_within_elapsed_second() -> None:
@@ -82,6 +88,7 @@ def test_fetch_keeps_fractional_second_end_within_elapsed_second() -> None:
     fetched = list(calendar[start_ts:end_ts])[0]
     assert fetched.start == start_ts
     assert fetched.end == end_ts
+    assert fetched.calendar_summary == "Primary"
 
 
 def test_fetch_supports_all_day_events_from_dates() -> None:
@@ -107,3 +114,5 @@ def test_fetch_supports_all_day_events_from_dates() -> None:
     fetched = list(calendar[expected_start_ts:expected_end_ts])[0]
     assert fetched.start == expected_start_ts
     assert fetched.end == expected_end_ts
+    assert fetched.calendar_id == "primary"
+    assert fetched.calendar_summary == "Primary"
