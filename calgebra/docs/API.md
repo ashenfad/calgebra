@@ -312,6 +312,12 @@ daily_incidents = incidents & day_of_week("monday")
 - Recurring patterns: `recurring`, `day_of_week`, `time_of_day`
 - Transforms: `buffer`, `merge_within`
 - Time constants: `SECOND`, `MINUTE`, `HOUR`, `DAY`
+- Utilities: `at_tz`, `docs`
+
+## Google Calendar Integration (`calgebra.gcsa`)
+- `list_calendars()` returns lightweight `CalendarItem` records (`id`, `summary`) for every calendar accessible to the authenticated Google account. Use it to present choices before instantiating a timeline.
+- `Calendar(calendar | CalendarItem, client=None)` is a `Timeline[Event]` backed by `gcsa.GoogleCalendar`. Slice it like any other timeline—bounds are converted to UTC, paging is automatic, and results include metadata for downstream set operations.
+- `Event` extends `Interval` with Google metadata: `id`, `calendar_id` (source calendar), `summary`, and optional `description`. These fields survive unions/intersections, ensuring you can trace provenance after composing multiple calendars.
 
 ## Notes
 - All intervals are inclusive; durations use `end - start + 1`.
