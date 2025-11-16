@@ -20,6 +20,7 @@ class CalendarItem:
 @dataclass(frozen=True, kw_only=True)
 class Event(Interval):
     id: str
+    calendar_id: str
     summary: str
     description: str | None
 
@@ -120,9 +121,9 @@ class Calendar(Timeline[Event]):
             calendar: Calendar ID string or CalendarItem object
             client: Optional GoogleCalendar client instance (for testing/reuse)
         """
-        calendar_id = calendar if isinstance(calendar, str) else calendar.id
+        self.calendar_id: str = calendar if isinstance(calendar, str) else calendar.id
         self.calendar: GoogleCalendar = (
-            client if client is not None else GoogleCalendar(calendar_id)
+            client if client is not None else GoogleCalendar(self.calendar_id)
         )
 
     @override
@@ -150,6 +151,7 @@ class Calendar(Timeline[Event]):
 
             yield Event(
                 id=e.id,
+                calendar_id=self.calendar_id,
                 summary=e.summary,
                 description=e.description,
                 start=_to_timestamp(e.start, "start", event_zone),
