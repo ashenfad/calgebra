@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2025-11-16
+
+### Added
+- `gcsa.Event` instances now include `calendar_summary` metadata alongside `calendar_id`, making it easier to display the original calendar when unions/intersections combine timelines.
+
+### Changed
+- Replaced `list_calendars()` with `calendars()`, which authenticates once and returns ready-to-use `Calendar` timelines (each reuses the shared client but tracks its own IDs/summaries).
+
+## [0.3.1] - 2025-11-16
+
+### Added
+- `gcsa.Event` now carries its originating `calendar_id`, so provenance survives unions/differences without custom bookkeeping.
+
+### Documentation
+- Added an API section describing the gcsa module and its helpers to make the integration easier for agents and scripts to discover.
+
 ## [0.3.0] - 2025-11-06
 
 ### Added
@@ -69,10 +85,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Google Calendar integration via `calgebra.gcsa.Calendar`
 - Comprehensive documentation accessible via `calgebra.docs` dictionary
 
-[0.1.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.1.0
-[0.2.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.2.0
-[0.2.1]: https://github.com/ashenfad/calgebra/releases/tag/v0.2.1
-[0.2.2]: https://github.com/ashenfad/calgebra/releases/tag/v0.2.2
-[0.2.3]: https://github.com/ashenfad/calgebra/releases/tag/v0.2.3
+[0.3.2]: https://github.com/ashenfad/calgebra/releases/tag/v0.3.2
+[0.3.1]: https://github.com/ashenfad/calgebra/releases/tag/v0.3.1
 [0.3.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.3.0
+[0.2.3]: https://github.com/ashenfad/calgebra/releases/tag/v0.2.3
+[0.2.2]: https://github.com/ashenfad/calgebra/releases/tag/v0.2.2
+[0.2.1]: https://github.com/ashenfad/calgebra/releases/tag/v0.2.1
+[0.2.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.2.0
+[0.1.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.1.0
 
