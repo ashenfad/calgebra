@@ -14,7 +14,7 @@ from calgebra import Interval
 meeting = Interval(start=1000, end=2000)
 ```
 
-Intervals are inclusive of both bounds. In the example above, the interval covers the entire range from `1000` through `2000`, which means durations count every second in that span.
+Intervals are inclusive of both bounds. In the example above, the interval covers the entire range from `1000` through `2000`, which means durations count every second in that span. Note that while *intervals* are inclusive, *timeline slicing* uses exclusive end bounds to match Python idioms.
 
 ### Timelines
 
@@ -24,10 +24,10 @@ A `Timeline` is a source of intervals. It's like a lazy stream that can fetch in
 from datetime import datetime, timezone
 from calgebra import Timeline
 
-# Fetch intervals between start and end using integer timestamps
+# Fetch intervals between start (inclusive) and end (exclusive)
 events = timeline.fetch(start=0, end=10000)
 
-# Or use slice notation (more intuitive!)
+# Or use slice notation (more intuitive!) - [0:10000)
 events = timeline[0:10000]
 
 # Timelines also accept datetime and date objects
@@ -42,7 +42,7 @@ Timelines are **composable** - you can combine them using operators to create co
 
 ### Slicing Timelines
 
-The most ergonomic way to slice timelines is using `at_tz()` with date strings:
+The most ergonomic way to slice timelines is using `at_tz()` with date strings. Remember that slicing uses **exclusive end bounds** (`[start:end)`), consistent with Python lists.
 
 ```python
 from calgebra import at_tz
@@ -130,9 +130,9 @@ from calgebra import timeline, Interval
 # Create a timeline with an interval that extends past our query
 t = timeline([Interval(start=100, end=500)])
 
-# Query for [0:300] - the interval will be clipped
+# Query for [0:300) - the interval will be clipped
 result = list(t[0:300])
-# Result: [Interval(start=100, end=300)]  # Clipped to query end
+# Result: [Interval(start=100, end=299)]  # Clipped to query end (exclusive)
 ```
 
 This automatic clipping ensures:

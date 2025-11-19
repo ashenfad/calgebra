@@ -31,7 +31,13 @@ class Timeline(ABC, Generic[IvlOut]):
 
     def __getitem__(self, item: slice) -> Iterable[IvlOut]:
         start = self._coerce_bound(item.start, "start")
-        end = self._coerce_bound(item.stop, "end")
+        end_bound = self._coerce_bound(item.stop, "end")
+
+        # Convert exclusive slice bound to inclusive interval bound
+        # Python slicing [start:end] excludes end
+        # Our intervals are inclusive [start, end]
+        # So we subtract 1 from the end bound
+        end = end_bound - 1 if end_bound is not None else None
 
         # Automatically clip intervals to query bounds via intersection with solid
         # timeline

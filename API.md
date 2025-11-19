@@ -31,12 +31,12 @@ events = timeline(
 ```
 
 ### `Timeline[IvlOut]`
-- `fetch(start, end)` → iterable of intervals within bounds (inclusive integer seconds)
+- `fetch(start, end)` → iterable of intervals within bounds (inclusive start, exclusive end)
 - `__getitem__(slice)` → shorthand for `fetch`, accepts int or timezone-aware datetime slice bounds
-  - Integer seconds (Unix timestamps): `timeline[1735689600:1767225600]`
+  - Integer seconds (Unix timestamps): `timeline[1735689600:1767225600]` (exclusive end)
   - Timezone-aware datetime: `timeline[datetime(2025, 1, 1, tzinfo=timezone.utc):...]`
   - Naive datetimes are rejected with TypeError
-  - **Automatic clipping**: Intervals are automatically clipped to query bounds. Any interval extending beyond `[start:end]` will be trimmed to fit. This ensures accurate aggregations and consistent set operations.
+  - **Automatic clipping**: Intervals are automatically clipped to query bounds. Any interval extending beyond `[start:end)` will be trimmed to fit. This ensures accurate aggregations and consistent set operations.
 - Set-like operators:
   - `timeline | other` → `Union`
   - `timeline & other` → `Intersection` or `Filtered`
@@ -319,7 +319,8 @@ daily_incidents = incidents & day_of_week("monday")
 - `Event` extends `Interval` with Google metadata: `id`, `calendar_id` (source calendar), `calendar_summary`, `summary`, and optional `description`. These fields survive unions/intersections, ensuring you can trace provenance after composing multiple calendars.
 
 ## Notes
-- All intervals are inclusive; durations use `end - start + 1`.
+- All intervals are inclusive `[start, end]`; durations use `end - start + 1`.
+- Timeline slicing uses exclusive end bounds `[start:end)` to match Python idioms.
 - Intervals support unbounded values: `start` or `end` can be `None` to represent -∞ or +∞.
 - Complement and flatten support unbounded queries (start/end can be `None`).
 - Aggregation helpers clamp to query bounds but preserve metadata via `dataclasses.replace`.

@@ -11,8 +11,14 @@ def total_duration(
     start: int,
     end: int,
 ) -> int:
-    """Return the inclusive duration covered by a timeline between two bounds."""
-    if start > end:
+    """Return the inclusive duration covered by a timeline between two bounds.
+
+    Args:
+        timeline: Source timeline
+        start: Start timestamp (inclusive)
+        end: End timestamp (exclusive)
+    """
+    if start >= end:
         return 0
 
     total = 0
@@ -30,8 +36,14 @@ def max_duration(
     start: int,
     end: int,
 ) -> Ivl | None:
-    """Return the longest interval within the slice."""
-    if start > end:
+    """Return the longest interval within the slice.
+
+    Args:
+        timeline: Source timeline
+        start: Start timestamp (inclusive)
+        end: End timestamp (exclusive)
+    """
+    if start >= end:
         return None
 
     longest: Ivl | None = None
@@ -52,8 +64,14 @@ def min_duration(
     start: int,
     end: int,
 ) -> Ivl | None:
-    """Return the shortest interval within the slice."""
-    if start > end:
+    """Return the shortest interval within the slice.
+
+    Args:
+        timeline: Source timeline
+        start: Start timestamp (inclusive)
+        end: End timestamp (exclusive)
+    """
+    if start >= end:
         return None
 
     shortest: Ivl | None = None
@@ -74,8 +92,14 @@ def count_intervals(
     start: int,
     end: int,
 ) -> int:
-    """Count intervals returned by the timeline over the specified bounds."""
-    if start > end:
+    """Count intervals returned by the timeline over the specified bounds.
+
+    Args:
+        timeline: Source timeline
+        start: Start timestamp (inclusive)
+        end: End timestamp (exclusive)
+    """
+    if start >= end:
         return 0
     return sum(1 for _ in timeline[start:end])
 
@@ -85,10 +109,16 @@ def coverage_ratio(
     start: int,
     end: int,
 ) -> float:
-    """Return the fraction of the window covered by events (between 0 and 1)."""
-    if start > end:
+    """Return the fraction of the window covered by events (between 0 and 1).
+
+    Args:
+        timeline: Source timeline
+        start: Start timestamp (inclusive)
+        end: End timestamp (exclusive)
+    """
+    if start >= end:
         return 0.0
-    span = end - start + 1
+    span = end - start
     if span <= 0:
         return 0.0
     return total_duration(timeline, start, end) / span

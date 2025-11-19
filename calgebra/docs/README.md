@@ -37,7 +37,7 @@ at = at_tz("US/Pacific")
 meeting_options = list(long_slots[at("2025-01-01"):at("2025-01-31")])
 ```
 
-Intervals in `calgebra` are inclusive of both `start` and `end`—durations therefore reflect every second covered by an interval. Timeline slices accept date strings via `at_tz()`, timezone-aware datetime objects, or integer timestamps.
+Intervals in `calgebra` are inclusive of both `start` and `end`—durations therefore reflect every second covered by an interval. However, **timeline slicing uses exclusive end bounds** (`[start:end)`) to match standard Python idioms. Timeline slices accept date strings via `at_tz()`, timezone-aware datetime objects, or integer timestamps.
 
 **Important:** Intervals are automatically clipped to your query bounds. When you slice `timeline[start:end]`, any intervals extending beyond those bounds are trimmed to fit. This ensures aggregations like `total_duration()` and set operations work correctly within your query window. When you subclass `Interval`, define your subclass as a dataclass (ideally `frozen=True`) so the algebra can clone and clamp events internally.
 
