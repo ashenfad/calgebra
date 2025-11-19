@@ -115,6 +115,9 @@ class Calendar(Timeline[Event]):
             client if client is not None else GoogleCalendar(self.calendar_id)
         )
 
+    def __str__(self) -> str:
+        return f"Calendar(id='{self.calendar_id}', summary='{self.calendar_summary}')"
+
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[Event]:
         start_dt = _timestamp_to_datetime(start) if start is not None else None

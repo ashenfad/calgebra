@@ -116,3 +116,8 @@ def test_fetch_supports_all_day_events_from_dates() -> None:
     assert fetched.end == expected_end_ts
     assert fetched.calendar_id == "primary"
     assert fetched.calendar_summary == "Primary"
+
+
+def test_calendar_str_includes_ids_and_summary() -> None:
+    calendar, _ = _build_calendar([], calendar_id="team@company.com", calendar_summary="Team Calendar")
+    assert str(calendar) == "Calendar(id='team@company.com', summary='Team Calendar')"
