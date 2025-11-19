@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.4.0] - 2025-11-19
+
+### Changed
+- **Breaking**: Timeline slicing now uses **exclusive end bounds** (`[start:end)`), aligning with standard Python slicing idioms. Previously, slicing was inclusive of the end bound.
+  - `timeline[start:end]` now returns intervals in the range `[start, end - 1]`.
+  - `Timeline.fetch(start, end)` also respects this exclusive end behavior.
+- Updated metric functions (`total_duration`, `max_duration`, `min_duration`, `count_intervals`, `coverage_ratio`) to interpret their `end` parameter as exclusive.
+- Updated `coverage_ratio` calculation to use `end - start` (instead of `end - start + 1`) for the denominator, correctly reflecting the span of an exclusive slice.
+
+### Documentation
+- Updated `README.md`, `TUTORIAL.md`, and `API.md` to explicitly state that timeline slicing uses exclusive end bounds while internal `Interval` objects remain inclusive.
+
 ## [0.3.2] - 2025-11-16
 
 ### Added
@@ -85,6 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Google Calendar integration via `calgebra.gcsa.Calendar`
 - Comprehensive documentation accessible via `calgebra.docs` dictionary
 
+[0.4.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.4.0
 [0.3.2]: https://github.com/ashenfad/calgebra/releases/tag/v0.3.2
 [0.3.1]: https://github.com/ashenfad/calgebra/releases/tag/v0.3.1
 [0.3.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.3.0
