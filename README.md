@@ -34,7 +34,7 @@ long_slots = free & (hours >= 2)
 
 # Fetch results with ergonomic date syntax
 at = at_tz("US/Pacific")
-meeting_options = list(long_slots[at("2025-01-01"):at("2025-01-31")])
+meeting_options = list(long_slots[at("2025-01-01"):at("2025-02-01")])
 ```
 
 Intervals in `calgebra` are inclusive of both `start` and `end`—durations therefore reflect every second covered by an interval. However, **timeline slicing uses exclusive end bounds** (`[start:end)`) to match standard Python idioms. Timeline slices accept date strings via `at_tz()`, timezone-aware datetime objects, or integer timestamps.
