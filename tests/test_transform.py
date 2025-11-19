@@ -158,7 +158,7 @@ def test_buffer_respects_query_bounds() -> None:
     # Second interval starts at 250 (within query), clipped to end at 350
     assert result == [
         Interval(start=200, end=250),  # Clipped to query start
-        Interval(start=250, end=350),  # Clipped to query end
+        Interval(start=250, end=349),  # Clipped to query end
     ]
 
 

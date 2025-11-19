@@ -12,9 +12,9 @@ def test_day_of_week_single_day():
     """Test generating intervals for a single day of the week."""
     # Week of Jan 6-12, 2025 (Mon-Sun in UTC)
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    sunday = int(datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+    next_monday = int(datetime(2025, 1, 13, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
-    mondays = list(day_of_week("monday", tz="UTC")[monday:sunday])
+    mondays = list(day_of_week("monday", tz="UTC")[monday:next_monday])
 
     # Should get 1 day (just Monday)
     assert len(mondays) == 1
@@ -30,13 +30,13 @@ def test_day_of_week_multiple_days():
     Adjacent days are merged by flatten, so Mon-Fri becomes one interval.
     """
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    sunday = int(datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+    next_monday = int(datetime(2025, 1, 13, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
     # Weekdays (Mon-Fri)
     weekdays = day_of_week(
         ["monday", "tuesday", "wednesday", "thursday", "friday"], tz="UTC"
     )
-    days = list(weekdays[monday:sunday])
+    days = list(weekdays[monday:next_monday])
 
     # Adjacent days are merged into one continuous interval
     assert len(days) == 1
@@ -51,11 +51,11 @@ def test_day_of_week_multiple_days():
 def test_day_of_week_case_insensitive():
     """Test that day names are case-insensitive."""
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    tuesday = int(datetime(2025, 1, 7, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+    next_day = int(datetime(2025, 1, 7, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
-    mondays_lower = list(day_of_week("monday")[monday:tuesday])
-    mondays_upper = list(day_of_week("MONDAY")[monday:tuesday])
-    mondays_mixed = list(day_of_week("Monday")[monday:tuesday])
+    mondays_lower = list(day_of_week("monday")[monday:next_day])
+    mondays_upper = list(day_of_week("MONDAY")[monday:next_day])
+    mondays_mixed = list(day_of_week("Monday")[monday:next_day])
 
     assert mondays_lower == mondays_upper == mondays_mixed
 
@@ -99,25 +99,25 @@ def test_time_of_day_full_day():
     Adjacent full days are merged by flatten into one continuous interval.
     """
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    tuesday = int(datetime(2025, 1, 7, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+    next_day = int(datetime(2025, 1, 8, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
     # Default is all 24 hours
-    all_day = list(time_of_day(tz="UTC")[monday:tuesday])
+    all_day = list(time_of_day(tz="UTC")[monday:next_day])
 
     # Adjacent full days are merged into one interval
     assert len(all_day) == 1
     assert all_day[0].start == monday
-    assert all_day[0].end == tuesday
+    assert all_day[0].end == next_day - 1
 
 
 def test_time_of_day_specific_hours():
     """Test time_of_day with specific hour range."""
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    monday_end = int(datetime(2025, 1, 6, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+    next_day = int(datetime(2025, 1, 7, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
     # 9am-5pm (8 hours)
     work_hours = list(
-        time_of_day(start=9 * HOUR, duration=8 * HOUR, tz="UTC")[monday:monday_end]
+        time_of_day(start=9 * HOUR, duration=8 * HOUR, tz="UTC")[monday:next_day]
     )
 
     assert len(work_hours) == 1
@@ -133,12 +133,12 @@ def test_time_of_day_specific_hours():
 def test_time_of_day_fractional_hours():
     """Test time_of_day with minute precision."""
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    monday_end = int(datetime(2025, 1, 6, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+    next_day = int(datetime(2025, 1, 7, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
     # 9:30am-10am (30 minutes)
     standup = list(
         time_of_day(start=9 * HOUR + 30 * MINUTE, duration=30 * MINUTE, tz="UTC")[
-            monday:monday_end
+            monday:next_day
         ]
     )
 
@@ -181,7 +181,7 @@ def test_composition_business_hours():
     """Test composing day_of_week and time_of_day for business hours."""
 
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    sunday = int(datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+    next_monday = int(datetime(2025, 1, 13, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
     # Business hours = weekdays & 9-5
     weekdays = day_of_week(
@@ -192,7 +192,7 @@ def test_composition_business_hours():
     # Intersection of mask timelines auto-flattens
     business_hours = weekdays & work_hours
 
-    hours = list(business_hours[monday:sunday])
+    hours = list(business_hours[monday:next_monday])
 
     # Should get 5 days (Mon-Fri), each with 9-5 window
     assert len(hours) == 5
@@ -249,7 +249,7 @@ def test_composition_with_calendar():
 
     # Monday with a 10am-11am meeting
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    monday_end = int(datetime(2025, 1, 6, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+    next_day = int(datetime(2025, 1, 7, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
     meeting = Interval(
         start=int(datetime(2025, 1, 6, 10, 0, 0, tzinfo=timezone.utc).timestamp()),
@@ -265,7 +265,7 @@ def test_composition_with_calendar():
     business_hours = weekdays & work_hours
 
     free = business_hours - busy
-    free_times = list(free[monday:monday_end])
+    free_times = list(free[monday:next_day])
 
     # Should have free time before (9-10) and after (11-17) the meeting
     assert len(free_times) == 2
@@ -277,10 +277,10 @@ def test_weekend_pattern():
     Adjacent days (Saturday and Sunday) are merged into one continuous interval.
     """
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    sunday = int(datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+    next_monday = int(datetime(2025, 1, 13, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
     weekends = day_of_week(["saturday", "sunday"], tz="UTC")
-    days = list(weekends[monday:sunday])
+    days = list(weekends[monday:next_monday])
 
     # Adjacent days are merged into one interval
     assert len(days) == 1

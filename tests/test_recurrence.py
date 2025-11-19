@@ -63,7 +63,7 @@ def test_recurring_biweekly():
     """Test bi-weekly (every other week) pattern."""
     # 4 weeks
     start = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    end = int(datetime(2025, 2, 3, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    end = int(datetime(2025, 2, 4, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
     # Every other Monday
     biweekly = list(
@@ -399,7 +399,7 @@ def test_recurring_duration_exceeds_interval():
 
     # Should span the entire query range
     assert results[0].start == query_start
-    assert results[0].end == query_end
+    assert results[0].end == query_end - 1
 
 
 def test_recurring_weekly_with_multi_day_duration():
@@ -454,7 +454,7 @@ def test_recurring_flatten_merges_overlapping_durations():
 
     # Should cover the entire query range
     assert flattened_results[0].start == query_start
-    assert flattened_results[0].end == query_end
+    assert flattened_results[0].end == query_end - 1
 
 
 def test_recurring_lookback_multiple_previous():
@@ -485,7 +485,7 @@ def test_recurring_lookback_multiple_previous():
 
     # Should cover the entire query range
     assert results[0].start == query_start
-    assert results[0].end == query_end
+    assert results[0].end == query_end - 1
 
 
 def test_recurring_raw_lookback_captures_all_overlaps():

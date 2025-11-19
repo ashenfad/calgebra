@@ -88,14 +88,16 @@ def test_fetch_respects_bounds() -> None:
     ]
 
     # Intervals are clipped to query bounds
+    # Slice [9:21] -> query [9, 20]
     assert list(timeline[9:21]) == [
         Interval(start=10, end=15),
-        Interval(start=20, end=21),  # Clipped to query end
+        Interval(start=20, end=20),  # Clipped to query end (20)
     ]
 
+    # Slice [:15] -> query [..., 14]
     assert list(timeline[:15]) == [
         Interval(start=0, end=5),
-        Interval(start=10, end=15),
+        Interval(start=10, end=14),  # Clipped to query end (14)
     ]
 
     # Intervals are clipped to query bounds
@@ -191,11 +193,12 @@ def test_complement_returns_gaps() -> None:
         Interval(start=15, end=17),
     )
 
+    # Slice [10:20] -> query [10, 19]
     complement = list((~timeline)[10:20])
 
     assert complement == [
         Interval(start=13, end=14),
-        Interval(start=18, end=20),
+        Interval(start=18, end=19),
     ]
 
 
@@ -206,12 +209,13 @@ def test_complement_yields_mask_intervals() -> None:
         LabeledInterval(start=15, end=17, label="focus"),
     )
 
+    # Slice [10:20] -> query [10, 19]
     complement = list((~timeline)[10:20])
 
     # Gaps are mask Intervals (not LabeledIntervals)
     assert complement == [
         Interval(start=13, end=14),
-        Interval(start=18, end=20),
+        Interval(start=18, end=19),
     ]
 
     # Verify they're actually mask Interval objects
@@ -360,7 +364,8 @@ def test_complement_supports_unbounded_queries() -> None:
 def test_complement_handles_empty_source() -> None:
     empty = DummyTimeline()
 
-    assert list((~empty)[10:12]) == [Interval(start=10, end=12)]
+    # Slice [10:12] -> query [10, 11]
+    assert list((~empty)[10:12]) == [Interval(start=10, end=11)]
 
 
 def test_complement_coalesces_adjacent_segments() -> None:
@@ -371,6 +376,7 @@ def test_complement_coalesces_adjacent_segments() -> None:
     )
 
     # first two intervals should coalesce when computing coverage
+    # Slice [0:12] -> query [0, 11]
     assert list((~timeline)[0:12]) == [Interval(start=6, end=9)]
 
 
@@ -484,7 +490,11 @@ def test_total_duration_flattens_union() -> None:
 
     combined = timeline | overlap
 
-    assert total_duration(combined, 0, 15) == 16
+    # total_duration uses slicing internally
+    # total_duration(tl, 0, 15) -> tl[0:15] -> query [0, 14]
+    # Combined covers [0, 15] fully (0-5, 3-12, 10-15)
+    # Query [0, 14] is fully covered -> duration 15
+    assert total_duration(combined, 0, 15) == 15
 
 
 def test_flatten_returns_coalesced_intervals() -> None:
@@ -498,7 +508,8 @@ def test_flatten_returns_coalesced_intervals() -> None:
 
     flattened = flatten(timeline | overlap)
 
-    assert list(flattened[0:15]) == [Interval(start=0, end=15)]
+    # Slice [0:15] -> query [0, 14]
+    assert list(flattened[0:15]) == [Interval(start=0, end=14)]
 
 
 def test_max_duration_reports_longest_run() -> None:
@@ -555,7 +566,16 @@ def test_coverage_ratio_returns_fraction() -> None:
     )
 
     # Covered time = 5 + 1 = 6; window span = 6
-    assert coverage_ratio(timeline, 0, 5) == 1.0
+    # coverage_ratio(tl, 0, 5) -> tl[0:5] -> query [0, 4]
+    # Timeline has [0, 4] (duration 5) and [5, 5] (duration 1)
+    # Query [0, 4] intersects only [0, 4].
+    # Covered duration = 5. Window duration = 5. Ratio = 1.0
+    # Covered time = 5 + 1 = 6; window span = 6
+    # coverage_ratio(tl, 0, 6) -> tl[0:6] -> query [0, 5]
+    # Timeline has [0, 4] (duration 5) and [5, 5] (duration 1)
+    # Query [0, 5] intersects both fully.
+    # Covered duration = 6. Window duration = 6. Ratio = 1.0
+    assert coverage_ratio(timeline, 0, 6) == 1.0
 
 
 def test_timeline_accepts_timezone_aware_datetime_slicing() -> None:
@@ -575,7 +595,12 @@ def test_timeline_accepts_timezone_aware_datetime_slicing() -> None:
     results = list(timeline[start_dt:end_dt])
     assert len(results) == 2
     assert results[0].start == 1735689600
-    assert results[1].end == 1738367999
+    # end_dt is Jan 31 23:59:59. Exclusive slice -> query ends at ...58
+    # But wait, end_dt is usually used as "up to"
+    # If we want to include the full second of 23:59:59, we need to slice up to the NEXT second
+    # But here we passed 23:59:59 as the stop. So it excludes that second.
+    # So the interval [..., ...99] is clipped to [..., ...98]
+    assert results[1].end == 1738367998
 
 
 def test_timeline_rejects_date_objects() -> None:
@@ -648,13 +673,17 @@ def test_datetime_slicing_uses_full_day_boundaries() -> None:
         Interval(start=1735689600, end=1735775999),
     )
 
-    # Slice with datetime at day boundaries should include the full day
+    # Slice with datetime at day boundaries
+    # start: Jan 1 00:00:00
+    # end: Jan 1 23:59:59
+    # Exclusive slice -> query [..., ...58]
+    # So the interval [..., ...99] is clipped to [..., ...98]
     start_dt = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
     end_dt = datetime(2025, 1, 1, 23, 59, 59, tzinfo=timezone.utc)
     results = list(timeline[start_dt:end_dt])
     assert len(results) == 1
     assert results[0].start == 1735689600
-    assert results[0].end == 1735775999
+    assert results[0].end == 1735775998
 
 
 def test_mixed_int_and_datetime_slicing() -> None:
@@ -758,6 +787,7 @@ def test_timeline_helper_composable() -> None:
     assert len(diff_result) > 0
 
     # Complement
+    # Slice [0:20] -> query [0, 19]
     complement_result = list((~tl1)[0:20])
     assert len(complement_result) > 0
 
@@ -771,14 +801,16 @@ def test_timeline_helper_respects_bounds() -> None:
     )
 
     # Intervals are clipped to query bounds
+    # Slice [9:21] -> query [9, 20]
     assert list(tl[9:21]) == [
         Interval(start=10, end=15),
-        Interval(start=20, end=21),  # Clipped to query end
+        Interval(start=20, end=20),  # Clipped to query end (20)
     ]
 
+    # Slice [:15] -> query [..., 14]
     assert list(tl[:15]) == [
         Interval(start=0, end=5),
-        Interval(start=10, end=15),
+        Interval(start=10, end=14),  # Clipped to query end (14)
     ]
 
     # Intervals are clipped to query bounds

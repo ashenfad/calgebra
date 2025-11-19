@@ -70,7 +70,7 @@ def test_fetch_converts_exact_second_end_to_inclusive_previous_second() -> None:
     # Verify API call parameters (now in UTC)
     kwargs = client.calls[0]
     assert kwargs["time_min"] == start.astimezone(ZoneInfo("UTC"))
-    assert kwargs["time_max"] == end.astimezone(ZoneInfo("UTC")) + timedelta(seconds=1)
+    assert kwargs["time_max"] == end.astimezone(ZoneInfo("UTC"))
     assert kwargs["calendar_id"] == "primary"
 
 
@@ -85,7 +85,7 @@ def test_fetch_keeps_fractional_second_end_within_elapsed_second() -> None:
     start_ts = int(start.timestamp())
     end_ts = int(end.timestamp())
 
-    fetched = list(calendar[start_ts:end_ts])[0]
+    fetched = list(calendar[start_ts : end_ts + 1])[0]
     assert fetched.start == start_ts
     assert fetched.end == end_ts
     assert fetched.calendar_summary == "Primary"
@@ -111,7 +111,7 @@ def test_fetch_supports_all_day_events_from_dates() -> None:
     expected_start_ts = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=zone).timestamp())
     expected_end_ts = int(datetime(2025, 1, 1, 23, 59, 59, tzinfo=zone).timestamp())
 
-    fetched = list(calendar[expected_start_ts:expected_end_ts])[0]
+    fetched = list(calendar[expected_start_ts : expected_end_ts + 1])[0]
     assert fetched.start == expected_start_ts
     assert fetched.end == expected_end_ts
     assert fetched.calendar_id == "primary"

@@ -28,7 +28,7 @@ def test_buffer_with_unbounded_future():
 
     assert len(result) == 1
     assert result[0].start == 900  # Start gets buffered
-    assert result[0].end == 2000  # Clipped to query end
+    assert result[0].end == 1999  # Clipped to query end
 
 
 def test_buffer_with_all_time():
@@ -41,7 +41,7 @@ def test_buffer_with_all_time():
 
     assert len(result) == 1
     assert result[0].start == 0  # Clipped to query start
-    assert result[0].end == 2000  # Clipped to query end
+    assert result[0].end == 1999  # Clipped to query end
 
 
 def test_buffer_mixed_bounded_unbounded():
@@ -64,7 +64,7 @@ def test_buffer_mixed_bounded_unbounded():
     assert result[1].end == 3100
     # Third interval: unbounded future, clipped to query end
     assert result[2].start == 4900
-    assert result[2].end == 10000  # Clipped to query end
+    assert result[2].end == 9999  # Clipped to query end
 
 
 def test_merge_within_merges_unbounded_with_bounded():
@@ -98,7 +98,7 @@ def test_merge_within_unbounded_future():
 
     assert len(result) == 1
     assert result[0].start == 1000  # Preserves bounded start
-    assert result[0].end == 3000  # Clipped to query end
+    assert result[0].end == 2999  # Clipped to query end
 
 
 def test_merge_within_preserves_bounded_merging():
@@ -128,7 +128,7 @@ def test_merge_within_absorbs_finite_inside_unbounded_future():
     merged = merge_within(tl, gap=0)
     result = list(merged[0:500])
 
-    assert result == [Interval(start=0, end=500)]  # Clipped to query end
+    assert result == [Interval(start=0, end=499)]  # Clipped to query end
 
 
 def test_buffer_rejects_negative_before():
