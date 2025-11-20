@@ -57,12 +57,12 @@ events = timeline(
 - Functional counterparts to chaining `|` / `&`; require at least one operand and preserve overlaps. `intersection` emits one interval per source for each overlap; use `flatten` if you want single coalesced spans.
 
 ## Interval Helpers (`calgebra.interval`)
-- `Interval(start, end)` dataclass with inclusive bounds.
+- `Interval(start, end)` dataclass with exclusive end bounds `[start, end)`. Duration is `end - start`.
 - Type vars `IvlIn`, `IvlOut` for generic timelines/filters.
 
 ## Properties (`calgebra.properties`)
 - Base `Property` class (`apply(event)`).
-- Duration helpers (inclusive lengths):
+- Duration helpers (exclusive end semantics: `end - start`):
   - `seconds`, `minutes`, `hours`, `days`
 - Boundary helpers:
   - `start`, `end`
@@ -139,7 +139,7 @@ critical_work = timeline & has_all(tags, {"work", "urgent"})
 **Note:** Use `one_of()` for scalar fields and `has_any()`/`has_all()` for collection fields.
 
 ## Metrics (`calgebra.metrics`)
-- `total_duration(timeline, start, end)` → inclusive seconds covered (uses `flatten`)
+- `total_duration(timeline, start, end)` → seconds covered (uses `flatten`, exclusive end)
 - `max_duration(timeline, start, end)` → longest interval clamped to bounds (returns `Interval | None`)
 - `min_duration(timeline, start, end)` → shortest interval clamped to bounds (returns `Interval | None`)
 - `count_intervals(timeline, start, end)` → number of events in slice
@@ -319,8 +319,8 @@ daily_incidents = incidents & day_of_week("monday")
 - `Event` extends `Interval` with Google metadata: `id`, `calendar_id` (source calendar), `calendar_summary`, `summary`, and optional `description`. These fields survive unions/intersections, ensuring you can trace provenance after composing multiple calendars.
 
 ## Notes
-- All intervals are inclusive `[start, end]`; durations use `end - start + 1`.
-- Timeline slicing uses exclusive end bounds `[start:end)` to match Python idioms.
+- All intervals use **exclusive end bounds** `[start, end)`, matching Python slicing idioms. Duration is simply `end - start`.
+- Timeline slicing also uses exclusive end bounds `[start:end)` for consistency.
 - Intervals support unbounded values: `start` or `end` can be `None` to represent -∞ or +∞.
 - Complement and flatten support unbounded queries (start/end can be `None`).
 - Aggregation helpers clamp to query bounds but preserve metadata via `dataclasses.replace`.

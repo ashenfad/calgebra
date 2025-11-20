@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.5.0] - 2025-11-20
+
+### Changed
+- **Breaking**: All intervals now use **exclusive end bounds** (`[start, end)`), matching Python slicing idioms throughout the library.
+  - `Interval(start=10, end=13)` now represents 3 seconds `{10, 11, 12}` (previously 4 seconds).
+  - Adjacent intervals like `[0, 5)` and `[5, 10)` naturally touch at the boundary.
+
 ## [0.4.1] - 2025-11-19
 
 ### Added
@@ -106,6 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Google Calendar integration via `calgebra.gcsa.Calendar`
 - Comprehensive documentation accessible via `calgebra.docs` dictionary
 
+[0.5.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.5.0
 [0.4.1]: https://github.com/ashenfad/calgebra/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.4.0
 [0.3.2]: https://github.com/ashenfad/calgebra/releases/tag/v0.3.2

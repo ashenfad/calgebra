@@ -272,8 +272,8 @@ class _RawRecurringTimeline(Timeline[Interval]):
         window_start = occurrence.replace(
             hour=start_hour_int, minute=start_minute, second=start_second
         )
-        # Subtract 1 because intervals are inclusive of both start and end bounds
-        window_end = window_start + timedelta(seconds=self.duration_seconds - 1)
+        # Intervals are now exclusive [start, end), so end = start + duration
+        window_end = window_start + timedelta(seconds=self.duration_seconds)
 
         return Interval(
             start=int(window_start.timestamp()), end=int(window_end.timestamp())

@@ -77,7 +77,7 @@ class Duration(Property[IvlIn]):
         # Handle unbounded intervals (None start or end)
         if event.start is None or event.end is None:
             return float("inf")
-        return (event.end - event.start + 1) / self.scale
+        return (event.end - event.start) / self.scale
 
 
 class Start(Property[Interval]):

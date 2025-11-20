@@ -91,13 +91,13 @@ def test_fetch_respects_bounds() -> None:
     # Slice [9:21] -> query [9, 20]
     assert list(timeline[9:21]) == [
         Interval(start=10, end=15),
-        Interval(start=20, end=20),  # Clipped to query end (20)
+        Interval(start=20, end=21),  # Clipped to query end (21)
     ]
 
     # Slice [:15] -> query [..., 14]
     assert list(timeline[:15]) == [
         Interval(start=0, end=5),
-        Interval(start=10, end=14),  # Clipped to query end (14)
+        Interval(start=10, end=15),  # Clipped to query end (15)
     ]
 
     # Intervals are clipped to query bounds
@@ -157,20 +157,23 @@ def test_intersection_yields_overlaps() -> None:
 
 
 def test_intersection_inclusive_edges() -> None:
+    # With exclusive end intervals, we need overlapping intervals
+    # [5,6) and [5,6) overlap fully
+    # [10,16) and [15,20) overlap at [15,16)
     primary = DummyTimeline(
-        Interval(start=5, end=5),
-        Interval(start=10, end=15),
+        Interval(start=5, end=6),
+        Interval(start=10, end=16),
     )
     secondary = DummyTimeline(
-        Interval(start=5, end=5),
+        Interval(start=5, end=6),
         Interval(start=15, end=20),
     )
 
     assert list((primary & secondary)[:]) == [
-        Interval(start=5, end=5),
-        Interval(start=5, end=5),
-        Interval(start=15, end=15),
-        Interval(start=15, end=15),
+        Interval(start=5, end=6),
+        Interval(start=5, end=6),
+        Interval(start=15, end=16),
+        Interval(start=15, end=16),
     ]
 
 
@@ -197,8 +200,8 @@ def test_complement_returns_gaps() -> None:
     complement = list((~timeline)[10:20])
 
     assert complement == [
-        Interval(start=13, end=14),
-        Interval(start=18, end=19),
+        Interval(start=12, end=15),
+        Interval(start=17, end=20),
     ]
 
 
@@ -214,8 +217,8 @@ def test_complement_yields_mask_intervals() -> None:
 
     # Gaps are mask Intervals (not LabeledIntervals)
     assert complement == [
-        Interval(start=13, end=14),
-        Interval(start=18, end=19),
+        Interval(start=12, end=15),
+        Interval(start=17, end=20),
     ]
 
     # Verify they're actually mask Interval objects
@@ -332,7 +335,8 @@ def test_filter_and_timeline_symmetric() -> None:
 
 
 def test_duration_properties_count_inclusive_bounds() -> None:
-    interval = Interval(start=10, end=12)
+    # With exclusive end intervals, [10, 13) has duration 3
+    interval = Interval(start=10, end=13)
 
     assert seconds.apply(interval) == 3
     assert minutes.apply(interval) == pytest.approx(3 / 60)
@@ -364,8 +368,8 @@ def test_complement_supports_unbounded_queries() -> None:
 def test_complement_handles_empty_source() -> None:
     empty = DummyTimeline()
 
-    # Slice [10:12] -> query [10, 11]
-    assert list((~empty)[10:12]) == [Interval(start=10, end=11)]
+    # Slice [10:12] -> query [10, 12)
+    assert list((~empty)[10:12]) == [Interval(start=10, end=12)]
 
 
 def test_complement_coalesces_adjacent_segments() -> None:
@@ -375,9 +379,13 @@ def test_complement_coalesces_adjacent_segments() -> None:
         Interval(start=10, end=12),
     )
 
-    # first two intervals should coalesce when computing coverage
-    # Slice [0:12] -> query [0, 11]
-    assert list((~timeline)[0:12]) == [Interval(start=6, end=9)]
+    # With exclusive intervals: [0,2), [3,5), [10,12)
+    # Gaps are: [2,3) and [5,10)
+    # Slice [0:12] -> query [0, 12)
+    assert list((~timeline)[0:12]) == [
+        Interval(start=2, end=3),
+        Interval(start=5, end=10),
+    ]
 
 
 def test_intersection_with_no_sources() -> None:
@@ -410,17 +418,23 @@ def test_intersection_preserves_adjacent_fragments() -> None:
         Interval(start=5, end=8),
     ]
 
-    assert list(flatten(left & right)[0:10]) == [Interval(start=2, end=8)]
+    # With exclusive intervals: left has [0,4) and [5,10), right has [2,8)
+    # Intersections: [2,4) and [5,8)
+    # These two fragments are NOT adjacent (gap at [4,5)), so flatten doesn't merge them
+    assert list(flatten(left & right)[0:10]) == [
+        Interval(start=2, end=4),
+        Interval(start=5, end=8),
+    ]
 
 
 def test_intersection_touching_edges_inclusive() -> None:
+    # With exclusive end intervals, [0, 5) and [5, 10) don't overlap
+    # They touch at the boundary but don't share any time
     left = DummyTimeline(Interval(start=0, end=5))
     right = DummyTimeline(Interval(start=5, end=10))
 
-    assert list((left & right)[:]) == [
-        Interval(start=5, end=5),
-        Interval(start=5, end=5),
-    ]
+    # No intersection because left ends at 5 (exclusive) and right starts at 5
+    assert list((left & right)[:]) == []
 
 
 def test_intersection_preserves_metadata_from_all_sources() -> None:
@@ -453,8 +467,8 @@ def test_difference_removes_overlaps() -> None:
     subtractor = DummyTimeline(Interval(start=3, end=12))
 
     assert list((timeline - subtractor)[:]) == [
-        Interval(start=0, end=2),
-        Interval(start=13, end=15),
+        Interval(start=0, end=3),
+        Interval(start=12, end=15),
     ]
 
 
@@ -466,9 +480,9 @@ def test_difference_splits_events_by_multiple_subtractions() -> None:
     )
 
     assert list((timeline - subtractor)[:]) == [
-        Interval(start=0, end=1),
-        Interval(start=4, end=4),
-        Interval(start=7, end=10),
+        Interval(start=0, end=2),
+        Interval(start=3, end=5),
+        Interval(start=6, end=10),
     ]
 
 
@@ -491,9 +505,9 @@ def test_total_duration_flattens_union() -> None:
     combined = timeline | overlap
 
     # total_duration uses slicing internally
-    # total_duration(tl, 0, 15) -> tl[0:15] -> query [0, 14]
-    # Combined covers [0, 15] fully (0-5, 3-12, 10-15)
-    # Query [0, 14] is fully covered -> duration 15
+    # total_duration(tl, 0, 15) -> tl[0:15] -> query [0, 15)
+    # Combined covers [0, 15) fully (0-5, 3-12, 10-15)
+    # Query [0, 15) is fully covered -> duration 15
     assert total_duration(combined, 0, 15) == 15
 
 
@@ -508,8 +522,8 @@ def test_flatten_returns_coalesced_intervals() -> None:
 
     flattened = flatten(timeline | overlap)
 
-    # Slice [0:15] -> query [0, 14]
-    assert list(flattened[0:15]) == [Interval(start=0, end=14)]
+    # Slice [0:15] -> query [0, 15)
+    assert list(flattened[0:15]) == [Interval(start=0, end=15)]
 
 
 def test_max_duration_reports_longest_run() -> None:
@@ -565,17 +579,21 @@ def test_coverage_ratio_returns_fraction() -> None:
         Interval(start=5, end=5),
     )
 
-    # Covered time = 5 + 1 = 6; window span = 6
-    # coverage_ratio(tl, 0, 5) -> tl[0:5] -> query [0, 4]
-    # Timeline has [0, 4] (duration 5) and [5, 5] (duration 1)
-    # Query [0, 4] intersects only [0, 4].
-    # Covered duration = 5. Window duration = 5. Ratio = 1.0
-    # Covered time = 5 + 1 = 6; window span = 6
-    # coverage_ratio(tl, 0, 6) -> tl[0:6] -> query [0, 5]
-    # Timeline has [0, 4] (duration 5) and [5, 5] (duration 1)
-    # Query [0, 5] intersects both fully.
-    # Covered duration = 6. Window duration = 6. Ratio = 1.0
-    assert coverage_ratio(timeline, 0, 6) == 1.0
+    # Covered time = 4 + 1 = 5; window span = 6
+    # coverage_ratio(tl, 0, 6) -> tl[0:6] -> query [0, 6)
+    # Timeline has [0, 4) (duration 4) and [5, 5) (duration 0 - empty!)
+    # Wait, [5, 5) is empty in exclusive intervals.
+    # Let's adjust the test case to have non-empty intervals.
+    timeline = DummyTimeline(
+        Interval(start=0, end=4),
+        Interval(start=5, end=6),
+    )
+    # Covered time = 4 + 1 = 5; window span = 6
+    # coverage_ratio(tl, 0, 6) -> tl[0:6] -> query [0, 6)
+    # Timeline has [0, 4) (duration 4) and [5, 6) (duration 1)
+    # Query [0, 6) intersects both fully.
+    # Covered duration = 5. Window duration = 6. Ratio = 5/6
+    assert coverage_ratio(timeline, 0, 6) == 5 / 6
 
 
 def test_timeline_accepts_timezone_aware_datetime_slicing() -> None:
@@ -595,12 +613,9 @@ def test_timeline_accepts_timezone_aware_datetime_slicing() -> None:
     results = list(timeline[start_dt:end_dt])
     assert len(results) == 2
     assert results[0].start == 1735689600
-    # end_dt is Jan 31 23:59:59. Exclusive slice -> query ends at ...58
-    # But wait, end_dt is usually used as "up to"
-    # If we want to include the full second of 23:59:59, we need to slice up to the NEXT second
-    # But here we passed 23:59:59 as the stop. So it excludes that second.
-    # So the interval [..., ...99] is clipped to [..., ...98]
-    assert results[1].end == 1738367998
+    # end_dt is Jan 31 23:59:59. Exclusive slice -> query ends at ...59
+    # So the interval [..., ...99] is clipped to [..., ...99]
+    assert results[1].end == 1738367999
 
 
 def test_timeline_rejects_date_objects() -> None:
@@ -683,7 +698,7 @@ def test_datetime_slicing_uses_full_day_boundaries() -> None:
     results = list(timeline[start_dt:end_dt])
     assert len(results) == 1
     assert results[0].start == 1735689600
-    assert results[0].end == 1735775998
+    assert results[0].end == 1735775999
 
 
 def test_mixed_int_and_datetime_slicing() -> None:
@@ -801,16 +816,16 @@ def test_timeline_helper_respects_bounds() -> None:
     )
 
     # Intervals are clipped to query bounds
-    # Slice [9:21] -> query [9, 20]
+    # Slice [9:21] -> query [9, 21)
     assert list(tl[9:21]) == [
         Interval(start=10, end=15),
-        Interval(start=20, end=20),  # Clipped to query end (20)
+        Interval(start=20, end=21),  # Clipped to query end (21)
     ]
 
-    # Slice [:15] -> query [..., 14]
+    # Slice [:15] -> query [..., 15)
     assert list(tl[:15]) == [
         Interval(start=0, end=5),
-        Interval(start=10, end=14),  # Clipped to query end (14)
+        Interval(start=10, end=15),  # Fully included in query
     ]
 
     # Intervals are clipped to query bounds

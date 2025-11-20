@@ -55,7 +55,7 @@ def test_recurring_weekly_with_time_window():
 
     # Check duration is 30 minutes
     assert standup[0].start is not None and standup[0].end is not None
-    duration = standup[0].end - standup[0].start + 1
+    duration = standup[0].end - standup[0].start
     assert duration == 1800  # 30 minutes in seconds
 
 
@@ -296,7 +296,7 @@ def test_recurring_yearly_with_time_window():
 
     # Check duration is 3 hours
     assert anniversary[0].start is not None and anniversary[0].end is not None
-    duration = anniversary[0].end - anniversary[0].start + 1
+    duration = anniversary[0].end - anniversary[0].start
     assert duration == 10800  # 3 hours in seconds
 
 
@@ -403,7 +403,7 @@ def test_recurring_duration_exceeds_interval():
 
     # Should span the entire query range
     assert results[0].start == query_start
-    assert results[0].end == query_end - 1
+    assert results[0].end == query_end
 
 
 def test_recurring_weekly_with_multi_day_duration():
@@ -424,7 +424,7 @@ def test_recurring_weekly_with_multi_day_duration():
     # First 4 events should be 3 days long
     for interval in results[:4]:
         assert interval.start is not None and interval.end is not None
-        duration = interval.end - interval.start + 1
+        duration = interval.end - interval.start
         assert duration == 3 * 86400, f"Expected 3 days, got {duration/86400:.2f} days"
 
     # Last event (Jan 31) extends beyond query range and gets clamped
@@ -458,7 +458,7 @@ def test_recurring_flatten_merges_overlapping_durations():
 
     # Should cover the entire query range
     assert flattened_results[0].start == query_start
-    assert flattened_results[0].end == query_end - 1
+    assert flattened_results[0].end == query_end
 
 
 def test_recurring_lookback_multiple_previous():
@@ -489,7 +489,7 @@ def test_recurring_lookback_multiple_previous():
 
     # Should cover the entire query range
     assert results[0].start == query_start
-    assert results[0].end == query_end - 1
+    assert results[0].end == query_end
 
 
 def test_recurring_raw_lookback_captures_all_overlaps():

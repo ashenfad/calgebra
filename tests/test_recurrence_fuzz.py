@@ -69,26 +69,21 @@ def get_ground_truth(freq_str, interval, start_ts, end_ts, duration):
         
     results = []
     for dt in candidates:
-        # Convert to Interval
+        # Convert to Interval with exclusive end
         start = int(dt.timestamp())
-        end = start + duration - 1
+        end = start + duration
         
         # Check overlap with [start_ts, end_ts)
-        # Interval is [start, end]
-        # Query is [start_ts, end_ts) (exclusive end for fetch logic? 
-        # Wait, fetch takes inclusive end in my implementation now?
-        # No, fetch takes 'end' which is the last valid second.
-        # But the test caller usually passes slice bounds.
-        # Let's assume we are testing recurring(...)[start:end]
-        # So we want intervals that overlap [start_ts, end_ts - 1]
+        # Interval is [start, end) (exclusive end)
+        # Query is [start_ts, end_ts) (exclusive end)
         
-        # Overlap logic:
-        # max(start, start_ts) <= min(end, end_ts - 1)
+        # Overlap logic for exclusive ends:
+        # max(start, start_ts) < min(end, end_ts)
         
         overlap_start = max(start, start_ts)
-        overlap_end = min(end, end_ts - 1)
+        overlap_end = min(end, end_ts)
         
-        if overlap_start <= overlap_end:
+        if overlap_start < overlap_end:
             results.append(Interval(start=overlap_start, end=overlap_end))
             
     # Flatten results to match recurring() behavior (which merges adjacent/overlapping)
@@ -100,8 +95,9 @@ def get_ground_truth(freq_str, interval, start_ts, end_ts, duration):
     current = results[0]
     
     for next_ivl in results[1:]:
-        # Merge if overlap or adjacent (end + 1 >= start)
-        if current.end + 1 >= next_ivl.start:
+        # Merge if overlap or adjacent
+        # With exclusive ends: [a,b) and [b,c) are adjacent
+        if current.end >= next_ivl.start:
             current = Interval(start=current.start, end=max(current.end, next_ivl.end))
         else:
             merged.append(current)

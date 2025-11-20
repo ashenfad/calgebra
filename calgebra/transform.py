@@ -59,7 +59,7 @@ class _MergedWithin(Timeline[Ivl], Generic[Ivl]):
                 if current.end is None or interval.start is None:
                     can_merge = True
                 else:
-                    gap = interval.start - current.end - 1
+                    gap = interval.start - current.end
                     can_merge = gap <= self.gap
 
                 if can_merge:

@@ -158,7 +158,7 @@ def test_buffer_respects_query_bounds() -> None:
     # Second interval starts at 250 (within query), clipped to end at 350
     assert result == [
         Interval(start=200, end=250),  # Clipped to query start
-        Interval(start=250, end=349),  # Clipped to query end
+        Interval(start=250, end=350),  # Clipped to query end
     ]
 
 
@@ -201,8 +201,8 @@ def test_merge_within_merges_close_intervals() -> None:
     """Test that intervals within gap threshold are merged."""
     timeline = SimpleTimeline(
         Interval(start=100, end=110),
-        Interval(start=120, end=130),  # Gap of 9 seconds (120-110-1)
-        Interval(start=140, end=150),  # Gap of 9 seconds (140-130-1)
+        Interval(start=120, end=130),  # Gap of 10 seconds (120-110)
+        Interval(start=140, end=150),  # Gap of 10 seconds (140-130)
     )
 
     merged = merge_within(timeline, gap=10)
@@ -216,7 +216,7 @@ def test_merge_within_keeps_distant_intervals_separate() -> None:
     """Test that intervals beyond gap threshold stay separate."""
     timeline = SimpleTimeline(
         Interval(start=100, end=110),
-        Interval(start=125, end=135),  # Gap of 14 seconds (125-110-1)
+        Interval(start=125, end=135),  # Gap of 15 seconds (125-110)
     )
 
     merged = merge_within(timeline, gap=10)
@@ -233,7 +233,7 @@ def test_merge_within_exact_gap_threshold() -> None:
     """Test that intervals exactly at gap threshold are merged."""
     timeline = SimpleTimeline(
         Interval(start=100, end=110),
-        Interval(start=121, end=130),  # Gap exactly 10 seconds (121-110-1)
+        Interval(start=120, end=130),  # Gap exactly 10 seconds (120-110)
     )
 
     merged = merge_within(timeline, gap=10)
@@ -247,7 +247,7 @@ def test_merge_within_one_second_over_threshold() -> None:
     """Test that intervals one second over threshold stay separate."""
     timeline = SimpleTimeline(
         Interval(start=100, end=110),
-        Interval(start=122, end=130),  # Gap is 11 seconds (122-110-1)
+        Interval(start=121, end=130),  # Gap is 11 seconds (121-110)
     )
 
     merged = merge_within(timeline, gap=10)
@@ -256,7 +256,7 @@ def test_merge_within_one_second_over_threshold() -> None:
     # Gap is 11 > 10, should stay separate
     assert result == [
         Interval(start=100, end=110),
-        Interval(start=122, end=130),
+        Interval(start=121, end=130),
     ]
 
 
@@ -264,7 +264,7 @@ def test_merge_within_adjacent_intervals() -> None:
     """Test that adjacent intervals (gap=0) are merged."""
     timeline = SimpleTimeline(
         Interval(start=100, end=110),
-        Interval(start=111, end=120),  # Gap of 0 (111-110-1)
+        Interval(start=110, end=120),  # Gap of 0 (110-110)
     )
 
     merged = merge_within(timeline, gap=0)
@@ -307,9 +307,9 @@ def test_merge_within_multiple_groups() -> None:
     """Test that merge_within creates separate groups."""
     timeline = SimpleTimeline(
         Interval(start=100, end=110),
-        Interval(start=120, end=130),  # Close to first (gap=9)
-        Interval(start=200, end=210),  # Far from second (gap=69)
-        Interval(start=220, end=230),  # Close to third (gap=9)
+        Interval(start=120, end=130),  # Close to first (gap=10)
+        Interval(start=200, end=210),  # Far from second (gap=70)
+        Interval(start=220, end=230),  # Close to third (gap=10)
     )
 
     merged = merge_within(timeline, gap=10)
@@ -404,8 +404,8 @@ def test_merge_then_buffer() -> None:
     """Test composing merge_within and buffer."""
     events = SimpleTimeline(
         Interval(start=100, end=110),
-        Interval(start=120, end=130),  # Gap of 9
-        Interval(start=200, end=210),  # Gap of 69
+        Interval(start=120, end=130),  # Gap of 10
+        Interval(start=200, end=210),  # Gap of 70
     )
 
     # First merge close events, then add buffer

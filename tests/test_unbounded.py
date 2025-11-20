@@ -59,11 +59,11 @@ def test_complement_with_bounded_query():
     free = ~busy
     gaps = list(free[0:10000])
 
-    # Should get gaps: [0, 999], [2001, 4999], [6001, 9999]
+    # Should get gaps: [0, 1000), [2000, 5000), [6000, 10000)
     assert len(gaps) == 3
-    assert gaps[0] == Interval(start=0, end=999)
-    assert gaps[1] == Interval(start=2001, end=4999)
-    assert gaps[2] == Interval(start=6001, end=9999)
+    assert gaps[0] == Interval(start=0, end=1000)
+    assert gaps[1] == Interval(start=2000, end=5000)
+    assert gaps[2] == Interval(start=6000, end=10000)
 
 
 def test_complement_with_unbounded_query():
@@ -77,25 +77,25 @@ def test_complement_with_unbounded_query():
 
     # Query with no start bound
     future_gaps = list(free[None:10000])
-    # Should get: [-∞, 999], [2001, 4999], [6001, 9999]
+    # Should get: [-∞, 1000), [2000, 5000), [6000, 10000)
     assert len(future_gaps) == 3
     assert future_gaps[0].start is None
-    assert future_gaps[0].end == 999
+    assert future_gaps[0].end == 1000
 
     # Query with no end bound
     past_gaps = list(free[0:None])
-    # Should get: [0, 999], [2001, 4999], [6001, +∞]
+    # Should get: [0, 1000), [2000, 5000), [6000, +∞]
     assert len(past_gaps) == 3
-    assert past_gaps[2].start == 6001
+    assert past_gaps[2].start == 6000
     assert past_gaps[2].end is None
 
     # Query with no bounds at all
     all_gaps = list(free[None:None])
-    # Should get: [-∞, 999], [2001, 4999], [6001, +∞]
+    # Should get: [-∞, 1000), [2000, 5000), [6000, +∞]
     assert len(all_gaps) == 3
     assert all_gaps[0].start is None
-    assert all_gaps[0].end == 999
-    assert all_gaps[2].start == 6001
+    assert all_gaps[0].end == 1000
+    assert all_gaps[2].start == 6000
     assert all_gaps[2].end is None
 
 
@@ -123,15 +123,15 @@ def test_complement_composition_with_bounded_timeline():
     slots = list(available[0:10000])
 
     # Should get the intersection of free time with business hours
-    # free: [-∞, 999], [2001, 4999], [6001, +∞]
-    # business: [0, 3000], [4000, 8000]
-    # intersection: [0, 999], [2001, 3000], [4000, 4999], [6001, 8000]
-    # Query [0:10000] -> [0, 9999]
+    # free: [-∞, 1000), [2000, 5000), [6000, +∞]
+    # business: [0, 3000), [4000, 8000)
+    # intersection: [0, 1000), [2000, 3000), [4000, 5000), [6000, 8000)
+    # Query [0:10000] -> [0, 10000)
     assert len(slots) == 4
-    assert slots[0] == Interval(start=0, end=999)
-    assert slots[1] == Interval(start=2001, end=3000)
-    assert slots[2] == Interval(start=4000, end=4999)
-    assert slots[3] == Interval(start=6001, end=8000)
+    assert slots[0] == Interval(start=0, end=1000)
+    assert slots[1] == Interval(start=2000, end=3000)
+    assert slots[2] == Interval(start=4000, end=5000)
+    assert slots[3] == Interval(start=6000, end=8000)
 
 
 def test_unbounded_intervals_with_filters():
@@ -147,7 +147,7 @@ def test_unbounded_intervals_with_filters():
     assert hours.apply(future) == float("inf")
 
     # Regular interval still works
-    regular = Interval(start=1000, end=4599)  # 3600 seconds = 1 hour
+    regular = Interval(start=1000, end=4600)  # 3600 seconds = 1 hour
     assert hours.apply(regular) == 1.0
 
 
@@ -170,7 +170,7 @@ def test_union_with_unbounded_intervals():
     assert intervals[1].start == 1000
     assert intervals[1].end == 2000
     assert intervals[2].start == 5000
-    assert intervals[2].end == 9999  # Clipped to query end
+    assert intervals[2].end == 10000  # Clipped to query end
 
 
 def test_intersection_with_unbounded_intervals():
@@ -214,14 +214,14 @@ def test_difference_with_unbounded_intervals():
     free = all_time - busy
     gaps = list(free[0:10000])
 
-    # Should get: [0, 999], [2001, 4999], [6001, 9999]
+    # Should get: [0, 1000), [2000, 5000), [6000, 10000)
     # All clipped to query bounds
     assert len(gaps) == 3
     assert gaps[0].start == 0  # Clipped to query start
-    assert gaps[0].end == 999
-    assert gaps[1] == Interval(start=2001, end=4999)
-    assert gaps[2].start == 6001
-    assert gaps[2].end == 9999  # Clipped to query end
+    assert gaps[0].end == 1000
+    assert gaps[1] == Interval(start=2000, end=5000)
+    assert gaps[2].start == 6000
+    assert gaps[2].end == 10000  # Clipped to query end
 
 
 def test_difference_subtract_unbounded_from_bounded():
@@ -238,10 +238,10 @@ def test_difference_subtract_unbounded_from_bounded():
     intervals = list(result[0:10000])
 
     # Should remove everything up to 3000
-    # [1000, 5000] - [-∞, 3000] = [3001, 5000]
-    # [7000, 9000] unchanged
+    # [1000, 5000) - [-∞, 3000) = [3000, 5000)
+    # [7000, 9000) unchanged
     assert len(intervals) == 2
-    assert intervals[0] == Interval(start=3001, end=5000)
+    assert intervals[0] == Interval(start=3000, end=5000)
     assert intervals[1] == Interval(start=7000, end=9000)
 
 
@@ -260,7 +260,7 @@ def test_flatten_with_unbounded_intervals():
 
     # Should coalesce into one interval covering the entire range
     assert len(flattened) == 1
-    assert flattened[0] == Interval(start=0, end=9999)
+    assert flattened[0] == Interval(start=0, end=10000)
 
 
 def test_flatten_with_unbounded_query():
@@ -299,7 +299,7 @@ def test_static_timeline_with_unbounded_intervals():
     assert intervals[0].end == 1000
     assert intervals[1] == Interval(start=2000, end=3000)
     assert intervals[2].start == 5000
-    assert intervals[2].end == 9999  # Clipped to query end
+    assert intervals[2].end == 10000  # Clipped to query end
 
 
 def test_unbounded_interval_validation():
@@ -315,3 +315,6 @@ def test_unbounded_interval_validation():
         assert False, "Should have raised ValueError"
     except ValueError as e:
         assert "must be <=" in str(e)
+
+    # This should now be valid (empty interval)
+    Interval(start=1000, end=1000)

@@ -62,8 +62,8 @@ def test_fetch_converts_exact_second_end_to_inclusive_previous_second() -> None:
     assert len(results) == 1
     fetched = results[0]
     assert fetched.start == start_ts
-    assert fetched.end == end_ts - 1
-    assert fetched.end - fetched.start + 1 == 30 * 60
+    assert fetched.end == end_ts
+    assert fetched.end - fetched.start == 30 * 60
     assert fetched.calendar_id == "primary"
     assert fetched.calendar_summary == "Primary"
 
@@ -87,6 +87,8 @@ def test_fetch_keeps_fractional_second_end_within_elapsed_second() -> None:
 
     fetched = list(calendar[start_ts : end_ts + 1])[0]
     assert fetched.start == start_ts
+    # With exclusive ends, the fractional second 10:30:00.5 gets truncated to 10:30:00
+    # So the end is 10:30:00, which is end_ts
     assert fetched.end == end_ts
     assert fetched.calendar_summary == "Primary"
 
@@ -108,10 +110,12 @@ def test_fetch_supports_all_day_events_from_dates() -> None:
     )
     calendar, _ = _build_calendar([event])
 
+    # With exclusive ends, the all-day event covers [start_of_day, end_of_day)
+    # But Google returns the next day as the exclusive end
     expected_start_ts = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=zone).timestamp())
-    expected_end_ts = int(datetime(2025, 1, 1, 23, 59, 59, tzinfo=zone).timestamp())
+    expected_end_ts = int(datetime(2025, 1, 2, 0, 0, 0, tzinfo=zone).timestamp())
 
-    fetched = list(calendar[expected_start_ts : expected_end_ts + 1])[0]
+    fetched = list(calendar[expected_start_ts : expected_end_ts])[0]
     assert fetched.start == expected_start_ts
     assert fetched.end == expected_end_ts
     assert fetched.calendar_id == "primary"

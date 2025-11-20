@@ -20,7 +20,7 @@ def test_day_of_week_single_day():
     assert len(mondays) == 1
 
     monday_start = monday
-    monday_end = int(datetime(2025, 1, 6, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+    monday_end = int(datetime(2025, 1, 7, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     assert mondays[0] == Interval(start=monday_start, end=monday_end)
 
 
@@ -43,7 +43,7 @@ def test_day_of_week_multiple_days():
     
     # Verify it covers Monday through Friday
     monday_start = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    friday_end = int(datetime(2025, 1, 10, 23, 59, 59, tzinfo=timezone.utc).timestamp())
+    friday_end = int(datetime(2025, 1, 11, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     assert days[0].start == monday_start
     assert days[0].end == friday_end
 
@@ -107,7 +107,7 @@ def test_time_of_day_full_day():
     # Adjacent full days are merged into one interval
     assert len(all_day) == 1
     assert all_day[0].start == monday
-    assert all_day[0].end == next_day - 1
+    assert all_day[0].end == next_day
 
 
 def test_time_of_day_specific_hours():
@@ -124,7 +124,7 @@ def test_time_of_day_specific_hours():
 
     expected_start = int(datetime(2025, 1, 6, 9, 0, 0, tzinfo=timezone.utc).timestamp())
     expected_end = int(
-        datetime(2025, 1, 6, 16, 59, 59, tzinfo=timezone.utc).timestamp()
+        datetime(2025, 1, 6, 17, 0, 0, tzinfo=timezone.utc).timestamp()
     )
 
     assert work_hours[0] == Interval(start=expected_start, end=expected_end)
@@ -147,7 +147,7 @@ def test_time_of_day_fractional_hours():
     expected_start = int(
         datetime(2025, 1, 6, 9, 30, 0, tzinfo=timezone.utc).timestamp()
     )
-    expected_end = int(datetime(2025, 1, 6, 9, 59, 59, tzinfo=timezone.utc).timestamp())
+    expected_end = int(datetime(2025, 1, 6, 10, 0, 0, tzinfo=timezone.utc).timestamp())
 
     assert standup[0] == Interval(start=expected_start, end=expected_end)
 
@@ -200,7 +200,7 @@ def test_composition_business_hours():
     # Check first day is Monday 9-5
     expected_start = int(datetime(2025, 1, 6, 9, 0, 0, tzinfo=timezone.utc).timestamp())
     expected_end = int(
-        datetime(2025, 1, 6, 16, 59, 59, tzinfo=timezone.utc).timestamp()
+        datetime(2025, 1, 6, 17, 0, 0, tzinfo=timezone.utc).timestamp()
     )
     assert hours[0] == Interval(start=expected_start, end=expected_end)
 
@@ -227,7 +227,7 @@ def test_composition_recurring_meeting():
 
     # Each should be 9:30-10am
     for standup in standups:
-        duration = standup.end - standup.start + 1
+        duration = standup.end - standup.start
         assert duration == 1800  # 30 minutes
 
 
@@ -289,7 +289,7 @@ def test_weekend_pattern():
         datetime(2025, 1, 11, 0, 0, 0, tzinfo=timezone.utc).timestamp()
     )
     sunday_end = int(
-        datetime(2025, 1, 12, 23, 59, 59, tzinfo=timezone.utc).timestamp()
+        datetime(2025, 1, 13, 0, 0, 0, tzinfo=timezone.utc).timestamp()
     )
     assert days[0].start == saturday_start
     assert days[0].end == sunday_end
