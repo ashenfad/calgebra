@@ -37,7 +37,7 @@ class Interval:
         end_str = str(self.end) if self.end is not None else "+∞"
 
         if self.start is not None and self.end is not None:
-            duration = self.end - self.start + 1
+            duration = self.end - self.start
             return f"Interval({start_str}→{end_str}, {duration}s)"
         else:
             return f"Interval({start_str}→{end_str}, unbounded)"

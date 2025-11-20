@@ -26,7 +26,7 @@ def total_duration(
         # Skip unbounded intervals (shouldn't happen with finite bounds, but be safe)
         if event.start is None or event.end is None:
             continue
-        total += event.end - event.start + 1
+        total += event.end - event.start
 
     return total
 
@@ -52,7 +52,7 @@ def max_duration(
         # Skip unbounded intervals (shouldn't happen with finite bounds, but be safe)
         if event.start is None or event.end is None:
             continue
-        length = event.end - event.start + 1
+        length = event.end - event.start
         if length > longest_len:
             longest = event
             longest_len = length
@@ -80,7 +80,7 @@ def min_duration(
         # Skip unbounded intervals (shouldn't happen with finite bounds, but be safe)
         if event.start is None or event.end is None:
             continue
-        length = event.end - event.start + 1
+        length = event.end - event.start
         if shortest_len is None or length < shortest_len:
             shortest = event
             shortest_len = length

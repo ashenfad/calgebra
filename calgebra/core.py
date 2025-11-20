@@ -35,9 +35,9 @@ class Timeline(ABC, Generic[IvlOut]):
 
         # Convert exclusive slice bound to inclusive interval bound
         # Python slicing [start:end] excludes end
-        # Our intervals are inclusive [start, end]
-        # So we subtract 1 from the end bound
-        end = end_bound - 1 if end_bound is not None else None
+        # Our intervals are now exclusive [start, end)
+        # So we use the end bound directly
+        end = end_bound
 
         # Automatically clip intervals to query bounds via intersection with solid
         # timeline
@@ -292,7 +292,7 @@ class Intersection(Timeline[IvlOut]):
                 overlap_end = min(event.finite_end for event in current)
 
                 # If there's actual overlap, yield trimmed copy from selected sources
-                if overlap_start <= overlap_end:
+                if overlap_start < overlap_end:
                     for idx in emit_indices:
                         # Convert sentinel values back to None for unbounded intervals
                         start_val = overlap_start if overlap_start != NEG_INF else None
@@ -410,20 +410,18 @@ class Difference(Timeline[IvlOut]):
                     overlap_start = max(cursor, current_subtractor.finite_start)
                     overlap_end = min(event_end, current_subtractor.finite_end)
 
-                    if overlap_start <= overlap_end:
+                    if overlap_start < overlap_end:
                         # Emit fragment before the hole (if any)
-                        if cursor <= overlap_start - 1:
+                        if cursor < overlap_start:
                             # Convert back to None if sentinel value
                             start_val = cursor if cursor != NEG_INF else None
                             end_val = (
-                                overlap_start - 1
-                                if overlap_start - 1 != NEG_INF
-                                else None
+                                overlap_start if overlap_start != NEG_INF else None
                             )
                             yield replace(event, start=start_val, end=end_val)
                         # Move cursor past the hole
-                        cursor = overlap_end + 1
-                        if cursor > event_end:
+                        cursor = overlap_end
+                        if cursor >= event_end:
                             break
 
                     # Advance if subtractor ends within this event
@@ -433,7 +431,7 @@ class Difference(Timeline[IvlOut]):
                         break
 
                 # Emit final fragment after all holes (if any remains)
-                if cursor <= event_end:
+                if cursor < event_end:
                     # Convert back to None if sentinel value
                     start_val = cursor if cursor != NEG_INF else None
                     end_val = event_end if event_end != POS_INF else None
@@ -484,24 +482,22 @@ class Complement(Timeline[Interval]):
                 segment_start = max(event_start, start_bound)
                 segment_end = min(event_end, end_bound)
 
-                if segment_end < cursor:
+                if segment_end <= cursor:
                     continue
 
                 if segment_start > cursor:
                     # Emit gap before this event
                     # Convert sentinels back to None for unbounded gaps
                     gap_start = cursor if cursor != NEG_INF else None
-                    gap_end = (
-                        segment_start - 1 if segment_start - 1 != NEG_INF else None
-                    )
+                    gap_end = segment_start if segment_start != NEG_INF else None
                     yield Interval(start=gap_start, end=gap_end)
 
-                cursor = max(cursor, segment_end + 1)
+                cursor = max(cursor, segment_end)
 
                 if cursor > end_bound:
                     return
 
-            if cursor <= end_bound:
+            if cursor < end_bound:
                 # Emit final gap
                 # Convert sentinels back to None for unbounded gaps
                 gap_start = cursor if cursor != NEG_INF else None
@@ -558,7 +554,7 @@ class _StaticTimeline(Timeline[IvlOut], Generic[IvlOut]):
         # Iterate only through the narrowed range
         for interval in self._intervals[start_idx:end_idx]:
             # Final filter: skip intervals that end before our start bound
-            if start is not None and interval.finite_end < start:
+            if start is not None and interval.finite_end <= start:
                 continue
             yield interval
 

@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timezone
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -26,7 +26,7 @@ class Event(Interval):
         end_str = str(self.end) if self.end is not None else "+∞"
 
         if self.start is not None and self.end is not None:
-            duration = self.end - self.start + 1
+            duration = self.end - self.start
             return f"Event('{self.summary}', {start_str}→{end_str}, {duration}s)"
         else:
             return f"Event('{self.summary}', {start_str}→{end_str}, unbounded)"
@@ -60,26 +60,12 @@ def _to_timestamp(
 ) -> int:
     """Convert a datetime or date to a Unix timestamp.
 
-    For end times, ensures inclusive semantics.
+    Both Google Calendar and calgebra now use exclusive end semantics.
     """
     normalized = _normalize_datetime(dt, edge, zone)
 
-    if edge == "start":
-        return int(normalized.replace(microsecond=0).timestamp())
-
-    # For end times: Google Calendar uses exclusive end times, but calgebra uses
-    # inclusive
-    # So we subtract 1 second to make the end inclusive
-    if not isinstance(dt, datetime):
-        # Date object: already at end of day, but normalize returns start of next day
-        start_of_day = _normalize_datetime(dt, "start", zone)
-        inclusive = start_of_day + timedelta(days=1, seconds=-1)
-        return int(inclusive.replace(microsecond=0).timestamp())
-
-    # Datetime object: subtract 1 second if on exact second boundary
-    if normalized.microsecond == 0:
-        normalized -= timedelta(seconds=1)
-
+    # Both start and end can be directly converted
+    # Google Calendar uses exclusive end times, and so does calgebra now
     return int(normalized.replace(microsecond=0).timestamp())
 
 
@@ -121,9 +107,8 @@ class Calendar(Timeline[Event]):
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[Event]:
         start_dt = _timestamp_to_datetime(start) if start is not None else None
-        # end bounds are inclusive; add a second so Google returns events
-        # touching the end (Google uses exclusive end times)
-        end_dt = _timestamp_to_datetime(end + 1) if end is not None else None
+        # Both calgebra and Google Calendar now use exclusive end bounds
+        end_dt = _timestamp_to_datetime(end) if end is not None else None
 
         events_iterable = (
             self.calendar.get_events(  # pyright: ignore[reportUnknownMemberType]
