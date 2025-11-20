@@ -28,7 +28,7 @@ from typing_extensions import override
 
 from calgebra.core import Timeline, flatten, solid
 from calgebra.interval import Interval
-from calgebra.util import DAY, MONTH, WEEK, YEAR
+from calgebra.util import DAY, WEEK
 
 Day: TypeAlias = Literal[
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
@@ -50,21 +50,6 @@ _FREQ_MAP = {
     "weekly": WEEKLY,
     "monthly": MONTHLY,
     "yearly": YEARLY,
-}
-
-_FREQ_SIZE = {
-    DAILY: DAY,
-    WEEKLY: WEEK,
-    MONTHLY: MONTH,
-    YEARLY: YEAR,
-}
-
-# Page sizes for unbounded queries (in seconds)
-_PAGE_SIZES = {
-    "daily": 365 * DAY,  # 1 year for daily patterns
-    "weekly": 2 * 365 * DAY,  # 2 years for weekly patterns
-    "monthly": 5 * 365 * DAY,  # 5 years for monthly patterns
-    "yearly": 10 * 365 * DAY,  # 10 years for yearly patterns
 }
 
 
@@ -105,31 +90,12 @@ class _RawRecurringTimeline(Timeline[Interval]):
             start: Start time of each occurrence in seconds from midnight (default 0)
             duration: Duration of each occurrence in seconds (default DAY = full day)
             tz: IANA timezone name
-
-        Examples:
-            >>> from calgebra import HOUR, MINUTE
-            >>> # Every Monday at 9:30am for 30 min
-            >>> recurring(
-            ...     freq="weekly", day="monday",
-            ...     start=9*HOUR + 30*MINUTE, duration=30*MINUTE
-            ... )
-            >>>
-            >>> # First Monday of each month at 10am for 1 hour
-            >>> recurring(
-            ...     freq="monthly", week=1, day="monday",
-            ...     start=10*HOUR, duration=HOUR
-            ... )
-            >>>
-            >>> # Every other Tuesday (full day)
-            >>> recurring(freq="weekly", interval=2, day="tuesday")
-            >>>
-            >>> # 1st and 15th of every month (full day)
-            >>> recurring(freq="monthly", day_of_month=[1, 15])
         """
         self.zone: ZoneInfo = ZoneInfo(tz)
         self.start_seconds: int = start
         self.duration_seconds: int = duration
         self.freq: str = freq
+        self.interval: int = interval
 
         # Build rrule kwargs
         rrule_kwargs: dict[str, Any] = {
@@ -170,12 +136,79 @@ class _RawRecurringTimeline(Timeline[Interval]):
         # Store rrule (without start date - we'll set that dynamically based on query)
         self.rrule_kwargs: dict[str, Any] = rrule_kwargs
 
+        # Store original start date components for phase calculations
+        # We assume the pattern "started" at epoch (1970-01-01) for phase alignment
+        # unless otherwise specified. Since rrule doesn't have an explicit "start date"
+        # in our API (only time-of-day), we align to 1970-01-01.
+        self._epoch = datetime(1970, 1, 1, tzinfo=self.zone)
+
+    def _get_safe_anchor(self, start_dt: datetime) -> datetime:
+        """Calculate a phase-aligned start date for rrule near the target date.
+
+        Ensures that the rrule sequence maintains its phase (e.g., "every 2 weeks")
+        regardless of where we start generating.
+        Derives the anchor from the Epoch to ensure stable defaults for unspecified
+        fields (e.g., day of month, time of day).
+        """
+        # If interval is 1, we still need to align to Epoch to ensure stable defaults
+        # (e.g. day of month) if they are not specified in rrule_kwargs.
+        # However, if interval=1, any "aligned" date is valid phase-wise.
+        # But to be safe against "random day of month" issues, we should always
+        # align to the grid if possible.
+
+        # Calculate offset from epoch in frequency units
+        if self.freq == "daily":
+            # Days since epoch
+            delta_days = (start_dt.date() - self._epoch.date()).days
+            offset = delta_days % self.interval
+            # Anchor = Start - Offset (days)
+            # But we want to preserve Epoch's time/etc.
+            # So Anchor = Epoch + (TotalDays - Offset)
+            aligned_days = delta_days - offset
+            return self._epoch + timedelta(days=aligned_days)
+
+        elif self.freq == "weekly":
+            # Weeks since epoch (1970-01-01 was a Thursday)
+            # We align to the Monday before epoch (1969-12-29) to match
+            # rrule's ISO week boundaries
+            epoch_monday = datetime(1969, 12, 29, tzinfo=self.zone)
+            delta_days = (start_dt.date() - epoch_monday.date()).days
+            weeks = delta_days // 7
+            offset = weeks % self.interval
+            aligned_weeks = weeks - offset
+            return epoch_monday + timedelta(weeks=aligned_weeks)
+
+        elif self.freq == "monthly":
+            # Months since epoch
+            delta_years = start_dt.year - self._epoch.year
+            delta_months = start_dt.month - self._epoch.month
+            total_months = delta_years * 12 + delta_months
+            offset = total_months % self.interval
+
+            # Logic: (Year * 12 + Month - 1) - offset
+            target_total = total_months - offset
+            # Reconstruct Year/Month (0-indexed month for math, then +1)
+            # We add epoch year/month back in implicitly because total_months was delta
+            abs_total = (self._epoch.year * 12 + self._epoch.month - 1) + target_total
+            year = abs_total // 12
+            month = (abs_total % 12) + 1
+            # Use self._epoch to preserve day=1, time=00:00
+            return self._epoch.replace(year=year, month=month)
+
+        elif self.freq == "yearly":
+            # Years since epoch
+            delta_years = start_dt.year - self._epoch.year
+            offset = delta_years % self.interval
+            # Use self._epoch to preserve month=1, day=1
+            return self._epoch.replace(year=start_dt.year - offset)
+
+        return start_dt
+
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
-        """Generate raw recurring intervals with paging and lookback.
+        """Generate recurring intervals using a single continuous rrule iterator.
 
-        Supports unbounded end queries via automatic paging.
-        Generates intervals that may extend beyond query bounds (no clamping).
+        Supports unbounded end queries.
         """
         if start is None:
             raise ValueError(
@@ -184,25 +217,50 @@ class _RawRecurringTimeline(Timeline[Interval]):
                 "Example: list(mondays[1704067200:])"
             )
 
-        # Determine page size based on frequency
-        page_size = _PAGE_SIZES[self.freq]
+        # 1. Determine where to start looking (Lookback)
+        # We need to start early enough to catch events that started before 'start'
+        # but overlap with it.
+        # Safe bet: Look back by duration + 1 interval period
+        lookback_buffer = self.duration_seconds
+        if self.freq == "daily":
+            lookback_buffer += self.interval * DAY
+        elif self.freq == "weekly":
+            lookback_buffer += self.interval * WEEK
+        elif self.freq == "monthly":
+            lookback_buffer += self.interval * 32 * DAY  # Approx
+        elif self.freq == "yearly":
+            lookback_buffer += self.interval * 366 * DAY  # Approx
 
-        # Page through time
-        page_start = start
-        while True:
-            # Calculate page end (bounded by query end if provided)
-            page_end = page_start + page_size - 1
-            if end is not None:
-                page_end = min(page_end, end)
+        lookback_start_ts = start - lookback_buffer
+        lookback_start_dt = datetime.fromtimestamp(lookback_start_ts, tz=self.zone)
 
-            # Generate raw intervals for this page
-            yield from self._generate_page(page_start, page_end)
+        # 2. Calculate Phase-Aligned Anchor
+        # Find a valid start date for the rrule that preserves the cadence
+        anchor_dt = self._get_safe_anchor(lookback_start_dt)
 
-            # Stop if we've covered bounded range
-            if end is not None and page_end >= end:
+        # Ensure anchor starts at midnight to match rrule expectations
+        anchor_dt = anchor_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # 3. Create Iterator
+        # We use the anchor as dtstart. rrule will generate valid occurrences
+        # from there.
+        rules = rrule(dtstart=anchor_dt, **self.rrule_kwargs)
+
+        # 4. Stream results
+        for occurrence in rules:
+            ivl = self._occurrence_to_interval(occurrence)
+
+            # Fast-forward: Skip if it ends before our query window
+            if ivl.end is not None and ivl.end < start:
+                continue
+
+            # Stop: If we've passed the query window
+            # Note: rrule yields in order, so once we pass end, we're done.
+            # fetch() end bound is inclusive, so we stop only if start > end
+            if end is not None and ivl.start is not None and ivl.start > end:
                 break
 
-            page_start = page_end + 1
+            yield ivl
 
     def _occurrence_to_interval(self, occurrence: datetime) -> Interval:
         """Convert an rrule occurrence to an Interval with time window applied."""
@@ -221,52 +279,6 @@ class _RawRecurringTimeline(Timeline[Interval]):
             start=int(window_start.timestamp()), end=int(window_end.timestamp())
         )
 
-    def _generate_page(self, page_start: int, page_end: int) -> Iterable[Interval]:
-        """Generate raw intervals for a single page with lookback.
-
-        Creates rrule with dtstart at page start, then looks back for overlapping
-        events.
-        For lookback, creates a second rrule with dtstart moved back by interval periods
-        to maintain phase consistency.
-        """
-        start_dt = datetime.fromtimestamp(page_start, tz=self.zone)
-        end_dt = datetime.fromtimestamp(page_end, tz=self.zone)
-
-        # Main rrule starts at page start (preserves original phase behavior)
-        dtstart = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        r = rrule(dtstart=dtstart, until=end_dt, cache=True, **self.rrule_kwargs)
-
-        # For lookback: go back enough to capture overlapping events
-        # Move back by duration AND enough interval periods to ensure we catch
-        # everything
-        interval = self.rrule_kwargs.get("interval", 1)
-
-        # Calculate how far back to look
-        period_seconds = _FREQ_SIZE[self.rrule_kwargs["freq"]] * interval
-
-        # Go back by duration + one interval period (to catch all overlaps)
-        lookback_seconds = self.duration_seconds + period_seconds
-        lookback_dt = start_dt - timedelta(seconds=lookback_seconds)
-        lookback_dtstart = lookback_dt.replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
-
-        # Create separate rrule for lookback
-        r_lookback = rrule(
-            dtstart=lookback_dtstart, until=dtstart, cache=True, **self.rrule_kwargs
-        )
-
-        # Yield lookback intervals that overlap with page_start
-        for occurrence in r_lookback:
-            interval = self._occurrence_to_interval(occurrence)
-            # Only yield if this interval extends into the page
-            if interval.end is not None and interval.end >= page_start:
-                yield interval
-
-        # Yield main intervals
-        for occurrence in r:
-            yield self._occurrence_to_interval(occurrence)
-
 
 def recurring(
     freq: Literal["daily", "weekly", "monthly", "yearly"],
@@ -283,7 +295,8 @@ def recurring(
     """
     Create a timeline with recurring intervals based on frequency and constraints.
 
-    Supports unbounded end queries (e.g., recurring(...)[start:]) via automatic paging.
+    Supports unbounded end queries (e.g., recurring(...)[start:]) via infinite
+    streaming.
 
     Args:
         freq: Frequency - "daily", "weekly", "monthly", or "yearly"
@@ -357,7 +370,7 @@ def recurring(
         >>> mondays = recurring(freq="weekly", day="monday", tz="UTC")
         >>> next_five = list(islice(mondays[start:], 5))
     """
-    # Generate raw recurring intervals with paging and lookback
+    # Generate raw recurring intervals with lookback for overlaps
     raw = _RawRecurringTimeline(
         freq,
         interval=interval,
