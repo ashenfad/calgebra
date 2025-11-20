@@ -198,9 +198,23 @@ class _SolidTimeline(Timeline[Interval]):
 solid: Timeline[Interval] = _SolidTimeline()
 
 
+def _flatten_sources(
+    sources: Iterable[Timeline[IvlOut]],
+    cls: type["Union[IvlOut]"] | type["Intersection[IvlOut]"],
+) -> tuple[Timeline[IvlOut], ...]:
+    """Flatten nested instances of the same class (Union or Intersection)."""
+    flattened: list[Timeline[IvlOut]] = []
+    for source in sources:
+        if isinstance(source, cls):
+            flattened.extend(source.sources)
+        else:
+            flattened.append(source)
+    return tuple(flattened)
+
+
 class Union(Timeline[IvlOut]):
     def __init__(self, *sources: Timeline[IvlOut]):
-        self.sources: tuple[Timeline[IvlOut], ...] = sources
+        self.sources: tuple[Timeline[IvlOut], ...] = _flatten_sources(sources, Union)
 
     @property
     @override
@@ -218,14 +232,9 @@ class Union(Timeline[IvlOut]):
 
 class Intersection(Timeline[IvlOut]):
     def __init__(self, *sources: Timeline[IvlOut]):
-        flattened: list[Timeline[IvlOut]] = []
-        for source in sources:
-            if isinstance(source, Intersection):
-                flattened.extend(source.sources)
-            else:
-                flattened.append(source)
-
-        self.sources: tuple[Timeline[IvlOut], ...] = tuple(flattened)
+        self.sources: tuple[Timeline[IvlOut], ...] = _flatten_sources(
+            sources, Intersection
+        )
 
     @property
     @override
