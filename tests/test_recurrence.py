@@ -70,8 +70,12 @@ def test_recurring_biweekly():
         recurring(freq="weekly", interval=2, day="monday", tz="UTC")[start:end]
     )
 
-    # Should get 3 Mondays (Jan 6, Jan 20, Feb 3) - rrule includes start date
-    assert len(biweekly) == 3
+    # Should get 2 Mondays (Jan 13, Jan 27)
+    # Jan 6 is skipped because it is an "Odd" week relative to the Monday Epoch (1969-12-29)
+    # Epoch-aligned phase ensures consistent results regardless of query start.
+    assert len(biweekly) == 2
+    assert biweekly[0].start == int(datetime(2025, 1, 13, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    assert biweekly[1].start == int(datetime(2025, 1, 27, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
 
 def test_recurring_monthly_first_weekday():
