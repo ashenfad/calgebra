@@ -2,7 +2,7 @@ import bisect
 import heapq
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from functools import reduce
 from typing import Any, Generic, Literal, cast, overload
@@ -642,3 +642,201 @@ def intersection(
         return acc & nxt
 
     return reduce(reducer, timelines)
+
+
+# ============================================================================
+# Mutable Timeline Abstractions
+# ============================================================================
+
+
+@dataclass(frozen=True)
+class WriteResult:
+    """Result of a write operation (add/remove).
+
+    Attributes:
+        success: True if the operation succeeded, False otherwise
+        event: The written event (with backend-assigned ID) if successful, None if failed
+        error: The exception that occurred if failed, None if successful
+    """
+
+    success: bool
+    event: Interval | None
+    error: Exception | None
+
+
+class MutableTimeline(Timeline[IvlOut], ABC):
+    """Abstract base class for timelines that support write operations.
+
+    Provides generic dispatch logic for adding and removing events, with
+    backend-specific implementations handling the actual writes.
+    """
+
+    def add(
+        self, item: Interval | Iterable[Interval] | Timeline[Interval], **metadata: Any
+    ) -> Iterable[WriteResult]:
+        """Add events to this timeline.
+
+        Args:
+            item: Single interval, iterable of intervals, or timeline to add
+            **metadata: Backend-specific metadata (e.g., summary, description, attendees)
+
+        Returns:
+            Iterator of WriteResult objects, one per item written
+
+        Raises:
+            ValueError: If passed a Timeline without a symbolic recurrence_rule
+
+        Examples:
+            # Add single event with metadata
+            results = cal.add(
+                Interval(start=..., end=...),
+                summary="Meeting",
+                attendees=["alice@example.com"]
+            )
+
+            # Add symbolic pattern
+            pattern = recurring(freq="weekly", day="monday", ...)
+            results = cal.add(pattern, summary="Weekly Standup")
+
+            # Add explicit slice (unroll)
+            results = cal.add(
+                complex_query[start:end],
+                summary="Office Hours"
+            )
+        """
+        # Single interval
+        if isinstance(item, Interval):
+            # Merge interval's own fields with metadata kwargs (kwargs override)
+            merged_metadata = {**vars(item), **metadata}
+            yield from self._add_interval(item, merged_metadata)
+
+        # Timeline with symbolic rule
+        elif isinstance(item, Timeline):
+            rule = getattr(item, "recurrence_rule", None)
+            if rule is not None:
+                yield from self._add_recurring(rule, metadata)
+            else:
+                raise ValueError(
+                    "Cannot add un-sliced timeline without symbolic recurrence rule.\n"
+                    "This timeline has been transformed in a way that lost its symbolic "
+                    "representation (e.g., filtered by duration, differenced, etc.).\n\n"
+                    "To add it, slice with explicit bounds: cal.add(timeline[start:end], summary=...)\n"
+                    "This will unroll the timeline into individual events within those bounds."
+                )
+
+        # Iterable of intervals
+        else:
+            yield from self._add_many(item, metadata)
+
+    def remove(
+        self, items: Interval | Iterable[Interval]
+    ) -> Iterable[WriteResult]:
+        """Remove specific event instances by ID.
+
+        Args:
+            items: Single interval or iterable of intervals to remove
+
+        Returns:
+            Iterator of WriteResult objects
+
+        Note:
+            This removes individual instances. To remove an entire recurring series,
+            use remove_series() instead.
+        """
+        if isinstance(items, Interval):
+            yield from self._remove_interval(items)
+        else:
+            for item in items:
+                yield from self._remove_interval(item)
+
+    def remove_series(
+        self, items: Interval | Iterable[Interval]
+    ) -> Iterable[WriteResult]:
+        """Remove entire recurring series by recurring_event_id.
+
+        Args:
+            items: Single interval or iterable of intervals whose series should be deleted
+
+        Returns:
+            Iterator of WriteResult objects
+
+        Note:
+            For non-recurring events, this behaves the same as remove().
+        """
+        if isinstance(items, Interval):
+            yield from self._remove_series(items)
+        else:
+            for item in items:
+                yield from self._remove_series(item)
+
+    @abstractmethod
+    def _add_interval(
+        self, interval: Interval, metadata: dict[str, Any]
+    ) -> Iterable[WriteResult]:
+        """Backend-specific: write a single interval.
+
+        Args:
+            interval: The interval to write
+            metadata: Merged metadata (interval fields + kwargs)
+
+        Returns:
+            Iterator yielding a single WriteResult
+        """
+        pass
+
+    @abstractmethod
+    def _add_recurring(
+        self, rule: Any, metadata: dict[str, Any]
+    ) -> Iterable[WriteResult]:
+        """Backend-specific: write a symbolic recurring pattern.
+
+        Args:
+            rule: The recurrence rule (rrule/rruleset)
+            metadata: Event metadata
+
+        Returns:
+            Iterator yielding a single WriteResult
+        """
+        pass
+
+    def _add_many(
+        self, intervals: Iterable[Interval], metadata: dict[str, Any]
+    ) -> Iterable[WriteResult]:
+        """Default batch implementation: loop and call _add_interval.
+
+        Backends can override this to use batch APIs for performance.
+
+        Args:
+            intervals: Iterable of intervals to write
+            metadata: Common metadata for all intervals
+
+        Returns:
+            Iterator of WriteResult objects
+        """
+        for interval in intervals:
+            merged_metadata = {**vars(interval), **metadata}
+            yield from self._add_interval(interval, merged_metadata)
+
+    @abstractmethod
+    def _remove_interval(self, interval: Interval) -> Iterable[WriteResult]:
+        """Backend-specific: delete a single event instance.
+
+        Args:
+            interval: The interval to delete (must have backend ID)
+
+        Returns:
+            Iterator yielding a single WriteResult
+        """
+        pass
+
+    @abstractmethod
+    def _remove_series(self, interval: Interval) -> Iterable[WriteResult]:
+        """Backend-specific: delete an entire recurring series.
+
+        Args:
+            interval: An interval from the series (uses recurring_event_id)
+
+        Returns:
+            Iterator yielding a single WriteResult
+        """
+        pass
