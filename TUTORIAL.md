@@ -11,7 +11,24 @@ An `Interval` represents a time range with a `start` and `end` (both integers, t
 ```python
 from calgebra import Interval
 
+# Create from timestamps
 meeting = Interval(start=1000, end=2000)
+
+# Or create from timezone-aware datetimes (more ergonomic!)
+from datetime import datetime, timezone
+from calgebra import at_tz
+
+# Using explicit timezone-aware datetimes
+dt1 = datetime(2025, 1, 1, 9, 0, tzinfo=timezone.utc)
+dt2 = datetime(2025, 1, 1, 17, 0, tzinfo=timezone.utc)
+meeting = Interval.from_datetimes(start=dt1, end=dt2)
+
+# Using at_tz() helper (recommended)
+at = at_tz("US/Pacific")
+vacation = Interval.from_datetimes(
+    start=at(2025, 7, 1),
+    end=at(2025, 7, 10)
+)
 ```
 
 Intervals use **exclusive end bounds** `[start, end)`, matching standard Python slicing idioms. In the example above, the interval `[1000, 2000)` covers seconds 1000 through 1999 (2000 is not included). Duration is simply `end - start`, which equals 1000 seconds. Timeline slicing also uses the same exclusive end semantics.

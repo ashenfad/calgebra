@@ -58,6 +58,11 @@ events = timeline(
 
 ## Interval Helpers (`calgebra.interval`)
 - `Interval(start, end)` dataclass with exclusive end bounds `[start, end)`. Duration is `end - start`.
+- `Interval.from_datetimes(start, end, **kwargs)` classmethod to create intervals from timezone-aware `datetime` objects.
+  - Requires timezone-aware datetimes (raises `ValueError` for naive datetimes)
+  - Converts to Unix timestamps automatically
+  - Works with all `Interval` subclasses
+  - Example: `Interval.from_datetimes(start=dt1, end=dt2)`
 - Type vars `IvlIn`, `IvlOut` for generic timelines/filters.
 
 ## Properties (`calgebra.properties`)
