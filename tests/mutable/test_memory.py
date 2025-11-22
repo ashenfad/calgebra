@@ -20,7 +20,7 @@ def test_add_single_interval():
     mem = MemoryTimeline()
 
     # Add an interval
-    results = list(mem.add(Interval(start=10, end=20)))
+    results = mem.add(Interval(start=10, end=20))
 
     assert len(results) == 1
     assert results[0].success is True
@@ -34,7 +34,7 @@ def test_add_and_fetch_interval():
     mem = MemoryTimeline()
 
     # Add interval
-    list(mem.add(Interval(start=10, end=20)))
+    mem.add(Interval(start=10, end=20))
 
     # Fetch it back
     result = list(mem[0:100])
@@ -54,9 +54,8 @@ def test_add_multiple_intervals():
         Interval(start=30, end=40),
         Interval(start=50, end=60),
     ]
-
     for interval in intervals:
-        list(mem.add(interval))
+        mem.add(interval)
 
     # Fetch them back
     result = list(mem[0:100])
@@ -75,7 +74,7 @@ def test_add_with_metadata():
     mem = MemoryTimeline()
 
     # Add with metadata
-    results = list(mem.add(Interval(start=10, end=20), summary="Meeting"))
+    results = mem.add(Interval(start=10, end=20), summary="Meeting")
 
     assert len(results) == 1
     assert results[0].success is True
@@ -101,14 +100,14 @@ def test_remove_interval():
     mem = MemoryTimeline()
 
     # Add interval
-    add_results = list(mem.add(Interval(start=10, end=20)))
+    add_results = mem.add(Interval(start=10, end=20))
     added_event = add_results[0].event
 
     # Verify it's there
     assert len(list(mem[0:100])) == 1
 
     # Remove it
-    remove_results = list(mem.remove(added_event))
+    remove_results = mem.remove(added_event)
 
     assert len(remove_results) == 1
     assert remove_results[0].success is True
@@ -122,11 +121,12 @@ def test_remove_nonexistent_interval():
     mem = MemoryTimeline()
 
     # Add interval
-    list(mem.add(Interval(start=10, end=20)))
+    mem.add(Interval(start=10, end=20))
 
     # Try to remove a different interval (not the one we added)
     fake_interval = Interval(start=30, end=40)
-    results = list(mem.remove(fake_interval))
+    # It should still work because SortedList uses equality
+    results = mem.remove(fake_interval)
 
     assert len(results) == 1
     assert results[0].success is False
@@ -138,9 +138,9 @@ def test_fetch_range_filtering():
     mem = MemoryTimeline()
 
     # Add intervals at different times
-    list(mem.add(Interval(start=10, end=20)))
-    list(mem.add(Interval(start=50, end=60)))
-    list(mem.add(Interval(start=90, end=100)))
+    mem.add(Interval(start=10, end=20))
+    mem.add(Interval(start=50, end=60))
+    mem.add(Interval(start=90, end=100))
 
     # Fetch middle range
     result = list(mem[40:80])

@@ -6,5 +6,6 @@
   "reportExplicitAny": "none",
   "reportAny": "none",
   "reportImplicitStringConcatenation": "none",
-  "reportMissingModuleSource": "none"
+  "reportMissingModuleSource": "none",
+  "reportUnknownMemberType": "none"
 }
