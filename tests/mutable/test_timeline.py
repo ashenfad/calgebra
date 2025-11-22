@@ -7,7 +7,8 @@ from zoneinfo import ZoneInfo
 import pytest
 from typing_extensions import override
 
-from calgebra.core import Intersection, Timeline, flatten, intersection, timeline, union
+from calgebra.core import Intersection, Timeline, flatten, intersection, union
+from calgebra.mutable.memory import timeline
 from calgebra.interval import Interval
 from calgebra.metrics import (
     count_intervals,

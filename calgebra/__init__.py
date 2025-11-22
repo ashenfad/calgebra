@@ -1,6 +1,7 @@
 from importlib.resources import files
 
-from .core import Filter, Timeline, flatten, intersection, timeline, union
+from .core import Filter, Timeline, flatten, intersection, union
+from .mutable.memory import timeline
 from .interval import Interval
 from .metrics import (
     count_intervals,
