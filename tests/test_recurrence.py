@@ -532,3 +532,182 @@ def test_recurring_raw_lookback_captures_all_overlaps():
 
     # Should have at least 9 events (Jan 7-15)
     assert len(results) >= 9
+
+
+# Tests for RRULE string conversion
+def test_rrule_string_daily():
+    """Test RRULE conversion for daily patterns."""
+    from calgebra.recurrence import RecurringPattern
+
+    pattern = RecurringPattern(freq="daily")
+    assert pattern.to_rrule_string() == "FREQ=DAILY"
+
+
+def test_rrule_string_weekly_single_day():
+    """Test RRULE conversion for weekly pattern with single day."""
+    from calgebra.recurrence import RecurringPattern
+
+    pattern = RecurringPattern(freq="weekly", day="monday")
+    assert pattern.to_rrule_string() == "FREQ=WEEKLY;BYDAY=MO"
+
+
+def test_rrule_string_weekly_multiple_days():
+    """Test RRULE conversion for weekly pattern with multiple days."""
+    from calgebra.recurrence import RecurringPattern
+
+    pattern = RecurringPattern(freq="weekly", day=["monday", "wednesday", "friday"])
+    rrule_str = pattern.to_rrule_string()
+    # Order may vary, so check components
+    assert rrule_str.startswith("FREQ=WEEKLY;BYDAY=")
+    assert "MO" in rrule_str
+    assert "WE" in rrule_str
+    assert "FR" in rrule_str
+
+
+def test_rrule_string_weekly_with_interval():
+    """Test RRULE conversion for bi-weekly pattern."""
+    from calgebra.recurrence import RecurringPattern
+
+    pattern = RecurringPattern(freq="weekly", day="tuesday", interval=2)
+    assert pattern.to_rrule_string() == "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU"
+
+
+def test_rrule_string_monthly_first_monday():
+    """Test RRULE conversion for first Monday of month."""
+    from calgebra.recurrence import RecurringPattern
+
+    pattern = RecurringPattern(freq="monthly", week=1, day="monday")
+    assert pattern.to_rrule_string() == "FREQ=MONTHLY;BYDAY=1MO"
+
+
+def test_rrule_string_monthly_last_friday():
+    """Test RRULE conversion for last Friday of month."""
+    from calgebra.recurrence import RecurringPattern
+
+    pattern = RecurringPattern(freq="monthly", week=-1, day="friday")
+    assert pattern.to_rrule_string() == "FREQ=MONTHLY;BYDAY=-1FR"
+
+
+def test_rrule_string_monthly_second_wednesday():
+    """Test RRULE conversion for second Wednesday of month."""
+    from calgebra.recurrence import RecurringPattern
+
+    pattern = RecurringPattern(freq="monthly", week=2, day="wednesday")
+    assert pattern.to_rrule_string() == "FREQ=MONTHLY;BYDAY=2WE"
+
+
+def test_rrule_string_monthly_by_day_of_month():
+    """Test RRULE conversion for monthly pattern by day of month."""
+    from calgebra.recurrence import RecurringPattern
+
+    pattern = RecurringPattern(freq="monthly", day_of_month=1)
+    assert pattern.to_rrule_string() == "FREQ=MONTHLY;BYMONTHDAY=1"
+
+
+def test_rrule_string_monthly_multiple_days_of_month():
+    """Test RRULE conversion for monthly pattern with multiple days."""
+    from calgebra.recurrence import RecurringPattern
+
+    pattern = RecurringPattern(freq="monthly", day_of_month=[1, 15])
+    rrule_str = pattern.to_rrule_string()
+    assert rrule_str.startswith("FREQ=MONTHLY;BYMONTHDAY=")
+    assert "1" in rrule_str
+    assert "15" in rrule_str
+
+
+def test_rrule_string_monthly_last_day():
+    """Test RRULE conversion for last day of month."""
+    from calgebra.recurrence import RecurringPattern
+
+    pattern = RecurringPattern(freq="monthly", day_of_month=-1)
+    assert pattern.to_rrule_string() == "FREQ=MONTHLY;BYMONTHDAY=-1"
+
+
+def test_rrule_string_yearly_by_month():
+    """Test RRULE conversion for yearly pattern by month."""
+    from calgebra.recurrence import RecurringPattern
+
+    pattern = RecurringPattern(freq="yearly", month=6)
+    assert pattern.to_rrule_string() == "FREQ=YEARLY;BYMONTH=6"
+
+
+def test_rrule_string_yearly_multiple_months():
+    """Test RRULE conversion for yearly pattern with multiple months."""
+    from calgebra.recurrence import RecurringPattern
+
+    pattern = RecurringPattern(freq="yearly", month=[1, 4, 7, 10])
+    rrule_str = pattern.to_rrule_string()
+    assert rrule_str.startswith("FREQ=YEARLY;BYMONTH=")
+    assert "1" in rrule_str
+    assert "4" in rrule_str
+    assert "7" in rrule_str
+    assert "10" in rrule_str
+
+
+def test_rrule_string_yearly_with_day_of_month():
+    """Test RRULE conversion for yearly pattern with day of month."""
+    from calgebra.recurrence import RecurringPattern
+
+    pattern = RecurringPattern(freq="yearly", month=4, day_of_month=15)
+    rrule_str = pattern.to_rrule_string()
+    assert "FREQ=YEARLY" in rrule_str
+    assert "BYMONTH=4" in rrule_str
+    assert "BYMONTHDAY=15" in rrule_str
+
+
+def test_rrule_string_complex_pattern():
+    """Test RRULE conversion for complex pattern (first Monday of quarter)."""
+    from calgebra.recurrence import RecurringPattern
+
+    # Every 3 months (quarterly), first Monday
+    pattern = RecurringPattern(freq="monthly", interval=3, week=1, day="monday")
+    rrule_str = pattern.to_rrule_string()
+    assert "FREQ=MONTHLY" in rrule_str
+    assert "INTERVAL=3" in rrule_str
+    assert "BYDAY=1MO" in rrule_str
+
+
+def test_rrule_string_direct_helper():
+    """Test rrule_kwargs_to_rrule_string helper function directly."""
+    from calgebra.recurrence import rrule_kwargs_to_rrule_string
+    from dateutil.rrule import WEEKLY, MONTHLY, MO, FR
+
+    # Test with dateutil constants directly
+    kwargs = {"freq": WEEKLY, "byweekday": [MO], "interval": 2}
+    assert rrule_kwargs_to_rrule_string(kwargs) == "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO"
+
+    kwargs = {"freq": MONTHLY, "byweekday": [MO(1)]}
+    assert rrule_kwargs_to_rrule_string(kwargs) == "FREQ=MONTHLY;BYDAY=1MO"
+
+    kwargs = {"freq": MONTHLY, "byweekday": [FR(-1)]}
+    assert rrule_kwargs_to_rrule_string(kwargs) == "FREQ=MONTHLY;BYDAY=-1FR"
+
+
+def test_rrule_string_all_weekdays():
+    """Test RRULE conversion for all weekdays."""
+    from calgebra.recurrence import RecurringPattern
+
+    pattern = RecurringPattern(
+        freq="weekly",
+        day=["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+    )
+    rrule_str = pattern.to_rrule_string()
+    assert rrule_str.startswith("FREQ=WEEKLY;BYDAY=")
+    for day in ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]:
+        assert day in rrule_str
+
+
+def test_rrule_string_error_missing_freq():
+    """Test that missing freq raises error."""
+    from calgebra.recurrence import rrule_kwargs_to_rrule_string
+
+    with pytest.raises(ValueError, match="must include 'freq'"):
+        rrule_kwargs_to_rrule_string({})
+
+
+def test_rrule_string_error_unsupported_freq():
+    """Test that unsupported freq raises error."""
+    from calgebra.recurrence import rrule_kwargs_to_rrule_string
+
+    with pytest.raises(ValueError, match="Unsupported frequency"):
+        rrule_kwargs_to_rrule_string({"freq": 999})
