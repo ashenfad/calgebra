@@ -5,7 +5,6 @@ backed by python-dateutil's battle-tested rrule implementation.
 """
 
 from collections.abc import Iterable
-from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any, Generic, Literal, TypeAlias, TypeVar
 from zoneinfo import ZoneInfo
@@ -58,20 +57,21 @@ _FREQ_MAP = {
 
 class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
     """Generate recurring intervals based on RFC 5545 recurrence rules.
-    
-    Supports both mask mode (no metadata) and rich mode (with interval_class and metadata).
+
+    Supports both mask mode (no metadata) and rich mode (with interval_class and
+    metadata).
     """
 
     @property
     @override
     def _is_mask(self) -> bool:
         """Mask only if using base Interval class with no metadata."""
-        return self._interval_class is Interval and not self._metadata
+        return self.interval_class is Interval and not self.metadata
 
     @property
     def recurrence_rule(self) -> Any:
         """Return the rrule for this recurring pattern.
-        
+
         Reconstructs the rrule from stored parameters. This is used by
         MutableTimeline.add() to determine if a timeline can be written
         symbolically to a backend.
@@ -93,6 +93,7 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
         duration: int = DAY,
         tz: str = "UTC",
         interval_class: type[IvlOut] = Interval,  # type: ignore
+        exdates: Iterable[int] | None = None,
         **metadata: Any,
     ):
         """
@@ -112,14 +113,31 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
             tz: IANA timezone name
             interval_class: Class to instantiate for each interval (default: Interval)
             **metadata: Additional metadata fields to apply to each interval
+            day: Day(s) of week to include
+            week: Week number(s) (1-53)
+            day_of_month: Day(s) of month (1-31)
+            month: Month(s) (1-12)
+            start: Start time in seconds from epoch (default 0)
+            duration: Duration in seconds (default DAY)
+            tz: IANA timezone name (default "UTC")
+            interval_class: Class to use for generated intervals
+            exdates: Optional set of excluded start timestamps (seconds from epoch)
+            **metadata: Additional metadata to store on generated intervals
         """
-        self.zone: ZoneInfo = ZoneInfo(tz)
-        self.start_seconds: int = start
-        self.duration_seconds: int = duration
-        self.freq: str = freq
-        self.interval: int = interval
-        self._interval_class: type[IvlOut] = interval_class
-        self._metadata: dict[str, Any] = metadata
+        self.freq = freq
+        self.interval = interval
+        self.start_seconds = start
+        self.duration_seconds = duration
+        self.zone = ZoneInfo(tz)
+        self.interval_class = interval_class
+        self.metadata = metadata
+        self.exdates = set(exdates) if exdates else set()
+
+        # Store original recurrence parameters for easy reconstruction
+        self.day = day
+        self.week = week
+        self.day_of_month = day_of_month
+        self.month = month
 
         # Build rrule kwargs
         rrule_kwargs: dict[str, Any] = {
@@ -229,7 +247,7 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
         return start_dt
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
+    def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
         """Generate recurring intervals using a single continuous rrule iterator.
 
         Supports unbounded end queries.
@@ -272,6 +290,11 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
 
         # 4. Stream results
         for occurrence in rules:
+            # Check if this occurrence is excluded
+            timestamp = int(occurrence.timestamp())
+            if timestamp in self.exdates:
+                continue
+
             ivl = self._occurrence_to_interval(occurrence)
 
             # Fast-forward: Skip if it ends before our query window
@@ -287,7 +310,7 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
             yield ivl
 
     def _occurrence_to_interval(self, occurrence: datetime) -> IvlOut:
-        """Convert an rrule occurrence to an Interval with time window and metadata applied."""
+        """Convert an rrule occurrence to an Interval with time window and metadata."""
         start_hour_int = self.start_seconds // 3600
         remaining = self.start_seconds % 3600
         start_minute = remaining // 60
@@ -300,12 +323,12 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
         window_end = window_start + timedelta(seconds=self.duration_seconds)
 
         # Create interval with metadata
-        base_interval = self._interval_class(
-            start=int(window_start.timestamp()), 
+        base_interval = self.interval_class(
+            start=int(window_start.timestamp()),
             end=int(window_end.timestamp()),
-            **self._metadata
+            **self.metadata,
         )
-        
+
         return base_interval
 
 

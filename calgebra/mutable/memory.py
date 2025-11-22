@@ -5,64 +5,44 @@ in-memory storage. It's useful for testing, prototyping, and ephemeral calendars
 """
 
 import bisect
-from collections.abc import Iterable, Sequence
+import heapq
+from collections.abc import Iterable
 from dataclasses import replace
-from typing import Any, Generic
+from typing import Any, Literal, cast
 
+from sortedcontainers import SortedList
+from typing_extensions import override
+
+from calgebra.interval import Interval
 from calgebra.mutable import MutableTimeline, WriteResult
-from calgebra.core import Union, Timeline
-from calgebra.interval import Interval, IvlOut
 from calgebra.recurrence import RecurringPattern
 
 
-class _StaticTimeline(Timeline[IvlOut], Generic[IvlOut]):
-    """Timeline backed by a static collection of intervals.
+def _interval_sort_key(interval: Interval) -> tuple[int | float, int | float]:
+    """Key function for sorting intervals by start and end."""
+    return (interval.finite_start, interval.finite_end)
 
-    Internal helper class used by MemoryTimeline for efficient querying.
+
+def _get_recurrence_params(
+    pattern: RecurringPattern[Interval],
+) -> dict[str, Any]:
+    """Get recurrence parameters from a pattern.
+
+    Returns a dict with day, week, day_of_month, month for use in creating
+    a new RecurringPattern with merged metadata.
     """
+    params: dict[str, Any] = {}
 
-    def __init__(self, intervals: Sequence[IvlOut]):
-        # Use finite properties for sorting to handle None (unbounded) values
-        self._intervals: tuple[IvlOut, ...] = tuple(
-            sorted(intervals, key=lambda e: (e.finite_start, e.finite_end))
-        )
+    if pattern.day is not None:
+        params["day"] = pattern.day
+    if pattern.week is not None:
+        params["week"] = pattern.week
+    if pattern.day_of_month is not None:
+        params["day_of_month"] = pattern.day_of_month
+    if pattern.month is not None:
+        params["month"] = pattern.month
 
-        # Build max-end prefix array for efficient query pruning
-        # max_end_prefix[i] = max(interval.finite_end for interval in intervals[:i+1])
-        self._max_end_prefix: list[int] = []
-        max_so_far = float("-inf")
-        for interval in self._intervals:
-            max_so_far = max(max_so_far, interval.finite_end)
-            self._max_end_prefix.append(int(max_so_far))
-
-    def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
-        # Use binary search to narrow the range of intervals to check
-        # Intervals are sorted by (finite_start, finite_end)
-
-        if not self._intervals:
-            return
-
-        start_idx = 0
-        end_idx = len(self._intervals)
-
-        # Use max-end prefix to skip intervals that definitely can't overlap
-        # Find first position where max_end >= start (all before can be skipped)
-        if start is not None:
-            start_idx = bisect.bisect_left(self._max_end_prefix, start)
-
-        # Use binary search on starts to find where to stop iterating
-        # Find first interval with finite_start > end
-        if end is not None:
-            end_idx = bisect.bisect_right(
-                self._intervals, end, key=lambda interval: interval.finite_start
-            )
-
-        # Iterate only through the narrowed range
-        for interval in self._intervals[start_idx:end_idx]:
-            # Final filter: skip intervals that end before our start bound
-            if start is not None and interval.finite_end <= start:
-                continue
-            yield interval
+    return params
 
 
 class MemoryTimeline(MutableTimeline[Interval]):
@@ -74,7 +54,6 @@ class MemoryTimeline(MutableTimeline[Interval]):
     Attributes:
         _recurring_patterns: List of recurring pattern timelines
         _static_intervals: List of individual interval objects
-        _next_id: Counter for assigning unique IDs to static intervals
     """
 
     def __init__(self, intervals: Iterable[Interval] = ()) -> None:
@@ -83,15 +62,19 @@ class MemoryTimeline(MutableTimeline[Interval]):
         Args:
             intervals: Optional initial intervals to add (creates static storage)
         """
-        self._recurring_patterns: list[RecurringPattern] = []
-        self._static_intervals: list[Interval] = []
-        self._next_id: int = 0
+        # Store recurring patterns with their unique IDs
+        # Format: list of (recurring_event_id, RecurringPattern) tuples
+        self._recurring_patterns: list[tuple[str, RecurringPattern[Interval]]] = []
+        # Use SortedList for O(log n) inserts (stays sorted automatically)
+        ivls = SortedList(key=_interval_sort_key)
+        self._static_intervals: list[Interval] = ivls
 
         # Add any initial intervals
         for interval in intervals:
             # Consume the WriteResult iterator
             list(self._add_interval(interval, vars(interval)))
 
+    @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
         """Fetch intervals by unioning recurring patterns and static storage.
 
@@ -102,163 +85,252 @@ class MemoryTimeline(MutableTimeline[Interval]):
         Returns:
             Iterator of intervals in the given range
         """
-        parts: list[RecurringPattern | _StaticTimeline] = []
+        iterators: list[Iterable[Interval]] = []
 
-        # Add all recurring patterns
-        parts.extend(self._recurring_patterns)
+        # 1. Recurring patterns
+        for _, pattern in self._recurring_patterns:
+            iterators.append(pattern.fetch(start, end))
 
-        # Add static timeline if non-empty
+        # 2. Static intervals (optimized fetch)
         if self._static_intervals:
-            parts.append(_StaticTimeline(self._static_intervals))
+            iterators.append(self._fetch_static(start, end))
 
-        if not parts:
-            return iter([])
+        # Merge all streams while maintaining sort order
+        # Note: heapq.merge expects sorted inputs, which we guarantee
+        # Use finite_start for comparison to handle None
+        return heapq.merge(*iterators, key=lambda x: x.finite_start)
 
-        # Union everything together
-        if len(parts) == 1:
-            return parts[0].fetch(start, end)
-        else:
-            combined = Union(*parts)
-            return combined.fetch(start, end)
+    def _fetch_static(self, start: int | None, end: int | None) -> Iterable[Interval]:
+        """Fetch from static intervals with binary search optimization."""
+        if not self._static_intervals:
+            return
 
+        # Optimization: Binary search for the end bound
+        # Intervals starting after query end can be skipped
+        end_idx = len(self._static_intervals)
+        if end is not None:
+            # Find first interval with finite_start > end
+            # SortedList supports bisect_right directly, but we use bisect module
+            # for compatibility with standard lists if we swap implementation
+            end_idx = bisect.bisect_right(
+                self._static_intervals, end, key=lambda interval: interval.finite_start
+            )
+        # Iterate through potentially overlapping intervals
+        # We start from 0 because an early interval could be very long and overlap
+        for i in range(end_idx):
+            interval = self._static_intervals[i]
+
+            # Skip intervals that end before our start bound
+            if start is not None and interval.finite_end <= start:
+                continue
+
+            yield interval
+
+    @override
     def _add_interval(
         self, interval: Interval, metadata: dict[str, Any]
-    ) -> Iterable[WriteResult]:
+    ) -> list[WriteResult]:
         """Add a single interval to static storage.
 
         Args:
             interval: The interval to add
             metadata: Merged metadata (interval fields + kwargs)
 
-        Yields:
-            WriteResult indicating success
+        Returns:
+            List containing single WriteResult
         """
         # For base Interval class, we can't add extra fields like 'id'
         # Just store the interval as-is
         # Subclasses with id field would work with replace()
-        
-        # Filter metadata to only include fields the interval class supports
-        interval_fields = set(vars(interval).keys())
-        safe_metadata = {k: v for k, v in metadata.items() if k in interval_fields}
-        
+
         # Try to update with safe metadata
-        try:
-            if safe_metadata != vars(interval):
-                interval_with_metadata = replace(interval, **safe_metadata)
-            else:
+        if metadata:
+            # Apply metadata overrides to the interval
+            try:
+                interval_with_metadata = replace(interval, **metadata)
+            except TypeError:
+                # If replace fails (e.g. invalid fields), just use the original
+                # but maybe we should warn or error? For now, silent fallback.
                 interval_with_metadata = interval
-        except (TypeError, ValueError):
-            # If replace fails, just use the original interval
+        else:
             interval_with_metadata = interval
 
-        self._static_intervals.append(interval_with_metadata)
+        cast(SortedList, self._static_intervals).add(interval_with_metadata)
 
-        yield WriteResult(
-            success=True, event=interval_with_metadata, error=None
-        )
+        return [WriteResult(success=True, event=interval_with_metadata, error=None)]
 
+    @override
     def _add_recurring(
-        self, pattern: "RecurringPattern", metadata: dict[str, Any]
-    ) -> Iterable[WriteResult]:
+        self, pattern: RecurringPattern[Interval], metadata: dict[str, Any]
+    ) -> list[WriteResult]:
         """Add a recurring pattern to recurring storage.
 
         Args:
             pattern: RecurringPattern with rrule and optional metadata
             metadata: Additional metadata to override pattern's metadata
 
-        Yields:
-            WriteResult indicating success
+        Returns:
+            List containing single WriteResult
         """
-        # If metadata is provided, create a new pattern with merged metadata
-        # Pattern's own metadata + override metadata
-        if metadata:
-            # Merge pattern's metadata with additional overrides
-            from calgebra.recurrence import RecurringPattern
-            
-            merged_metadata = {**pattern._metadata, **metadata}
-            
-            # Create new pattern with merged metadata
-            enriched_pattern = RecurringPattern(
-                freq=pattern.freq,
-                interval=pattern.interval,
-                duration=pattern.duration_seconds,
-                tz=str(pattern.zone),
-                interval_class=pattern._interval_class,
-                **merged_metadata
-            )
-            self._recurring_patterns.append(enriched_pattern)
-        else:
-            # Use pattern as-is
-            self._recurring_patterns.append(pattern)
+        # Use pattern's object ID as recurring_event_id
+        recurring_id = str(id(pattern))
 
-        yield WriteResult(success=True, event=None, error=None)
+        # Merge metadata with recurring_event_id (if interval class supports it)
+        merged_metadata = {**pattern.metadata, **metadata}
 
-    def _remove_interval(self, interval: Interval) -> Iterable[WriteResult]:
-        """Remove a specific interval from static storage.
+        # Check if interval_class has recurring_event_id field
+        # Only add it if the class supports it (not base Interval)
+        interval_fields: set[str] = set()
+        if hasattr(pattern.interval_class, "__annotations__"):
+            interval_fields = set(pattern.interval_class.__annotations__.keys())
+        if "recurring_event_id" in interval_fields:
+            merged_metadata["recurring_event_id"] = recurring_id
 
-        Args:
-            interval: The interval to remove
-
-        Yields:
-            WriteResult indicating success or failure
-        """
-        # Try to match by ID if available
-        if hasattr(interval, "id") and interval.id is not None:
-            for i, stored in enumerate(self._static_intervals):
-                if hasattr(stored, "id") and stored.id == interval.id:
-                    removed = self._static_intervals.pop(i)
-                    yield WriteResult(success=True, event=removed, error=None)
-                    return
-        
-        # Otherwise, try to match by equality
-        try:
-            idx = self._static_intervals.index(interval)
-            removed = self._static_intervals.pop(idx)
-            yield WriteResult(success=True, event=removed, error=None)
-            return
-        except ValueError:
-            pass
-
-        # Not found
-        yield WriteResult(
-            success=False,
-            event=None,
-            error=ValueError(f"Interval not found in memory timeline"),
+        # Create new pattern with merged metadata
+        enriched_pattern = RecurringPattern(
+            freq=cast(Literal["daily", "weekly", "monthly", "yearly"], pattern.freq),
+            interval=pattern.interval,
+            duration=pattern.duration_seconds,
+            start=pattern.start_seconds,
+            tz=str(pattern.zone),
+            interval_class=pattern.interval_class,
+            exdates=pattern.exdates,
+            **_get_recurrence_params(pattern),
+            **merged_metadata,
         )
 
-    def _remove_series(self, interval: Interval) -> Iterable[WriteResult]:
+        # Store pattern with its ID
+        self._recurring_patterns.append((recurring_id, enriched_pattern))
+
+        return [WriteResult(success=True, event=None, error=None)]
+
+    @override
+    def _remove_interval(self, interval: Interval) -> list[WriteResult]:
+        """Remove a single interval from the static list."""
+        recurring_id = getattr(interval, "recurring_event_id", None)
+        if recurring_id:
+            return self._remove_recurring_instance(interval)
+
+        try:
+            self._static_intervals.remove(interval)
+            return [WriteResult(success=True, event=interval, error=None)]
+        except ValueError:
+            return [
+                WriteResult(
+                    success=False,
+                    event=interval,
+                    error=ValueError(f"Interval {interval} not found in timeline"),
+                )
+            ]
+
+    @override
+    def _remove_series(self, interval: Interval) -> list[WriteResult]:
         """Remove a recurring series by recurring_event_id.
 
         Args:
             interval: An interval from the series to remove
 
-        Yields:
-            WriteResult indicating success or failure
+        Returns:
+            List containing WriteResult
 
         Note:
             For MemoryTimeline, this removes the entire recurring pattern
             that matches the recurring_event_id.
         """
-        if not hasattr(interval, "recurring_event_id"):
-            # Not a recurring event - treat as single interval removal
-            yield from self._remove_interval(interval)
-            return
-
-        recurring_id = interval.recurring_event_id
+        recurring_id = getattr(interval, "recurring_event_id", None)
         if recurring_id is None:
-            # No recurring ID - treat as single interval removal
-            yield from self._remove_interval(interval)
-            return
+            # Not a recurring event - treat as single interval removal
+            return self._remove_interval(interval)
 
-        # Find and remove the recurring pattern
-        # This is simplified - real implementation would need to track recurring IDs
-        yield WriteResult(
-            success=False,
-            event=None,
-            error=NotImplementedError(
-                "Removing recurring series not yet implemented for MemoryTimeline"
-            ),
-        )
+        # Find and remove the recurring pattern by ID
+        for i, (pattern_id, _) in enumerate(self._recurring_patterns):
+            if pattern_id == recurring_id:
+                self._recurring_patterns.pop(i)
+                return [
+                    WriteResult(
+                        success=True,
+                        event=None,  # Could return the pattern itself if needed
+                        error=None,
+                    )
+                ]
+
+        # Pattern not found
+        return [
+            WriteResult(
+                success=False,
+                event=None,
+                error=ValueError(
+                    f"Recurring series with ID '{recurring_id}' not found in timeline"
+                ),
+            )
+        ]
+
+    def _remove_recurring_instance(self, interval: Interval) -> list[WriteResult]:
+        """Remove a single instance of a recurring pattern via exdate."""
+        recurring_id = getattr(interval, "recurring_event_id", None)
+        if recurring_id is None:
+            return [
+                WriteResult(
+                    success=False,
+                    event=interval,
+                    error=ValueError("Interval does not have recurring_event_id"),
+                )
+            ]
+
+        # Find the pattern
+        for stored_id, pattern in self._recurring_patterns:
+            if stored_id == recurring_id:
+                # Add start time to exdates
+                # Note: We modify the pattern in-place. Since RecurringPattern
+                # is mutable (it has exdates set), this works.
+
+                # Check if start is finite
+                if interval.start is None:
+                    return [
+                        WriteResult(
+                            success=False,
+                            event=interval,
+                            error=ValueError(
+                                "Cannot remove unbounded interval instance"
+                            ),
+                        )
+                    ]
+
+                pattern.exdates.add(interval.start)
+                return [WriteResult(success=True, event=interval, error=None)]
+
+        return [
+            WriteResult(
+                success=False,
+                event=interval,
+                error=ValueError(f"Recurring pattern {recurring_id} not found"),
+            )
+        ]
+
+    @override
+    def _remove_many(self, intervals: Iterable[Interval]) -> list[WriteResult]:
+        """Remove multiple intervals.
+
+        For MemoryTimeline, this just loops through and calls _remove_interval.
+        No special batch optimization needed since we're using in-memory structures.
+        """
+        results = []
+        for interval in intervals:
+            results.extend(self._remove_interval(interval))
+        return results
+
+    @override
+    def _remove_many_series(self, intervals: Iterable[Interval]) -> list[WriteResult]:
+        """Remove multiple recurring series.
+
+        For MemoryTimeline, this just loops through and calls _remove_series.
+        No special batch optimization needed since we're using in-memory structures.
+        """
+        results = []
+        for interval in intervals:
+            results.extend(self._remove_series(interval))
+        return results
+
 
 def timeline(*intervals: Interval) -> MemoryTimeline:
     """Create a mutable timeline from a collection of intervals.

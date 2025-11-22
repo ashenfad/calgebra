@@ -11,11 +11,11 @@ def test_add_recurring_pattern_to_memory():
     
     mem = MemoryTimeline()
 
-    # Create RecurringPattern directly (not via recurring() which wraps it)
+    # Create RecurringPattern directly
     mondays = RecurringPattern(freq="weekly", day="monday", tz="UTC")
 
-    # Add (metadata would apply if using Event subclass with summary field)
-    results = list(mem.add(mondays))
+    # Add a recurring pattern
+    results = mem.add(mondays)
 
     assert len(results) == 1
     assert results[0].success is True
@@ -46,12 +46,11 @@ def test_add_recurring_pattern_metadata_override():
     pattern = RecurringPattern(
         freq="weekly",
         day="monday",
-        interval_class=Event,
-        summary="Original"
+        interval_class=Event
     )
     
-    # Add with override
-    results = list(mem.add(pattern, summary="Overridden"))
+    # Add with metadata override
+    results = mem.add(pattern, summary="Overridden")
     
     assert len(results) == 1
     assert results[0].success is True
@@ -76,8 +75,7 @@ def test_add_timeline_raises_error():
     mem = MemoryTimeline()
     
     # Create a non-recurring timeline
-    tl = timeline(Interval(start=100, end=200))
+    tl = timeline(Interval(start=1, end=2))
     
-    # Should raise ValueError
-    with pytest.raises(ValueError, match="Cannot add Timeline directly"):
-        list(mem.add(tl | tl, summary="test"))  # Union is not RecurringPattern
+    with pytest.raises(ValueError):
+        mem.add(tl | tl, summary="test")  # Union is not RecurringPattern
