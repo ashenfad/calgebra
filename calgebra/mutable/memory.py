@@ -8,7 +8,8 @@ from collections.abc import Iterable
 from dataclasses import replace
 from typing import Any
 
-from calgebra.core import MutableTimeline, Union, WriteResult, _StaticTimeline
+from calgebra.mutable import MutableTimeline, WriteResult
+from calgebra.core import Union, _StaticTimeline
 from calgebra.interval import Interval
 from calgebra.recurrence import RecurringPattern
 
