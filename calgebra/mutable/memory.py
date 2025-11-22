@@ -4,14 +4,65 @@ This module provides MemoryTimeline, a simple mutable timeline backed by
 in-memory storage. It's useful for testing, prototyping, and ephemeral calendars.
 """
 
-from collections.abc import Iterable
+import bisect
+from collections.abc import Iterable, Sequence
 from dataclasses import replace
-from typing import Any
+from typing import Any, Generic
 
 from calgebra.mutable import MutableTimeline, WriteResult
-from calgebra.core import Union, _StaticTimeline
-from calgebra.interval import Interval
+from calgebra.core import Union, Timeline
+from calgebra.interval import Interval, IvlOut
 from calgebra.recurrence import RecurringPattern
+
+
+class _StaticTimeline(Timeline[IvlOut], Generic[IvlOut]):
+    """Timeline backed by a static collection of intervals.
+
+    Internal helper class used by MemoryTimeline for efficient querying.
+    """
+
+    def __init__(self, intervals: Sequence[IvlOut]):
+        # Use finite properties for sorting to handle None (unbounded) values
+        self._intervals: tuple[IvlOut, ...] = tuple(
+            sorted(intervals, key=lambda e: (e.finite_start, e.finite_end))
+        )
+
+        # Build max-end prefix array for efficient query pruning
+        # max_end_prefix[i] = max(interval.finite_end for interval in intervals[:i+1])
+        self._max_end_prefix: list[int] = []
+        max_so_far = float("-inf")
+        for interval in self._intervals:
+            max_so_far = max(max_so_far, interval.finite_end)
+            self._max_end_prefix.append(int(max_so_far))
+
+    def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
+        # Use binary search to narrow the range of intervals to check
+        # Intervals are sorted by (finite_start, finite_end)
+
+        if not self._intervals:
+            return
+
+        start_idx = 0
+        end_idx = len(self._intervals)
+
+        # Use max-end prefix to skip intervals that definitely can't overlap
+        # Find first position where max_end >= start (all before can be skipped)
+        if start is not None:
+            start_idx = bisect.bisect_left(self._max_end_prefix, start)
+
+        # Use binary search on starts to find where to stop iterating
+        # Find first interval with finite_start > end
+        if end is not None:
+            end_idx = bisect.bisect_right(
+                self._intervals, end, key=lambda interval: interval.finite_start
+            )
+
+        # Iterate only through the narrowed range
+        for interval in self._intervals[start_idx:end_idx]:
+            # Final filter: skip intervals that end before our start bound
+            if start is not None and interval.finite_end <= start:
+                continue
+            yield interval
 
 
 class MemoryTimeline(MutableTimeline[Interval]):
@@ -208,3 +259,42 @@ class MemoryTimeline(MutableTimeline[Interval]):
                 "Removing recurring series not yet implemented for MemoryTimeline"
             ),
         )
+
+def timeline(*intervals: Interval) -> MemoryTimeline:
+    """Create a mutable timeline from a collection of intervals.
+
+    This is a convenience function for creating in-memory timelines without needing to
+    instantiate MemoryTimeline directly. The returned timeline is mutable and sorts
+    intervals by (start, end).
+
+    Args:
+        *intervals: Variable number of interval objects
+
+    Returns:
+        MemoryTimeline containing the provided intervals
+
+    Example:
+        >>> from calgebra.mutable.memory import timeline
+        >>> from calgebra import Interval
+        >>>
+        >>> # Create a simple timeline
+        >>> my_timeline = timeline(
+        ...     Interval(start=1000, end=2000),
+        ...     Interval(start=5000, end=6000),
+        ... )
+        >>>
+        >>> # Can add more intervals later
+        >>> list(my_timeline.add(Interval(start=3000, end=4000)))
+        >>>
+        >>> # Works with subclassed intervals too
+        >>> from dataclasses import dataclass
+        >>> @dataclass(frozen=True, kw_only=True)
+        ... class Event(Interval):
+        ...     title: str
+        >>>
+        >>> events = timeline(
+        ...     Event(start=1000, end=2000, title="Meeting"),
+        ...     Event(start=5000, end=6000, title="Lunch"),
+        ... )
+    """
+    return MemoryTimeline(intervals)
