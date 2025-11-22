@@ -5,8 +5,9 @@ backed by python-dateutil's battle-tested rrule implementation.
 """
 
 from collections.abc import Iterable
+from dataclasses import replace
 from datetime import datetime, timedelta
-from typing import Any, Literal, TypeAlias
+from typing import Any, Generic, Literal, TypeAlias, TypeVar
 from zoneinfo import ZoneInfo
 
 from dateutil.rrule import (
@@ -29,6 +30,8 @@ from typing_extensions import override
 from calgebra.core import Timeline, flatten, solid
 from calgebra.interval import Interval
 from calgebra.util import DAY, WEEK
+
+IvlOut = TypeVar("IvlOut", bound=Interval)
 
 Day: TypeAlias = Literal[
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
@@ -53,14 +56,29 @@ _FREQ_MAP = {
 }
 
 
-class _RawRecurringTimeline(Timeline[Interval]):
-    """Generate recurring intervals based on RFC 5545 recurrence rules."""
+class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
+    """Generate recurring intervals based on RFC 5545 recurrence rules.
+    
+    Supports both mask mode (no metadata) and rich mode (with interval_class and metadata).
+    """
 
     @property
     @override
     def _is_mask(self) -> bool:
-        """RecurringTimeline always yields mask Interval objects."""
-        return True
+        """Mask only if using base Interval class with no metadata."""
+        return self._interval_class is Interval and not self._metadata
+
+    @property
+    def recurrence_rule(self) -> Any:
+        """Return the rrule for this recurring pattern.
+        
+        Reconstructs the rrule from stored parameters. This is used by
+        MutableTimeline.add() to determine if a timeline can be written
+        symbolically to a backend.
+        """
+        # Return a fresh rrule instance with our parameters
+        # Note: No dtstart here, it's computed dynamically in fetch()
+        return rrule(**self.rrule_kwargs)
 
     def __init__(
         self,
@@ -74,9 +92,11 @@ class _RawRecurringTimeline(Timeline[Interval]):
         start: int = 0,
         duration: int = DAY,
         tz: str = "UTC",
+        interval_class: type[IvlOut] = Interval,  # type: ignore
+        **metadata: Any,
     ):
         """
-        Initialize a recurring timeline.
+        Initialize a recurring pattern.
 
         Args:
             freq: Frequency - "daily", "weekly", "monthly", or "yearly"
@@ -90,12 +110,16 @@ class _RawRecurringTimeline(Timeline[Interval]):
             start: Start time of each occurrence in seconds from midnight (default 0)
             duration: Duration of each occurrence in seconds (default DAY = full day)
             tz: IANA timezone name
+            interval_class: Class to instantiate for each interval (default: Interval)
+            **metadata: Additional metadata fields to apply to each interval
         """
         self.zone: ZoneInfo = ZoneInfo(tz)
         self.start_seconds: int = start
         self.duration_seconds: int = duration
         self.freq: str = freq
         self.interval: int = interval
+        self._interval_class: type[IvlOut] = interval_class
+        self._metadata: dict[str, Any] = metadata
 
         # Build rrule kwargs
         rrule_kwargs: dict[str, Any] = {
@@ -262,8 +286,8 @@ class _RawRecurringTimeline(Timeline[Interval]):
 
             yield ivl
 
-    def _occurrence_to_interval(self, occurrence: datetime) -> Interval:
-        """Convert an rrule occurrence to an Interval with time window applied."""
+    def _occurrence_to_interval(self, occurrence: datetime) -> IvlOut:
+        """Convert an rrule occurrence to an Interval with time window and metadata applied."""
         start_hour_int = self.start_seconds // 3600
         remaining = self.start_seconds % 3600
         start_minute = remaining // 60
@@ -275,9 +299,14 @@ class _RawRecurringTimeline(Timeline[Interval]):
         # Intervals are now exclusive [start, end), so end = start + duration
         window_end = window_start + timedelta(seconds=self.duration_seconds)
 
-        return Interval(
-            start=int(window_start.timestamp()), end=int(window_end.timestamp())
+        # Create interval with metadata
+        base_interval = self._interval_class(
+            start=int(window_start.timestamp()), 
+            end=int(window_end.timestamp()),
+            **self._metadata
         )
+        
+        return base_interval
 
 
 def recurring(
@@ -371,7 +400,7 @@ def recurring(
         >>> next_five = list(islice(mondays[start:], 5))
     """
     # Generate raw recurring intervals with lookback for overlaps
-    raw = _RawRecurringTimeline(
+    raw = RecurringPattern(
         freq,
         interval=interval,
         day=day,

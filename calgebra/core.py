@@ -5,9 +5,12 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from functools import reduce
-from typing import Any, Generic, Literal, cast, overload
+from typing import TYPE_CHECKING, Any, Generic, Literal, cast, overload
 
 from typing_extensions import override
+
+if TYPE_CHECKING:
+    from calgebra.recurrence import RecurringPattern
 
 from calgebra.interval import NEG_INF, POS_INF, Interval, IvlIn, IvlOut
 
@@ -672,7 +675,9 @@ class MutableTimeline(Timeline[IvlOut], ABC):
     """
 
     def add(
-        self, item: Interval | Iterable[Interval] | Timeline[Interval], **metadata: Any
+        self, 
+        item: "Interval | Iterable[Interval] | RecurringPattern", 
+        **metadata: Any
     ) -> Iterable[WriteResult]:
         """Add events to this timeline.
 
@@ -684,7 +689,7 @@ class MutableTimeline(Timeline[IvlOut], ABC):
             Iterator of WriteResult objects, one per item written
 
         Raises:
-            ValueError: If passed a Timeline without a symbolic recurrence_rule
+            ValueError: If passed a Timeline (not RecurringPattern) - must slice explicitly
 
         Examples:
             # Add single event with metadata
@@ -710,23 +715,30 @@ class MutableTimeline(Timeline[IvlOut], ABC):
             merged_metadata = {**vars(item), **metadata}
             yield from self._add_interval(item, merged_metadata)
 
-        # Timeline with symbolic rule
-        elif isinstance(item, Timeline):
-            rule = getattr(item, "recurrence_rule", None)
-            if rule is not None:
-                yield from self._add_recurring(rule, metadata)
-            else:
-                raise ValueError(
-                    "Cannot add un-sliced timeline without symbolic recurrence rule.\n"
-                    "This timeline has been transformed in a way that lost its symbolic "
-                    "representation (e.g., filtered by duration, differenced, etc.).\n\n"
-                    "To add it, slice with explicit bounds: cal.add(timeline[start:end], summary=...)\n"
-                    "This will unroll the timeline into individual events within those bounds."
-                )
-
-        # Iterable of intervals
+        # RecurringPattern (symbolic)
         else:
-            yield from self._add_many(item, metadata)
+            # Import at runtime to avoid circular dependency
+            from calgebra.recurrence import RecurringPattern
+            
+            if isinstance(item, RecurringPattern):
+                yield from self._add_recurring(item, metadata)
+
+            # Iterable of intervals or unsupported Timeline
+            # Check if it's a Timeline (but not RecurringPattern)
+            elif isinstance(item, Timeline):
+                raise ValueError(
+                    "Cannot add Timeline directly (only RecurringPattern is supported).\n"
+                    "This timeline has been composed/transformed and lost symbolic representation.\n\n"
+                    "To add it, slice with explicit bounds to unroll into intervals:\n"
+                    "  cal.add(timeline[start:end], summary=...)\n\n"
+                    "Or use RecurringPattern directly for recurring events:\n"
+                    "  from calgebra import recurring\n"
+                    "  cal.add(recurring(freq='weekly', day='monday'), summary='Standup')"
+                )
+            
+            # Iterable of intervals (else)
+            else:
+                yield from self._add_many(item, metadata)
 
     def remove(
         self, items: Interval | Iterable[Interval]
@@ -786,16 +798,16 @@ class MutableTimeline(Timeline[IvlOut], ABC):
 
     @abstractmethod
     def _add_recurring(
-        self, rule: Any, metadata: dict[str, Any]
+        self, pattern: "RecurringPattern", metadata: dict[str, Any]
     ) -> Iterable[WriteResult]:
-        """Backend-specific: write a symbolic recurring pattern.
+        """Add a recurring pattern to backend storage.
 
         Args:
-            rule: The recurrence rule (rrule/rruleset)
-            metadata: Event metadata
+            pattern: RecurringPattern with rrule and optional metadata
+            metadata: Additional metadata to apply (overrides pattern's metadata)
 
-        Returns:
-            Iterator yielding a single WriteResult
+        Yields:
+            WriteResult for the recurring series
         """
         pass
 

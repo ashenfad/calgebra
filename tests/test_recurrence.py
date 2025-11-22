@@ -436,14 +436,14 @@ def test_recurring_weekly_with_multi_day_duration():
 def test_recurring_flatten_merges_overlapping_durations():
     """Test that overlapping recurring events are already flattened by recurring()."""
     from calgebra import DAY, recurring
-    from calgebra.recurrence import _RawRecurringTimeline
+    from calgebra.recurrence import RecurringPattern
 
     query_start = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     query_end = int(datetime(2025, 1, 10, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
     # Daily events with 2-day duration: creates continuous coverage
     # recurring() already applies flatten(), so check raw timeline first
-    raw = _RawRecurringTimeline(freq="daily", duration=2 * DAY, tz="UTC")
+    raw = RecurringPattern(freq="daily", duration=2 * DAY, tz="UTC")
     raw_results = list(raw.fetch(query_start, query_end))
 
     # Raw should have many overlapping intervals (one per day)
@@ -498,10 +498,10 @@ def test_recurring_raw_lookback_captures_all_overlaps():
     This directly tests the _generate_page lookback logic.
     """
     from calgebra import DAY
-    from calgebra.recurrence import _RawRecurringTimeline
+    from calgebra.recurrence import RecurringPattern
 
     # Create raw timeline (bypasses the flatten in recurring())
-    raw = _RawRecurringTimeline(
+    raw = RecurringPattern(
         freq="daily", duration=4 * DAY, tz="UTC"  # 4-day duration on daily events
     )
 

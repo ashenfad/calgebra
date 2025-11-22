@@ -10,7 +10,7 @@ from typing import Any
 
 from calgebra.core import MutableTimeline, Union, WriteResult, _StaticTimeline
 from calgebra.interval import Interval
-from calgebra.recurrence import _RawRecurringTimeline
+from calgebra.recurrence import RecurringPattern
 
 
 class MemoryTimeline(MutableTimeline[Interval]):
@@ -31,7 +31,7 @@ class MemoryTimeline(MutableTimeline[Interval]):
         Args:
             intervals: Optional initial intervals to add (creates static storage)
         """
-        self._recurring_patterns: list[_RawRecurringTimeline] = []
+        self._recurring_patterns: list[RecurringPattern] = []
         self._static_intervals: list[Interval] = []
         self._next_id: int = 0
 
@@ -50,7 +50,7 @@ class MemoryTimeline(MutableTimeline[Interval]):
         Returns:
             Iterator of intervals in the given range
         """
-        parts: list[_RawRecurringTimeline | _StaticTimeline] = []
+        parts: list[RecurringPattern | _StaticTimeline] = []
 
         # Add all recurring patterns
         parts.extend(self._recurring_patterns)
@@ -106,40 +106,40 @@ class MemoryTimeline(MutableTimeline[Interval]):
         )
 
     def _add_recurring(
-        self, rule: Any, metadata: dict[str, Any]
+        self, pattern: "RecurringPattern", metadata: dict[str, Any]
     ) -> Iterable[WriteResult]:
         """Add a recurring pattern to recurring storage.
 
         Args:
-            rule: The recurrence rule (rrule/rruleset)
-            metadata: Event metadata
+            pattern: RecurringPattern with rrule and optional metadata
+            metadata: Additional metadata to override pattern's metadata
 
         Yields:
             WriteResult indicating success
         """
-        # Create a RecurringPattern from the rule
-        # For now, we need to extract parameters from the rrule
-        # This is a simplified version - in production we'd need proper conversion
-        from dateutil.rrule import rrule
-
-        if isinstance(rule, rrule):
-            # Extract basic parameters from rrule
-            # This is a placeholder - real implementation would need full conversion
-            pattern = _RawRecurringTimeline(
-                freq="daily",  # Placeholder - would extract from rule._freq
-                duration=metadata.get("duration", 86400),
-                tz=metadata.get("tz", "UTC"),
+        # If metadata is provided, create a new pattern with merged metadata
+        # Pattern's own metadata + override metadata
+        if metadata:
+            # Merge pattern's metadata with additional overrides
+            from calgebra.recurrence import RecurringPattern
+            
+            merged_metadata = {**pattern._metadata, **metadata}
+            
+            # Create new pattern with merged metadata
+            enriched_pattern = RecurringPattern(
+                freq=pattern.freq,
+                interval=pattern.interval,
+                duration=pattern.duration_seconds,
+                tz=str(pattern.zone),
+                interval_class=pattern._interval_class,
+                **merged_metadata
             )
+            self._recurring_patterns.append(enriched_pattern)
+        else:
+            # Use pattern as-is
             self._recurring_patterns.append(pattern)
 
-            yield WriteResult(success=True, event=None, error=None)
-        else:
-            # Unsupported rule type
-            yield WriteResult(
-                success=False,
-                event=None,
-                error=ValueError(f"Unsupported recurrence rule type: {type(rule)}"),
-            )
+        yield WriteResult(success=True, event=None, error=None)
 
     def _remove_interval(self, interval: Interval) -> Iterable[WriteResult]:
         """Remove a specific interval from static storage.
