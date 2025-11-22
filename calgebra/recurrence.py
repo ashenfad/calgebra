@@ -54,6 +54,124 @@ _FREQ_MAP = {
     "yearly": YEARLY,
 }
 
+# Reverse mapping from dateutil constants to RFC 5545 strings
+_FREQ_TO_STRING = {
+    DAILY: "DAILY",
+    WEEKLY: "WEEKLY",
+    MONTHLY: "MONTHLY",
+    YEARLY: "YEARLY",
+}
+
+# Mapping from dateutil weekday constants to RFC 5545 strings
+_WEEKDAY_TO_STRING = {
+    MO: "MO",
+    TU: "TU",
+    WE: "WE",
+    TH: "TH",
+    FR: "FR",
+    SA: "SA",
+    SU: "SU",
+}
+
+# Mapping from weekday integer (0=Monday, 6=Sunday) to RFC 5545 strings
+_WEEKDAY_INT_TO_STRING = {
+    0: "MO",  # Monday
+    1: "TU",  # Tuesday
+    2: "WE",  # Wednesday
+    3: "TH",  # Thursday
+    4: "FR",  # Friday
+    5: "SA",  # Saturday
+    6: "SU",  # Sunday
+}
+
+
+def rrule_kwargs_to_rrule_string(rrule_kwargs: dict[str, Any]) -> str:
+    """Convert dateutil rrule kwargs to RFC 5545 RRULE string.
+
+    Args:
+        rrule_kwargs: Dictionary of rrule parameters (from dateutil.rrule)
+
+    Returns:
+        RFC 5545 RRULE string (e.g., "FREQ=WEEKLY;BYDAY=MO;INTERVAL=2")
+
+    Examples:
+        >>> from dateutil.rrule import WEEKLY, MO
+        >>> kwargs = {"freq": WEEKLY, "byweekday": [MO], "interval": 2}
+        >>> rrule_kwargs_to_rrule_string(kwargs)
+        'FREQ=WEEKLY;BYDAY=MO;INTERVAL=2'
+
+        >>> from dateutil.rrule import MONTHLY, MO
+        >>> kwargs = {"freq": MONTHLY, "byweekday": [MO(1)]}  # First Monday
+        >>> rrule_kwargs_to_rrule_string(kwargs)
+        'FREQ=MONTHLY;BYDAY=1MO'
+    """
+    parts: list[str] = []
+
+    # FREQ (required)
+    freq = rrule_kwargs.get("freq")
+    if freq is None:
+        raise ValueError("rrule_kwargs must include 'freq'")
+    if freq not in _FREQ_TO_STRING:
+        raise ValueError(f"Unsupported frequency: {freq}")
+    parts.append(f"FREQ={_FREQ_TO_STRING[freq]}")
+
+    # INTERVAL (only include if > 1)
+    interval = rrule_kwargs.get("interval", 1)
+    if interval != 1:
+        parts.append(f"INTERVAL={interval}")
+
+    # BYDAY (for weekly/monthly patterns with day-of-week)
+    byweekday = rrule_kwargs.get("byweekday")
+    if byweekday is not None:
+        if not isinstance(byweekday, list):
+            byweekday = [byweekday]
+
+        day_strings: list[str] = []
+        for wd in byweekday:
+            if isinstance(wd, weekday):
+                # Get weekday string from integer (0=Monday, 6=Sunday)
+                weekday_str = _WEEKDAY_INT_TO_STRING.get(wd.weekday)
+                if weekday_str is None:
+                    raise ValueError(f"Unsupported weekday integer: {wd.weekday}")
+
+                # Check if weekday has an offset (e.g., MO(1) for first Monday)
+                # Note: wd.n is None when there's no offset, not 0
+                if wd.n is not None and wd.n != 0:
+                    # Format: "1MO" for first Monday, "-1MO" for last Monday
+                    day_strings.append(f"{wd.n}{weekday_str}")
+                else:
+                    # No offset, just the day
+                    day_strings.append(weekday_str)
+            else:
+                # Fallback: try direct lookup (for weekday constants like MO, TU)
+                if wd in _WEEKDAY_TO_STRING:
+                    day_strings.append(_WEEKDAY_TO_STRING[wd])
+                else:
+                    raise ValueError(f"Unsupported weekday: {wd}")
+
+        if day_strings:
+            parts.append(f"BYDAY={','.join(day_strings)}")
+
+    # BYMONTHDAY (for monthly patterns with specific days)
+    bymonthday = rrule_kwargs.get("bymonthday")
+    if bymonthday is not None:
+        if isinstance(bymonthday, list):
+            day_strs = [str(d) for d in bymonthday]
+            parts.append(f"BYMONTHDAY={','.join(day_strs)}")
+        else:
+            parts.append(f"BYMONTHDAY={bymonthday}")
+
+    # BYMONTH (for yearly patterns)
+    bymonth = rrule_kwargs.get("bymonth")
+    if bymonth is not None:
+        if isinstance(bymonth, list):
+            month_strs = [str(m) for m in bymonth]
+            parts.append(f"BYMONTH={','.join(month_strs)}")
+        else:
+            parts.append(f"BYMONTH={bymonth}")
+
+    return ";".join(parts)
+
 
 class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
     """Generate recurring intervals based on RFC 5545 recurrence rules.
@@ -79,6 +197,24 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
         # Return a fresh rrule instance with our parameters
         # Note: No dtstart here, it's computed dynamically in fetch()
         return rrule(**self.rrule_kwargs)
+
+    def to_rrule_string(self) -> str:
+        """Convert this recurring pattern to an RFC 5545 RRULE string.
+
+        Returns:
+            RFC 5545 RRULE string suitable for Google Calendar and other
+            iCalendar-compatible systems.
+
+        Examples:
+            >>> pattern = RecurringPattern(freq="weekly", day="monday", interval=2)
+            >>> pattern.to_rrule_string()
+            'FREQ=WEEKLY;INTERVAL=2;BYDAY=MO'
+
+            >>> pattern = RecurringPattern(freq="monthly", week=1, day="monday")
+            >>> pattern.to_rrule_string()
+            'FREQ=MONTHLY;BYDAY=1MO'
+        """
+        return rrule_kwargs_to_rrule_string(self.rrule_kwargs)
 
     def __init__(
         self,
