@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from calgebra.memory import MemoryTimeline
+from calgebra.mutable.memory import MemoryTimeline
 
 
 def test_add_recurring_pattern_to_memory():

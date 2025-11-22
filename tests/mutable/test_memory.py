@@ -2,10 +2,8 @@
 
 from datetime import datetime, timezone
 
-import pytest
-
 from calgebra import Interval
-from calgebra.memory import MemoryTimeline
+from calgebra.mutable.memory import MemoryTimeline
 
 
 def test_create_empty_memory_timeline():
