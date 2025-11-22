@@ -1,18 +1,35 @@
+"""Google Calendar integration for mutable timelines.
+
+This module provides GoogleCalendarTimeline, a MutableTimeline implementation
+that reads from and writes to Google Calendar via the gcsa library.
+"""
+
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
-from typing import Literal
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from gcsa.google_calendar import GoogleCalendar
 from typing_extensions import override
 
-from calgebra.core import Timeline
 from calgebra.interval import Interval
+from calgebra.mutable import MutableTimeline, WriteResult
+from calgebra.recurrence import RecurringPattern
 
 
 @dataclass(frozen=True, kw_only=True)
 class Event(Interval):
+    """Google Calendar event represented as an interval.
+
+    Attributes:
+        id: Google Calendar event ID
+        calendar_id: ID of the calendar containing this event
+        calendar_summary: Human-readable name of the calendar
+        summary: Event title/summary
+        description: Event description (optional)
+    """
+
     id: str
     calendar_id: str
     calendar_summary: str
@@ -74,11 +91,14 @@ def _timestamp_to_datetime(ts: int) -> datetime:
     return datetime.fromtimestamp(ts, tz=timezone.utc)
 
 
-class Calendar(Timeline[Event]):
+class GoogleCalendarTimeline(MutableTimeline[Event]):
     """Timeline backed by the Google Calendar API using local credentials.
 
     Events are converted to UTC timestamps. Each event's own timezone (if specified)
     is used when interpreting all-day events or naive datetimes from the API.
+
+    Currently implements read operations (Timeline). Write operations (MutableTimeline)
+    will be implemented in Phase 3.
     """
 
     def __init__(
@@ -88,7 +108,7 @@ class Calendar(Timeline[Event]):
         *,
         client: GoogleCalendar | None = None,
     ) -> None:
-        """Initialize a Calendar timeline.
+        """Initialize a Google Calendar timeline.
 
         Args:
             calendar_id: Calendar ID string
@@ -102,7 +122,10 @@ class Calendar(Timeline[Event]):
         )
 
     def __str__(self) -> str:
-        return f"Calendar(id='{self.calendar_id}', summary='{self.calendar_summary}')"
+        return (
+            f"GoogleCalendarTimeline(id='{self.calendar_id}', "
+            f"summary='{self.calendar_summary}')"
+        )
 
     @override
     def fetch(self, start: int | None, end: int | None) -> Iterable[Event]:
@@ -137,12 +160,72 @@ class Calendar(Timeline[Event]):
                 end=_to_timestamp(e.end, "end", event_zone),
             )
 
+    # MutableTimeline methods will be implemented in Phase 3
+    # For now, these raise NotImplementedError to indicate they're not yet implemented
 
-def calendars() -> list[Calendar]:
-    """Return calendars accessible to the locally authenticated user."""
+    @override
+    def _add_interval(
+        self, interval: Interval, metadata: dict[str, Any]
+    ) -> list[WriteResult]:
+        """Add a single interval to Google Calendar.
+
+        Not yet implemented - will be added in Phase 3.
+        """
+        raise NotImplementedError("Write operations not yet implemented")
+
+    @override
+    def _add_recurring(
+        self, pattern: RecurringPattern[Event], metadata: dict[str, Any]
+    ) -> list[WriteResult]:
+        """Add a recurring pattern to Google Calendar.
+
+        Not yet implemented - will be added in Phase 3.
+        """
+        raise NotImplementedError("Write operations not yet implemented")
+
+    @override
+    def _remove_interval(self, interval: Interval) -> list[WriteResult]:
+        """Remove a single interval from Google Calendar.
+
+        Not yet implemented - will be added in Phase 3.
+        """
+        raise NotImplementedError("Write operations not yet implemented")
+
+    @override
+    def _remove_series(self, interval: Interval) -> list[WriteResult]:
+        """Remove a recurring series from Google Calendar.
+
+        Not yet implemented - will be added in Phase 3.
+        """
+        raise NotImplementedError("Write operations not yet implemented")
+
+    @override
+    def _remove_many(self, intervals: Iterable[Interval]) -> list[WriteResult]:
+        """Remove multiple intervals from Google Calendar.
+
+        Not yet implemented - will be added in Phase 3.
+        """
+        raise NotImplementedError("Write operations not yet implemented")
+
+    @override
+    def _remove_many_series(self, intervals: Iterable[Interval]) -> list[WriteResult]:
+        """Remove multiple recurring series from Google Calendar.
+
+        Not yet implemented - will be added in Phase 3.
+        """
+        raise NotImplementedError("Write operations not yet implemented")
+
+
+def calendars() -> list[GoogleCalendarTimeline]:
+    """Return calendars accessible to the locally authenticated user.
+
+    Returns:
+        List of GoogleCalendarTimeline instances, one per accessible calendar
+    """
     client = GoogleCalendar()
     return [
-        Calendar(e.id, e.summary, client=client)
+        GoogleCalendarTimeline(e.id, e.summary, client=client)
         for e in client.get_calendar_list()
         if e.id is not None and e.summary is not None
     ]
+

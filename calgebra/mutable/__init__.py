@@ -233,3 +233,16 @@ class MutableTimeline(Timeline[IvlOut], Generic[IvlOut]):
 
 
 __all__ = ["MutableTimeline", "WriteResult"]
+
+# Google Calendar integration (optional dependency)
+try:
+    from calgebra.mutable.gcsa import (  # noqa: F401
+        Event,
+        GoogleCalendarTimeline,
+        calendars,
+    )
+
+    __all__.extend(["Event", "GoogleCalendarTimeline", "calendars"])
+except ImportError:
+    # gcsa not installed, skip exports
+    pass
