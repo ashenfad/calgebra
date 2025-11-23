@@ -8,6 +8,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
+from time import time as current_time
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
@@ -21,6 +22,10 @@ from calgebra.interval import Interval
 from calgebra.mutable import MutableTimeline, WriteResult
 from calgebra.recurrence import RecurringPattern
 from calgebra.util import DAY
+
+# Constants
+_UTC_TIMEZONE = "UTC"
+_EXDATE_FORMAT = "%Y%m%dT%H%M%SZ"
 
 
 @dataclass(frozen=True)
@@ -215,8 +220,8 @@ def _infer_is_all_day(start_ts: int, end_ts: int, calendar_tz: ZoneInfo | None) 
     tz = calendar_tz if calendar_tz is not None else timezone.utc
 
     # Convert to calendar timezone
-    start_dt = datetime.fromtimestamp(start_ts, tz=timezone.utc).astimezone(tz)
-    end_dt = datetime.fromtimestamp(end_ts, tz=timezone.utc).astimezone(tz)
+    start_dt = datetime.fromtimestamp(start_ts, tz=tz)
+    end_dt = datetime.fromtimestamp(end_ts, tz=tz)
 
     # Check if both are at midnight
     if start_dt.time() != time.min or end_dt.time() != time.min:
@@ -255,14 +260,150 @@ def _convert_reminders_to_gcsa(
     return gcsa_reminders if gcsa_reminders else None
 
 
+def _format_exdate(timestamp: int) -> str:
+    """Format a UTC timestamp as an RFC 5545 EXDATE string.
+
+    Args:
+        timestamp: UTC timestamp in seconds
+
+    Returns:
+        EXDATE string in format YYYYMMDDTHHMMSSZ
+    """
+    dt = _timestamp_to_datetime(timestamp)
+    return dt.strftime(_EXDATE_FORMAT)
+
+
+def _parse_exdates_from_rrule(rrule_str: str) -> tuple[str, list[str]]:
+    """Parse EXDATE from an RRULE string.
+
+    Args:
+        rrule_str: RRULE string potentially containing EXDATE
+
+    Returns:
+        Tuple of (base_rrule_without_exdate, list_of_exdate_strings)
+    """
+    exdate_match = re.search(r"EXDATE[:=]([^;]+)", rrule_str)
+    if exdate_match:
+        exdates = exdate_match.group(1).split(",")
+        base_rrule = re.sub(r";EXDATE[:=][^;]+", "", rrule_str)
+        return base_rrule, exdates
+    else:
+        return rrule_str, []
+
+
+def _add_exdate_to_rrule(rrule_str: str, exdate_str: str) -> str:
+    """Add an EXDATE to an RRULE string.
+
+    Args:
+        rrule_str: Base RRULE string
+        exdate_str: EXDATE string to add
+
+    Returns:
+        RRULE string with EXDATE appended
+    """
+    base_rrule, existing_exdates = _parse_exdates_from_rrule(rrule_str)
+    if exdate_str not in existing_exdates:
+        existing_exdates.append(exdate_str)
+    exdate_part = "EXDATE:" + ",".join(existing_exdates)
+    return f"{base_rrule};{exdate_part}"
+
+
+def _convert_timestamps_to_datetime(
+    start_ts: int, end_ts: int, is_all_day: bool
+) -> tuple[datetime | date, datetime | date]:
+    """Convert UTC timestamps to datetime/date objects for Google Calendar.
+
+    Args:
+        start_ts: Start timestamp (UTC)
+        end_ts: End timestamp (UTC)
+        is_all_day: Whether the event is all-day
+
+    Returns:
+        Tuple of (start_datetime_or_date, end_datetime_or_date)
+    """
+    if is_all_day:
+        start_dt = _timestamp_to_datetime(start_ts).date()
+        end_dt = _timestamp_to_datetime(end_ts).date()
+    else:
+        start_dt = _timestamp_to_datetime(start_ts)
+        end_dt = _timestamp_to_datetime(end_ts)
+    return start_dt, end_dt
+
+
+def _error_result(error: Exception) -> list[WriteResult]:
+    """Create a WriteResult list for an error.
+
+    Args:
+        error: The exception that occurred
+
+    Returns:
+        List containing a single WriteResult with success=False
+    """
+    return [WriteResult(success=False, event=None, error=error)]
+
+
+def _get_calendar_timezone(
+    calendar: GoogleCalendar, calendar_id: str
+) -> ZoneInfo | None:
+    """Get the calendar's default timezone.
+
+    Currently returns None (UTC) but can be extended to fetch from calendar settings.
+
+    Args:
+        calendar: GoogleCalendar client instance
+        calendar_id: Calendar ID
+
+    Returns:
+        Calendar's timezone, or None to use UTC
+    """
+    # TODO: Fetch actual calendar timezone from Google Calendar API
+    # For now, return None which means UTC
+    return None
+
+
+def _validate_event(
+    interval: Interval, require_id: bool = True
+) -> tuple[Event | None, list[WriteResult] | None]:
+    """Validate that an interval is an Event with required fields.
+
+    Args:
+        interval: Interval to validate
+        require_id: If True, require that the event has a non-empty ID
+
+    Returns:
+        Tuple of (Event, None) if valid, or (None, error_results) if invalid
+    """
+    if not isinstance(interval, Event):
+        return None, [
+            WriteResult(
+                success=False,
+                event=None,
+                error=TypeError(f"Expected Event, got {type(interval).__name__}"),
+            )
+        ]
+
+    if require_id and not interval.id:
+        return None, [
+            WriteResult(
+                success=False,
+                event=None,
+                error=ValueError("Event must have an ID"),
+            )
+        ]
+
+    return interval, None
+
+
 class GoogleCalendarTimeline(MutableTimeline[Event]):
     """Timeline backed by the Google Calendar API using local credentials.
 
     Events are converted to UTC timestamps. Each event's own timezone (if specified)
     is used when interpreting all-day events or naive datetimes from the API.
 
-    Currently implements read operations (Timeline). Write operations (MutableTimeline)
-    will be implemented in Phase 3.
+    Supports full read/write operations including:
+    - Creating single and recurring events
+    - Removing events and recurring series
+    - Handling all-day events and reminders
     """
 
     def __init__(
@@ -313,7 +454,7 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
                 continue
 
             # Use event's own timezone if available, otherwise UTC
-            event_zone = ZoneInfo(e.timezone) if e.timezone else None
+            event_zone = ZoneInfo(e.timezone) if e.timezone else ZoneInfo(_UTC_TIMEZONE)
 
             # Extract event data using helper functions
             is_all_day = _is_all_day_event(e)
@@ -335,9 +476,6 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
                 end=_to_timestamp(end_dt, "end", event_zone),
             )
 
-    # MutableTimeline methods will be implemented in Phase 3
-    # For now, these raise NotImplementedError to indicate they're not yet implemented
-
     @override
     def _add_interval(
         self, interval: Interval, metadata: dict[str, Any]
@@ -349,61 +487,44 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
 
         Args:
             interval: Event to add (must be an Event instance)
-            metadata: Additional metadata (currently unused)
+            metadata: Additional metadata (unused for single events)
 
         Returns:
             List containing a single WriteResult with the created event
         """
-        if not isinstance(interval, Event):
-            return [
-                WriteResult(
-                    success=False,
-                    event=None,
-                    error=TypeError(f"Expected Event, got {type(interval).__name__}"),
-                )
-            ]
+        # Validate event (ID not required for add operations)
+        event, error_result = _validate_event(interval, require_id=False)
+        if error_result:
+            return error_result
 
-        if interval.start is None or interval.end is None:
-            return [
-                WriteResult(
-                    success=False,
-                    event=None,
-                    error=ValueError("Event must have finite start and end"),
-                )
-            ]
+        assert event is not None  # For type checker
+
+        if event.start is None or event.end is None:
+            return _error_result(ValueError("Event must have finite start and end"))
 
         try:
             # Determine if event is all-day
-            is_all_day = interval.is_all_day
+            is_all_day = event.is_all_day
             if is_all_day is None:
                 # Auto-infer: need calendar's default timezone
-                # For now, use UTC (can be improved later with calendar settings)
-                is_all_day = _infer_is_all_day(
-                    interval.start, interval.end, calendar_tz=None
-                )
+                calendar_tz = _get_calendar_timezone(self.calendar, self.calendar_id)
+                is_all_day = _infer_is_all_day(event.start, event.end, calendar_tz)
 
             # Convert timestamps to datetime/date objects
-            if is_all_day:
-                # For all-day events, convert UTC timestamps to dates
-                # Google Calendar uses dates in the calendar's timezone
-                # For now, use UTC (can be improved with calendar settings)
-                start_dt = _timestamp_to_datetime(interval.start).date()
-                end_dt = _timestamp_to_datetime(interval.end).date()
-            else:
-                # For timed events, use UTC datetime objects
-                start_dt = _timestamp_to_datetime(interval.start)
-                end_dt = _timestamp_to_datetime(interval.end)
+            start_dt, end_dt = _convert_timestamps_to_datetime(
+                event.start, event.end, is_all_day
+            )
 
             # Convert reminders
-            gcsa_reminders = _convert_reminders_to_gcsa(interval.reminders)
+            gcsa_reminders = _convert_reminders_to_gcsa(event.reminders)
 
             # Create gcsa Event object
             gcsa_event = GcsaEvent(
-                summary=interval.summary,
+                summary=event.summary,
                 start=start_dt,
                 end=end_dt,
-                timezone="UTC" if not is_all_day else None,
-                description=interval.description,
+                timezone=_UTC_TIMEZONE if not is_all_day else None,
+                description=event.description,
                 reminders=gcsa_reminders,
             )
 
@@ -412,26 +533,30 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
                 gcsa_event, calendar_id=self.calendar_id
             )
 
+            # Validate that we got an ID back
+            if not created_event.id:
+                return _error_result(
+                    ValueError("Google Calendar did not return an event ID")
+                )
+
             # Convert created event back to our Event format
-            # We need to fetch it to get the full details, but for now
-            # we'll create a new Event with the ID from the created event
             result_event = Event(
-                id=created_event.id or "",
+                id=created_event.id,
                 calendar_id=self.calendar_id,
                 calendar_summary=self.calendar_summary,
-                summary=interval.summary,
-                description=interval.description,
+                summary=event.summary,
+                description=event.description,
                 recurring_event_id=None,  # Single events don't have recurring_event_id
                 is_all_day=is_all_day,
-                reminders=interval.reminders,
-                start=interval.start,
-                end=interval.end,
+                reminders=event.reminders,
+                start=event.start,
+                end=event.end,
             )
 
             return [WriteResult(success=True, event=result_event, error=None)]
 
         except Exception as e:
-            return [WriteResult(success=False, event=None, error=e)]
+            return _error_result(e)
 
     @override
     def _add_recurring(
@@ -450,16 +575,12 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
             List containing a single WriteResult with the created recurring event
         """
         if pattern.interval_class is not Event:
-            return [
-                WriteResult(
-                    success=False,
-                    event=None,
-                    error=TypeError(
-                        f"Expected RecurringPattern[Event], "
-                        f"got RecurringPattern[{pattern.interval_class.__name__}]"
-                    ),
+            return _error_result(
+                TypeError(
+                    f"Expected RecurringPattern[Event], "
+                    f"got RecurringPattern[{pattern.interval_class.__name__}]"
                 )
-            ]
+            )
 
         try:
             # Merge metadata
@@ -474,45 +595,20 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
             # Add EXDATE if there are exdates
             if pattern.exdates:
                 # Convert exdates (timestamps) to EXDATE format
-                # EXDATE format: "EXDATE:20250106T100000Z,20250113T100000Z"
-                exdate_strings = []
                 for exdate_ts in sorted(pattern.exdates):
-                    exdate_dt = _timestamp_to_datetime(exdate_ts)
-                    # Format as RFC 5545 EXDATE: YYYYMMDDTHHMMSSZ
-                    exdate_str = exdate_dt.strftime("%Y%m%dT%H%M%SZ")
-                    exdate_strings.append(exdate_str)
-
-                # Append EXDATE to RRULE string
-                # Note: EXDATE is technically a separate property, but gcsa
-                # accepts it in the recurrence string
-                exdate_part = "EXDATE:" + ",".join(exdate_strings)
-                rrule_str = f"{rrule_str};{exdate_part}"
+                    exdate_str = _format_exdate(exdate_ts)
+                    rrule_str = _add_exdate_to_rrule(rrule_str, exdate_str)
 
             # Determine series start date/time
             # Use current time as DTSTART (or from metadata if provided)
             # For Google Calendar, we need a concrete start date
-            if "start" in merged_metadata:
-                # Use provided start timestamp
-                series_start_ts = merged_metadata["start"]
-            else:
-                # Use current time as default
-                from time import time
-
-                series_start_ts = int(time())
+            series_start_ts = merged_metadata.get("start", int(current_time()))
+            series_end_ts = series_start_ts + pattern.duration_seconds
 
             # Convert start timestamp to datetime/date
-            if is_all_day:
-                series_start_dt = _timestamp_to_datetime(series_start_ts).date()
-                # For all-day events, calculate end date
-                series_end_dt = datetime.fromtimestamp(
-                    series_start_ts + pattern.duration_seconds, tz=timezone.utc
-                ).date()
-            else:
-                series_start_dt = _timestamp_to_datetime(series_start_ts)
-                # For timed events, add duration
-                series_end_dt = datetime.fromtimestamp(
-                    series_start_ts + pattern.duration_seconds, tz=timezone.utc
-                )
+            series_start_dt, series_end_dt = _convert_timestamps_to_datetime(
+                series_start_ts, series_end_ts, is_all_day
+            )
 
             # Extract Event fields from metadata
             summary = merged_metadata.get("summary", "Recurring Event")
@@ -521,20 +617,26 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
             # Convert reminders if provided in metadata
             reminders = merged_metadata.get("reminders")
             if isinstance(reminders, list):
-                # Assume they're our Reminder objects
+                # Validate that reminders are Reminder objects
+                if not all(isinstance(r, Reminder) for r in reminders):
+                    return _error_result(
+                        TypeError("reminders metadata must contain Reminder objects")
+                    )
                 gcsa_reminders = _convert_reminders_to_gcsa(reminders)
+                validated_reminders = reminders
             else:
                 gcsa_reminders = None
+                validated_reminders = None
 
             # Create gcsa Event with recurrence
             gcsa_event = GcsaEvent(
                 summary=summary,
                 start=series_start_dt,
                 end=series_end_dt,
-                timezone="UTC" if not is_all_day else None,
+                timezone=_UTC_TIMEZONE if not is_all_day else None,
                 description=description,
-                recurrence=rrule_str,  # gcsa accepts RRULE string
                 reminders=gcsa_reminders,
+                recurrence=rrule_str,  # gcsa accepts RRULE string
             )
 
             # Add event to Google Calendar
@@ -542,17 +644,23 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
                 gcsa_event, calendar_id=self.calendar_id
             )
 
+            # Validate that we got an ID back
+            if not created_event.id:
+                return _error_result(
+                    ValueError("Google Calendar did not return an event ID")
+                )
+
             # Create result Event (representing the master recurring event)
             # Master events have recurring_event_id = None
             result_event = Event(
-                id=created_event.id or "",
+                id=created_event.id,
                 calendar_id=self.calendar_id,
                 calendar_summary=self.calendar_summary,
                 summary=summary,
                 description=description,
                 recurring_event_id=None,  # Master events don't have recurring_event_id
                 is_all_day=is_all_day,
-                reminders=reminders,
+                reminders=validated_reminders,
                 start=series_start_ts,
                 end=series_start_ts + pattern.duration_seconds,
             )
@@ -560,7 +668,7 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
             return [WriteResult(success=True, event=result_event, error=None)]
 
         except Exception as e:
-            return [WriteResult(success=False, event=None, error=e)]
+            return _error_result(e)
 
     @override
     def _remove_interval(self, interval: Interval) -> list[WriteResult]:
@@ -576,37 +684,25 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
         Returns:
             List containing a single WriteResult
         """
-        if not isinstance(interval, Event):
-            return [
-                WriteResult(
-                    success=False,
-                    event=None,
-                    error=TypeError(f"Expected Event, got {type(interval).__name__}"),
-                )
-            ]
+        # Validate event
+        event, error_result = _validate_event(interval)
+        if error_result:
+            return error_result
 
-        if not interval.id:
-            return [
-                WriteResult(
-                    success=False,
-                    event=None,
-                    error=ValueError("Event must have an ID to remove"),
-                )
-            ]
+        assert event is not None  # For type checker
 
         try:
             # Check if this is a recurring event instance
-            recurring_event_id = getattr(interval, "recurring_event_id", None)
-            if recurring_event_id:
+            if event.recurring_event_id:
                 # This is a recurring instance - add to exdates instead of deleting
-                return self._remove_recurring_instance(interval, recurring_event_id)
+                return self._remove_recurring_instance(event, event.recurring_event_id)
             else:
                 # Standalone event - delete it
-                self.calendar.delete_event(interval.id, calendar_id=self.calendar_id)
-                return [WriteResult(success=True, event=interval, error=None)]
+                self.calendar.delete_event(event.id, calendar_id=self.calendar_id)
+                return [WriteResult(success=True, event=event, error=None)]
 
         except Exception as e:
-            return [WriteResult(success=False, event=None, error=e)]
+            return _error_result(e)
 
     def _remove_recurring_instance(
         self, instance: Event, master_event_id: str
@@ -620,60 +716,43 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
         Returns:
             List containing a single WriteResult
         """
-        # Fetch the master event
-        master_event = self.calendar.get_event(
-            master_event_id, calendar_id=self.calendar_id
-        )
+        try:
+            # Fetch the master event
+            master_event = self.calendar.get_event(
+                master_event_id, calendar_id=self.calendar_id
+            )
+        except Exception as e:
+            return _error_result(
+                ValueError(f"Failed to fetch master event {master_event_id}: {e}")
+            )
 
         # Get current recurrence string
         if not master_event.recurrence:
-            return [
-                WriteResult(
-                    success=False,
-                    event=None,
-                    error=ValueError(
-                        f"Master event {master_event_id} has no recurrence"
-                    ),
-                )
-            ]
+            return _error_result(
+                ValueError(f"Master event {master_event_id} has no recurrence")
+            )
 
         rrule_str = master_event.recurrence[0]
 
-        # Parse existing EXDATE if present
-        # EXDATE format can be EXDATE=value or EXDATE:value
-        exdate_match = re.search(r"EXDATE[:=]([^;]+)", rrule_str)
-        existing_exdates: list[str] = []
-        if exdate_match:
-            existing_exdates = exdate_match.group(1).split(",")
-            # Remove EXDATE from base RRULE
-            rrule_base = re.sub(r";EXDATE[:=][^;]+", "", rrule_str)
-        else:
-            rrule_base = rrule_str
-
         # Format instance start time as EXDATE
         if instance.start is None:
-            return [
-                WriteResult(
-                    success=False,
-                    event=None,
-                    error=ValueError(
-                        "Instance must have a start time to add to exdates"
-                    ),
-                )
-            ]
+            return _error_result(
+                ValueError("Instance must have a start time to add to exdates")
+            )
 
-        instance_start_dt = _timestamp_to_datetime(instance.start)
-        exdate_str = instance_start_dt.strftime("%Y%m%dT%H%M%SZ")
+        exdate_str = _format_exdate(instance.start)
 
-        # Add to exdates if not already present
+        # Add EXDATE to RRULE if not already present
+        _, existing_exdates = _parse_exdates_from_rrule(rrule_str)
         if exdate_str not in existing_exdates:
-            existing_exdates.append(exdate_str)
-            # Update recurrence string with new EXDATE
-            new_rrule = f"{rrule_base};EXDATE:{','.join(existing_exdates)}"
+            new_rrule = _add_exdate_to_rrule(rrule_str, exdate_str)
             master_event.recurrence = [new_rrule]
 
             # Update the master event
-            self.calendar.update_event(master_event, calendar_id=self.calendar_id)
+            try:
+                self.calendar.update_event(master_event, calendar_id=self.calendar_id)
+            except Exception as e:
+                return _error_result(ValueError(f"Failed to update master event: {e}"))
 
         return [WriteResult(success=True, event=instance, error=None)]
 
@@ -692,38 +771,26 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
         Returns:
             List containing a single WriteResult
         """
-        if not isinstance(interval, Event):
-            return [
-                WriteResult(
-                    success=False,
-                    event=None,
-                    error=TypeError(f"Expected Event, got {type(interval).__name__}"),
-                )
-            ]
+        # Validate event
+        event, error_result = _validate_event(interval)
+        if error_result:
+            return error_result
 
-        if not interval.id:
-            return [
-                WriteResult(
-                    success=False,
-                    event=None,
-                    error=ValueError("Event must have an ID to remove series"),
-                )
-            ]
+        assert event is not None  # For type checker
 
         try:
             # Determine which event ID to delete
             # If recurring_event_id is set, delete the master
             # Otherwise, delete the event itself (assuming it's a master)
-            recurring_event_id = getattr(interval, "recurring_event_id", None)
-            master_event_id = recurring_event_id if recurring_event_id else interval.id
+            master_event_id = event.recurring_event_id or event.id
 
             # Delete the master event (this deletes all instances)
             self.calendar.delete_event(master_event_id, calendar_id=self.calendar_id)
 
-            return [WriteResult(success=True, event=interval, error=None)]
+            return [WriteResult(success=True, event=event, error=None)]
 
         except Exception as e:
-            return [WriteResult(success=False, event=None, error=e)]
+            return _error_result(e)
 
 
 def calendars() -> list[GoogleCalendarTimeline]:
