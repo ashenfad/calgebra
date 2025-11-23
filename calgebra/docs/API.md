@@ -319,9 +319,47 @@ daily_incidents = incidents & day_of_week("monday")
 - Time constants: `SECOND`, `MINUTE`, `HOUR`, `DAY`
 - Utilities: `at_tz`, `docs`
 
+## Mutable Timelines (`calgebra.mutable`)
+
+`MutableTimeline` extends `Timeline` with write operations:
+
+- `add(item, **metadata)` → `list[WriteResult]`
+  - Add single intervals, iterables of intervals, or `RecurringPattern` objects
+  - `metadata` provides backend-specific fields (e.g., `summary`, `description`, `reminders`)
+  - Returns list of `WriteResult` objects (one per item written)
+
+- `remove(items)` → `list[WriteResult]`
+  - Remove single interval or iterable of intervals
+  - For recurring instances, adds to exdates instead of deleting
+  - Returns list of `WriteResult` objects
+
+- `remove_series(items)` → `list[WriteResult]`
+  - Remove entire recurring series
+  - Can use master event or any instance
+  - Returns list of `WriteResult` objects
+
+**Note:** `MemoryTimeline` is available for testing/development. For production use, see Google Calendar integration below.
+
+**See also:** [Google Calendar Guide](GCSA.md) for complete write operation examples.
+
 ## Google Calendar Integration (`calgebra.gcsa`)
-- `calendars()` returns ready-to-use `Calendar` timelines (one per accessible Google Calendar). Each timeline includes `calendar_id` and `calendar_summary` metadata.
-- `Event` extends `Interval` with Google metadata: `id`, `calendar_id` (source calendar), `calendar_summary`, `summary`, and optional `description`. These fields survive unions/intersections, ensuring you can trace provenance after composing multiple calendars.
+
+- `calendars()` → `list[Calendar]` - Returns ready-to-use `Calendar` timelines (one per accessible Google Calendar)
+- `Calendar` (alias for `GoogleCalendarTimeline`) - Timeline backed by Google Calendar API with full read/write support
+- `Event` - Extends `Interval` with Google Calendar metadata:
+  - `id`: Google Calendar event ID
+  - `calendar_id`: Source calendar ID
+  - `calendar_summary`: Human-readable calendar name
+  - `summary`: Event title
+  - `description`: Event description (optional)
+  - `recurring_event_id`: Master recurring event ID (None for standalone/master events)
+  - `is_all_day`: True for all-day events, False for timed events
+  - `reminders`: List of `Reminder` objects (None = calendar defaults)
+- `Reminder` - Event reminder/notification:
+  - `method`: `"email"` or `"popup"`
+  - `minutes`: Minutes before event start
+
+**See also:** [Google Calendar Guide](GCSA.md) for authentication, examples, and common patterns.
 
 ## Notes
 - All intervals use **exclusive end bounds** `[start, end)`, matching Python slicing idioms. Duration is simply `end - start`.
