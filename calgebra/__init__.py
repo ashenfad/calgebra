@@ -33,6 +33,7 @@ docs = {
     "readme": (_docs_path / "README.md").read_text(),
     "tutorial": (_docs_path / "TUTORIAL.md").read_text(),
     "api": (_docs_path / "API.md").read_text(),
+    "gcsa": (_docs_path / "GCSA.md").read_text(),
 }
 
 __all__ = [

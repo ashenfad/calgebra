@@ -27,9 +27,6 @@ Example:
 """
 
 # Re-export public API from mutable.gcsa
-from calgebra.mutable.gcsa import Event, GoogleCalendarTimeline, Reminder, calendars
-
-# Alias for convenience (matches README usage)
-Calendar = GoogleCalendarTimeline
+from calgebra.mutable.gcsa import Calendar, Event, Reminder, calendars
 
 __all__ = ["Event", "Calendar", "Reminder", "calendars"]

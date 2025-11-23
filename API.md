@@ -345,7 +345,7 @@ daily_incidents = incidents & day_of_week("monday")
 ## Google Calendar Integration (`calgebra.gcsa`)
 
 - `calendars()` → `list[Calendar]` - Returns ready-to-use `Calendar` timelines (one per accessible Google Calendar)
-- `Calendar` (alias for `GoogleCalendarTimeline`) - Timeline backed by Google Calendar API with full read/write support
+- `Calendar` - Timeline backed by Google Calendar API with full read/write support
 - `Event` - Extends `Interval` with Google Calendar metadata:
   - `id`: Google Calendar event ID
   - `calendar_id`: Source calendar ID

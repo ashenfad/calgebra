@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from calgebra.mutable.gcsa import GoogleCalendarTimeline
+from calgebra.gcsa import Calendar
 
 
 class _StubStart:
@@ -138,9 +138,7 @@ class _StubGoogleCalendar:
         # Remove from list
         self._events = [e for e in self._events if e.id != event_id]
 
-    def update_event(
-        self, event: object, *, calendar_id: str | None = None, **kwargs
-    ):
+    def update_event(self, event: object, *, calendar_id: str | None = None, **kwargs):
         """Stub for updating an event."""
         # Update the event in our list
         event_id = getattr(event, "id", None)
@@ -163,9 +161,9 @@ def _build_calendar(
     *,
     calendar_id: str = "primary",
     calendar_summary: str = "Primary",
-) -> tuple[GoogleCalendarTimeline, _StubGoogleCalendar]:
+) -> tuple[Calendar, _StubGoogleCalendar]:
     stub = _StubGoogleCalendar(events)
-    calendar = GoogleCalendarTimeline(
+    calendar = Calendar(
         calendar_id=calendar_id,
         calendar_summary=calendar_summary,
         client=stub,
@@ -248,7 +246,7 @@ def test_fetch_supports_all_day_events_from_dates() -> None:
     expected_start_ts = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=zone).timestamp())
     expected_end_ts = int(datetime(2025, 1, 2, 0, 0, 0, tzinfo=zone).timestamp())
 
-    fetched = list(calendar[expected_start_ts : expected_end_ts])[0]
+    fetched = list(calendar[expected_start_ts:expected_end_ts])[0]
     assert fetched.start == expected_start_ts
     assert fetched.end == expected_end_ts
     assert fetched.calendar_id == "primary"
@@ -259,10 +257,7 @@ def test_calendar_str_includes_ids_and_summary() -> None:
     calendar, _ = _build_calendar(
         [], calendar_id="team@company.com", calendar_summary="Team Calendar"
     )
-    assert (
-        str(calendar)
-        == "GoogleCalendarTimeline(id='team@company.com', summary='Team Calendar')"
-    )
+    assert str(calendar) == "Calendar(id='team@company.com', summary='Team Calendar')"
 
 
 def test_fetch_populates_is_all_day_for_all_day_events() -> None:
@@ -803,7 +798,6 @@ def test_add_recurring_rejects_non_event_pattern() -> None:
 
     # Verify add_event was not called
     assert len(stub.added_events) == 0
-
 
 
 def test_remove_interval_deletes_standalone_event() -> None:

@@ -1,6 +1,6 @@
 """Google Calendar integration for mutable timelines.
 
-This module provides GoogleCalendarTimeline, a MutableTimeline implementation
+This module provides Calendar, a MutableTimeline implementation
 that reads from and writes to Google Calendar via the gcsa library.
 """
 
@@ -423,7 +423,7 @@ def _validate_event(
     return interval, None
 
 
-class GoogleCalendarTimeline(MutableTimeline[Event]):
+class Calendar(MutableTimeline[Event]):
     """Timeline backed by the Google Calendar API using local credentials.
 
     Events are converted to UTC timestamps. Each event's own timezone (if specified)
@@ -458,8 +458,7 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
     @override
     def __str__(self) -> str:
         return (
-            f"GoogleCalendarTimeline(id='{self.calendar_id}', "
-            f"summary='{self.calendar_summary}')"
+            f"Calendar(id='{self.calendar_id}', " f"summary='{self.calendar_summary}')"
         )
 
     @override
@@ -825,15 +824,15 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
         return [WriteResult(success=True, event=event, error=None)]
 
 
-def calendars() -> list[GoogleCalendarTimeline]:
+def calendars() -> list[Calendar]:
     """Return calendars accessible to the locally authenticated user.
 
     Returns:
-        List of GoogleCalendarTimeline instances, one per accessible calendar
+        List of Calendar instances, one per accessible calendar
     """
     client = GoogleCalendar()
     return [
-        GoogleCalendarTimeline(e.id, e.summary, client=client)
+        Calendar(e.id, e.summary, client=client)
         for e in client.get_calendar_list()
         if e.id is not None and e.summary is not None
     ]
