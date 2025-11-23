@@ -27,13 +27,9 @@ Example:
 """
 
 # Re-export public API from mutable.gcsa
-try:
-    from calgebra.mutable.gcsa import Event, GoogleCalendarTimeline, Reminder, calendars
+from calgebra.mutable.gcsa import Event, GoogleCalendarTimeline, Reminder, calendars
 
-    # Alias for convenience (matches README usage)
-    Calendar = GoogleCalendarTimeline
+# Alias for convenience (matches README usage)
+Calendar = GoogleCalendarTimeline
 
-    __all__ = ["Event", "GoogleCalendarTimeline", "Calendar", "Reminder", "calendars"]
-except ImportError:
-    # gcsa library not installed
-    __all__ = []
+__all__ = ["Event", "Calendar", "Reminder", "calendars"]
