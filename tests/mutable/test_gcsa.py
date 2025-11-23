@@ -61,9 +61,10 @@ class _StubEvent:
 
 
 class _StubGoogleCalendar:
-    def __init__(self, events: list[_StubEvent]):
-        self._events = events
+    def __init__(self, events: list[_StubEvent] | None = None):
+        self._events = events if events is not None else []
         self.calls: list[dict[str, object]] = []
+        self.added_events: list[dict[str, object]] = []
 
     def get_events(
         self,
@@ -85,6 +86,39 @@ class _StubGoogleCalendar:
         )
         # Return iterator (gcsa returns an iterator)
         return iter(self._events)
+
+    def add_event(self, event, *, calendar_id: str | None = None, **kwargs):
+        """Stub for adding an event to Google Calendar."""
+        self.added_events.append(
+            {
+                "event": event,
+                "calendar_id": calendar_id,
+                **kwargs,
+            }
+        )
+        # Return a stub event with an ID
+        # Extract event details from the gcsa Event object
+        event_id = f"evt-{len(self.added_events)}"
+        # Extract start datetime/date
+        if isinstance(event.start, (datetime, date)):
+            start_dt = event.start
+        else:
+            start_dt = event.start.dateTime or event.start.date
+        # Extract end datetime/date
+        if isinstance(event.end, (datetime, date)):
+            end_dt = event.end
+        else:
+            end_dt = event.end.dateTime or event.end.date
+        return _StubEvent(
+            id=event_id,
+            summary=event.summary,
+            start=start_dt,
+            end=end_dt,
+            description=event.description,
+            timezone=event.timezone,
+            reminders=event.reminders,
+            default_reminders=getattr(event, "default_reminders", False),
+        )
 
     def get_calendar_list(self):
         return []
@@ -135,7 +169,8 @@ def test_fetch_keeps_fractional_second_end_within_elapsed_second() -> None:
     """Test that fractional seconds are handled correctly."""
     zone = ZoneInfo("UTC")
     start_dt = datetime(2025, 1, 1, 10, 0, 0, tzinfo=zone)
-    end_dt = datetime(2025, 1, 1, 10, 30, 0, 500000, tzinfo=zone)  # 30 minutes + 0.5 seconds
+    # 30 minutes + 0.5 seconds
+    end_dt = datetime(2025, 1, 1, 10, 30, 0, 500000, tzinfo=zone)
 
     event = _StubEvent(
         id="evt-2",
@@ -230,8 +265,10 @@ def test_fetch_populates_is_all_day_for_all_day_events() -> None:
     start_ts = int(datetime(2024, 12, 31, 0, 0, 0, tzinfo=zone).timestamp())
     end_ts = int(datetime(2025, 1, 2, 23, 59, 59, tzinfo=zone).timestamp())
 
-    # Use fetch() directly to avoid intersection clipping issues with overlapping events
-    # TODO: Investigate why intersection filters out the timed event when it's within all-day event
+    # Use fetch() directly to avoid intersection clipping issues
+    # with overlapping events
+    # TODO: Investigate why intersection filters out the timed event
+    # when it's within all-day event
     fetched = list(calendar.fetch(start_ts, end_ts))
     assert len(fetched) == 2
 
@@ -355,4 +392,206 @@ def test_fetch_populates_reminders() -> None:
     # Find event with no reminders (empty list should result in None)
     no_reminders = next(e for e in fetched if e.id == "evt-no-reminders")
     assert no_reminders.reminders is None
+
+
+def test_add_interval_creates_timed_event() -> None:
+    """Test that _add_interval creates a timed event correctly."""
+    from calgebra.mutable.gcsa import Event, Reminder
+
+    zone = ZoneInfo("UTC")
+    start_dt = datetime(2025, 1, 1, 14, 0, 0, tzinfo=zone)
+    end_dt = datetime(2025, 1, 1, 15, 0, 0, tzinfo=zone)
+
+    start_ts = int(start_dt.timestamp())
+    end_ts = int(end_dt.timestamp())
+
+    # Create an Event to add
+    event = Event(
+        id="",  # Will be set by Google Calendar
+        calendar_id="primary",
+        calendar_summary="Primary",
+        summary="Test Meeting",
+        description="Test description",
+        is_all_day=False,
+        reminders=[
+            Reminder(method="email", minutes=30),
+            Reminder(method="popup", minutes=15),
+        ],
+        start=start_ts,
+        end=end_ts,
+    )
+
+    calendar, stub = _build_calendar([])
+
+    # Add the event
+    results = calendar._add_interval(event, metadata={})
+
+    # Verify result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is True
+    assert result.error is None
+    assert result.event is not None
+    assert result.event.summary == "Test Meeting"
+    assert result.event.description == "Test description"
+    assert result.event.is_all_day is False
+    assert result.event.start == start_ts
+    assert result.event.end == end_ts
+    assert result.event.reminders == event.reminders
+
+    # Verify add_event was called
+    assert len(stub.added_events) == 1
+    added_call = stub.added_events[0]
+    assert added_call["calendar_id"] == "primary"
+    gcsa_event = added_call["event"]
+    assert gcsa_event.summary == "Test Meeting"
+    assert gcsa_event.description == "Test description"
+    assert gcsa_event.timezone == "UTC"
+    # Verify start/end are datetime objects (not dates)
+    assert isinstance(gcsa_event.start, datetime)
+    assert isinstance(gcsa_event.end, datetime)
+    # Verify reminders were converted
+    assert len(gcsa_event.reminders) == 2
+
+
+def test_add_interval_creates_all_day_event() -> None:
+    """Test that _add_interval creates an all-day event correctly."""
+    from calgebra.mutable.gcsa import Event
+
+    zone = ZoneInfo("UTC")
+    # All-day event: start and end at midnight
+    start_dt = datetime(2025, 1, 1, 0, 0, 0, tzinfo=zone)
+    end_dt = datetime(2025, 1, 2, 0, 0, 0, tzinfo=zone)
+
+    start_ts = int(start_dt.timestamp())
+    end_ts = int(end_dt.timestamp())
+
+    # Create an all-day Event
+    event = Event(
+        id="",
+        calendar_id="primary",
+        calendar_summary="Primary",
+        summary="All Day Event",
+        description=None,
+        is_all_day=True,
+        reminders=None,
+        start=start_ts,
+        end=end_ts,
+    )
+
+    calendar, stub = _build_calendar([])
+
+    # Add the event
+    results = calendar._add_interval(event, metadata={})
+
+    # Verify result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is True
+    assert result.event is not None
+    assert result.event.is_all_day is True
+
+    # Verify add_event was called with date objects
+    assert len(stub.added_events) == 1
+    gcsa_event = stub.added_events[0]["event"]
+    assert isinstance(gcsa_event.start, date)
+    assert isinstance(gcsa_event.end, date)
+    assert gcsa_event.timezone is None  # All-day events don't have timezone
+
+
+def test_add_interval_auto_infers_all_day() -> None:
+    """Test that _add_interval auto-infers all-day status when is_all_day=None."""
+    from calgebra.mutable.gcsa import Event
+
+    zone = ZoneInfo("UTC")
+    # Event spanning whole days at midnight boundaries
+    start_dt = datetime(2025, 1, 1, 0, 0, 0, tzinfo=zone)
+    end_dt = datetime(2025, 1, 3, 0, 0, 0, tzinfo=zone)  # 2 days
+
+    start_ts = int(start_dt.timestamp())
+    end_ts = int(end_dt.timestamp())
+
+    # Create event with is_all_day=None (should auto-infer)
+    event = Event(
+        id="",
+        calendar_id="primary",
+        calendar_summary="Primary",
+        summary="Auto-detected All Day",
+        description=None,
+        is_all_day=None,  # Auto-infer
+        reminders=None,
+        start=start_ts,
+        end=end_ts,
+    )
+
+    calendar, stub = _build_calendar([])
+
+    # Add the event
+    results = calendar._add_interval(event, metadata={})
+
+    # Verify result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is True
+    assert result.event is not None
+    # Should have inferred all-day
+    assert result.event.is_all_day is True
+
+    # Verify add_event was called with date objects
+    gcsa_event = stub.added_events[0]["event"]
+    assert isinstance(gcsa_event.start, date)
+    assert isinstance(gcsa_event.end, date)
+
+
+def test_add_interval_rejects_non_event() -> None:
+    """Test that _add_interval rejects non-Event intervals."""
+    from calgebra.interval import Interval
+
+    calendar, stub = _build_calendar([])
+
+    # Try to add a plain Interval (not an Event)
+    interval = Interval(start=1000, end=2000)
+    results = calendar._add_interval(interval, metadata={})
+
+    # Verify error result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is False
+    assert result.error is not None
+    assert isinstance(result.error, TypeError)
+    assert "Expected Event" in str(result.error)
+
+    # Verify add_event was not called
+    assert len(stub.added_events) == 0
+
+
+def test_add_interval_rejects_unbounded_interval() -> None:
+    """Test that _add_interval rejects intervals with None start/end."""
+    from calgebra.mutable.gcsa import Event
+
+    calendar, stub = _build_calendar([])
+
+    # Try to add an event with None start
+    event = Event(
+        id="",
+        calendar_id="primary",
+        calendar_summary="Primary",
+        summary="Unbounded",
+        description=None,
+        start=None,  # Invalid
+        end=2000,
+    )
+
+    results = calendar._add_interval(event, metadata={})
+
+    # Verify error result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is False
+    assert result.error is not None
+    assert isinstance(result.error, ValueError)
+    assert "finite start and end" in str(result.error)
+
+    # Verify add_event was not called
+    assert len(stub.added_events) == 0
 

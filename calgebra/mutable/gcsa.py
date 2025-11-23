@@ -6,11 +6,14 @@ that reads from and writes to Google Calendar via the gcsa library.
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
+from gcsa.event import Event as GcsaEvent
 from gcsa.google_calendar import GoogleCalendar
+from gcsa.reminders import EmailReminder, PopupReminder
+from gcsa.reminders import Reminder as GcsaReminder
 from typing_extensions import override
 
 from calgebra.interval import Interval
@@ -192,6 +195,64 @@ def _extract_end_datetime(gcsa_event: Any) -> datetime | date:
         return gcsa_event.end
 
 
+def _infer_is_all_day(start_ts: int, end_ts: int, calendar_tz: ZoneInfo | None) -> bool:
+    """Infer if an event should be all-day based on timestamps.
+
+    An event is all-day if:
+    - Duration is exactly N * DAY (within 1 hour tolerance for DST)
+    - Start and end are at midnight boundaries in calendar's timezone
+
+    Args:
+        start_ts: Start timestamp (UTC)
+        end_ts: End timestamp (UTC)
+        calendar_tz: Calendar's default timezone (None = UTC)
+
+    Returns:
+        True if event should be all-day, False otherwise
+    """
+    tz = calendar_tz if calendar_tz is not None else timezone.utc
+
+    # Convert to calendar timezone
+    start_dt = datetime.fromtimestamp(start_ts, tz=timezone.utc).astimezone(tz)
+    end_dt = datetime.fromtimestamp(end_ts, tz=timezone.utc).astimezone(tz)
+
+    # Check if both are at midnight
+    if start_dt.time() != time.min or end_dt.time() != time.min:
+        return False
+
+    # Check if duration is whole days (within 1 hour tolerance for DST)
+    duration = timedelta(seconds=end_ts - start_ts)
+    days = duration.days
+    remainder = duration - timedelta(days=days)
+
+    # Allow up to 1 hour remainder (for DST transitions)
+    if remainder > timedelta(hours=1):
+        return False
+
+    return True
+
+
+def _convert_reminders_to_gcsa(
+    reminders: list[Reminder] | None,
+) -> list[GcsaReminder] | None:
+    """Convert our Reminder objects to gcsa Reminder objects.
+
+    Returns:
+        List of gcsa Reminder objects, or None if reminders is None
+    """
+    if reminders is None:
+        return None
+
+    gcsa_reminders: list[GcsaReminder] = []
+    for reminder in reminders:
+        if reminder.method == "email":
+            gcsa_reminders.append(EmailReminder(minutes_before_start=reminder.minutes))
+        elif reminder.method == "popup":
+            gcsa_reminders.append(PopupReminder(minutes_before_start=reminder.minutes))
+
+    return gcsa_reminders if gcsa_reminders else None
+
+
 class GoogleCalendarTimeline(MutableTimeline[Event]):
     """Timeline backed by the Google Calendar API using local credentials.
 
@@ -281,9 +342,94 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
     ) -> list[WriteResult]:
         """Add a single interval to Google Calendar.
 
-        Not yet implemented - will be added in Phase 3.
+        Converts an Event (Interval subclass) to a Google Calendar event
+        and creates it via the gcsa API.
+
+        Args:
+            interval: Event to add (must be an Event instance)
+            metadata: Additional metadata (currently unused)
+
+        Returns:
+            List containing a single WriteResult with the created event
         """
-        raise NotImplementedError("Write operations not yet implemented")
+        if not isinstance(interval, Event):
+            return [
+                WriteResult(
+                    success=False,
+                    event=None,
+                    error=TypeError(f"Expected Event, got {type(interval).__name__}"),
+                )
+            ]
+
+        if interval.start is None or interval.end is None:
+            return [
+                WriteResult(
+                    success=False,
+                    event=None,
+                    error=ValueError("Event must have finite start and end"),
+                )
+            ]
+
+        try:
+            # Determine if event is all-day
+            is_all_day = interval.is_all_day
+            if is_all_day is None:
+                # Auto-infer: need calendar's default timezone
+                # For now, use UTC (can be improved later with calendar settings)
+                is_all_day = _infer_is_all_day(
+                    interval.start, interval.end, calendar_tz=None
+                )
+
+            # Convert timestamps to datetime/date objects
+            if is_all_day:
+                # For all-day events, convert UTC timestamps to dates
+                # Google Calendar uses dates in the calendar's timezone
+                # For now, use UTC (can be improved with calendar settings)
+                start_dt = _timestamp_to_datetime(interval.start).date()
+                end_dt = _timestamp_to_datetime(interval.end).date()
+            else:
+                # For timed events, use UTC datetime objects
+                start_dt = _timestamp_to_datetime(interval.start)
+                end_dt = _timestamp_to_datetime(interval.end)
+
+            # Convert reminders
+            gcsa_reminders = _convert_reminders_to_gcsa(interval.reminders)
+
+            # Create gcsa Event object
+            gcsa_event = GcsaEvent(
+                summary=interval.summary,
+                start=start_dt,
+                end=end_dt,
+                timezone="UTC" if not is_all_day else None,
+                description=interval.description,
+                reminders=gcsa_reminders,
+            )
+
+            # Add event to Google Calendar
+            created_event = self.calendar.add_event(
+                gcsa_event, calendar_id=self.calendar_id
+            )
+
+            # Convert created event back to our Event format
+            # We need to fetch it to get the full details, but for now
+            # we'll create a new Event with the ID from the created event
+            result_event = Event(
+                id=created_event.id or "",
+                calendar_id=self.calendar_id,
+                calendar_summary=self.calendar_summary,
+                summary=interval.summary,
+                description=interval.description,
+                recurring_event_id=None,  # Single events don't have recurring_event_id
+                is_all_day=is_all_day,
+                reminders=interval.reminders,
+                start=interval.start,
+                end=interval.end,
+            )
+
+            return [WriteResult(success=True, event=result_event, error=None)]
+
+        except Exception as e:
+            return [WriteResult(success=False, event=None, error=e)]
 
     @override
     def _add_recurring(
