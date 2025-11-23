@@ -595,3 +595,178 @@ def test_add_interval_rejects_unbounded_interval() -> None:
     # Verify add_event was not called
     assert len(stub.added_events) == 0
 
+
+def test_add_recurring_creates_recurring_event() -> None:
+    """Test that _add_recurring creates a recurring event correctly."""
+    from calgebra.mutable.gcsa import Event
+    from calgebra.recurrence import RecurringPattern
+    from calgebra.util import HOUR
+
+    zone = ZoneInfo("UTC")
+    start_dt = datetime(2025, 1, 6, 10, 0, 0, tzinfo=zone)  # Monday
+    start_ts = int(start_dt.timestamp())
+
+    # Create a weekly recurring pattern (every Monday at 10am for 1 hour)
+    pattern = RecurringPattern(
+        freq="weekly",
+        day="monday",
+        start=10 * HOUR,  # 10am
+        duration=HOUR,  # 1 hour
+        tz="UTC",
+        interval_class=Event,
+        summary="Weekly Standup",
+        description="Team standup meeting",
+    )
+
+    calendar, stub = _build_calendar([])
+
+    # Add the recurring pattern with start timestamp in metadata
+    metadata = {"start": start_ts}
+    results = calendar._add_recurring(pattern, metadata)
+
+    # Verify result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is True
+    assert result.error is None
+    assert result.event is not None
+    assert result.event.summary == "Weekly Standup"
+    assert result.event.description == "Team standup meeting"
+    assert result.event.recurring_event_id is None  # Master event
+    assert result.event.is_all_day is False  # Timed event
+
+    # Verify add_event was called
+    assert len(stub.added_events) == 1
+    added_call = stub.added_events[0]
+    assert added_call["calendar_id"] == "primary"
+    gcsa_event = added_call["event"]
+    assert gcsa_event.summary == "Weekly Standup"
+    assert gcsa_event.description == "Team standup meeting"
+    assert gcsa_event.timezone == "UTC"
+    # Verify recurrence string
+    assert len(gcsa_event.recurrence) == 1
+    rrule_str = gcsa_event.recurrence[0]
+    assert "FREQ=WEEKLY" in rrule_str
+    assert "BYDAY=MO" in rrule_str
+    # Verify start/end are datetime objects (not dates)
+    assert isinstance(gcsa_event.start, datetime)
+    assert isinstance(gcsa_event.end, datetime)
+
+
+def test_add_recurring_creates_all_day_recurring_event() -> None:
+    """Test that _add_recurring creates an all-day recurring event."""
+    from calgebra.mutable.gcsa import Event
+    from calgebra.recurrence import RecurringPattern
+    from calgebra.util import DAY
+
+    zone = ZoneInfo("UTC")
+    start_dt = datetime(2025, 1, 1, 0, 0, 0, tzinfo=zone)
+    start_ts = int(start_dt.timestamp())
+
+    # Create a daily all-day recurring pattern
+    pattern = RecurringPattern(
+        freq="daily",
+        duration=DAY,  # Full day = all-day
+        tz="UTC",
+        interval_class=Event,
+        summary="Daily Reminder",
+    )
+
+    calendar, stub = _build_calendar([])
+
+    # Add the recurring pattern
+    metadata = {"start": start_ts}
+    results = calendar._add_recurring(pattern, metadata)
+
+    # Verify result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is True
+    assert result.event is not None
+    assert result.event.is_all_day is True
+
+    # Verify add_event was called with date objects
+    gcsa_event = stub.added_events[0]["event"]
+    assert isinstance(gcsa_event.start, date)
+    assert isinstance(gcsa_event.end, date)
+    assert gcsa_event.timezone is None  # All-day events don't have timezone
+    # Verify recurrence string
+    assert "FREQ=DAILY" in gcsa_event.recurrence[0]
+
+
+def test_add_recurring_includes_exdates() -> None:
+    """Test that _add_recurring includes EXDATE for excluded dates."""
+    from datetime import timezone
+
+    from calgebra.mutable.gcsa import Event
+    from calgebra.recurrence import RecurringPattern
+    from calgebra.util import DAY, HOUR
+
+    zone = ZoneInfo("UTC")
+    start_dt = datetime(2025, 1, 6, 10, 0, 0, tzinfo=zone)  # Monday
+    start_ts = int(start_dt.timestamp())
+
+    # Exclude the second occurrence (next Monday)
+    excluded_ts = start_ts + 7 * DAY
+
+    # Create a weekly recurring pattern with exdates
+    pattern = RecurringPattern(
+        freq="weekly",
+        day="monday",
+        start=10 * HOUR,
+        duration=HOUR,
+        tz="UTC",
+        interval_class=Event,
+        summary="Weekly Meeting",
+        exdates=[excluded_ts],
+    )
+
+    calendar, stub = _build_calendar([])
+
+    # Add the recurring pattern
+    metadata = {"start": start_ts}
+    results = calendar._add_recurring(pattern, metadata)
+
+    # Verify result
+    assert len(results) == 1
+    assert results[0].success is True
+
+    # Verify EXDATE is included in recurrence string
+    gcsa_event = stub.added_events[0]["event"]
+    rrule_str = gcsa_event.recurrence[0]
+    assert "EXDATE:" in rrule_str
+    # Check that the excluded date is formatted correctly
+    excluded_dt = datetime.fromtimestamp(excluded_ts, tz=timezone.utc)
+    excluded_str = excluded_dt.strftime("%Y%m%dT%H%M%SZ")
+    assert excluded_str in rrule_str
+
+
+def test_add_recurring_rejects_non_event_pattern() -> None:
+    """Test that _add_recurring rejects patterns with non-Event interval_class."""
+    from calgebra.interval import Interval
+    from calgebra.recurrence import RecurringPattern
+    from calgebra.util import DAY
+
+    calendar, stub = _build_calendar([])
+
+    # Create a pattern with base Interval class (not Event)
+    pattern = RecurringPattern(
+        freq="daily",
+        duration=DAY,
+        tz="UTC",
+        interval_class=Interval,  # Not Event!
+    )
+
+    results = calendar._add_recurring(pattern, metadata={})
+
+    # Verify error result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is False
+    assert result.error is not None
+    assert isinstance(result.error, TypeError)
+    assert "Expected RecurringPattern[Event]" in str(result.error)
+
+    # Verify add_event was not called
+    assert len(stub.added_events) == 0
+
