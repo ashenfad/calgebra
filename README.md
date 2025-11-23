@@ -63,10 +63,11 @@ Common helpers and aggregates are exposed alongside the core DSL:
 - `merge_within(timeline, gap)` coalesces intervals separated by at most `gap` seconds (useful for grouping related events)
 
 **Integrations**:
-- `calgebra.gcsa.calendars()` returns ready-to-use `Calendar` timelines backed by the Google Calendar API (shared auth, per-calendar metadata, inclusive bounds)
+- `calgebra.gcsa.calendars()` returns ready-to-use `Calendar` timelines backed by the Google Calendar API with full read/write support
 
 **→ [Read the full tutorial](TUTORIAL.md)** for a complete guide to the DSL  
-**→ [API Reference](API.md)** for detailed function signatures and parameters
+**→ [API Reference](API.md)** for detailed function signatures and parameters  
+**→ [Google Calendar Guide](calgebra/docs/GCSA.md)** for read/write operations with Google Calendar
 
 
 ## License
