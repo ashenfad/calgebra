@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.6.0] - 2025-11-22
+
+### Added
+- **Mutable Timeline API** (`calgebra.mutable`): Write operations (`add()`, `remove()`, `remove_series()`) with `WriteResult` return type for handling partial failures
+- **Google Calendar Write Support**: `GoogleCalendarTimeline` (exported as `Calendar`) now supports creating, updating, and deleting events
+- **Documentation**: New `GCSA.md` guide for Google Calendar integration
+
+### Fixed
+- Intersection algorithm now correctly handles overlapping intervals when sources have different lengths
+
 ## [0.5.0] - 2025-11-20
 
 ### Changed
@@ -113,6 +123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Google Calendar integration via `calgebra.gcsa.Calendar`
 - Comprehensive documentation accessible via `calgebra.docs` dictionary
 
+[0.6.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.6.0
 [0.5.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.5.0
 [0.4.1]: https://github.com/ashenfad/calgebra/releases/tag/v0.4.1
 [0.4.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.4.0
