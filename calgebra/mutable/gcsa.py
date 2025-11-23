@@ -4,6 +4,7 @@ This module provides GoogleCalendarTimeline, a MutableTimeline implementation
 that reads from and writes to Google Calendar via the gcsa library.
 """
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
@@ -565,9 +566,116 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
     def _remove_interval(self, interval: Interval) -> list[WriteResult]:
         """Remove a single interval from Google Calendar.
 
-        Not yet implemented - will be added in Phase 3.
+        If the interval is a recurring event instance (has `recurring_event_id`),
+        adds it to the master event's exdates instead of deleting it.
+        Otherwise, deletes the event by ID.
+
+        Args:
+            interval: Event to remove (must be an Event instance with an ID)
+
+        Returns:
+            List containing a single WriteResult
         """
-        raise NotImplementedError("Write operations not yet implemented")
+        if not isinstance(interval, Event):
+            return [
+                WriteResult(
+                    success=False,
+                    event=None,
+                    error=TypeError(f"Expected Event, got {type(interval).__name__}"),
+                )
+            ]
+
+        if not interval.id:
+            return [
+                WriteResult(
+                    success=False,
+                    event=None,
+                    error=ValueError("Event must have an ID to remove"),
+                )
+            ]
+
+        try:
+            # Check if this is a recurring event instance
+            recurring_event_id = getattr(interval, "recurring_event_id", None)
+            if recurring_event_id:
+                # This is a recurring instance - add to exdates instead of deleting
+                return self._remove_recurring_instance(interval, recurring_event_id)
+            else:
+                # Standalone event - delete it
+                self.calendar.delete_event(interval.id, calendar_id=self.calendar_id)
+                return [WriteResult(success=True, event=interval, error=None)]
+
+        except Exception as e:
+            return [WriteResult(success=False, event=None, error=e)]
+
+    def _remove_recurring_instance(
+        self, instance: Event, master_event_id: str
+    ) -> list[WriteResult]:
+        """Remove a recurring event instance by adding it to exdates.
+
+        Args:
+            instance: The recurring instance to remove
+            master_event_id: ID of the master recurring event
+
+        Returns:
+            List containing a single WriteResult
+        """
+        # Fetch the master event
+        master_event = self.calendar.get_event(
+            master_event_id, calendar_id=self.calendar_id
+        )
+
+        # Get current recurrence string
+        if not master_event.recurrence:
+            return [
+                WriteResult(
+                    success=False,
+                    event=None,
+                    error=ValueError(
+                        f"Master event {master_event_id} has no recurrence"
+                    ),
+                )
+            ]
+
+        rrule_str = master_event.recurrence[0]
+
+        # Parse existing EXDATE if present
+        # EXDATE format can be EXDATE=value or EXDATE:value
+        exdate_match = re.search(r"EXDATE[:=]([^;]+)", rrule_str)
+        existing_exdates: list[str] = []
+        if exdate_match:
+            existing_exdates = exdate_match.group(1).split(",")
+            # Remove EXDATE from base RRULE
+            rrule_base = re.sub(r";EXDATE[:=][^;]+", "", rrule_str)
+        else:
+            rrule_base = rrule_str
+
+        # Format instance start time as EXDATE
+        if instance.start is None:
+            return [
+                WriteResult(
+                    success=False,
+                    event=None,
+                    error=ValueError(
+                        "Instance must have a start time to add to exdates"
+                    ),
+                )
+            ]
+
+        instance_start_dt = _timestamp_to_datetime(instance.start)
+        exdate_str = instance_start_dt.strftime("%Y%m%dT%H%M%SZ")
+
+        # Add to exdates if not already present
+        if exdate_str not in existing_exdates:
+            existing_exdates.append(exdate_str)
+            # Update recurrence string with new EXDATE
+            new_rrule = f"{rrule_base};EXDATE:{','.join(existing_exdates)}"
+            master_event.recurrence = [new_rrule]
+
+            # Update the master event
+            self.calendar.update_event(master_event, calendar_id=self.calendar_id)
+
+        return [WriteResult(success=True, event=instance, error=None)]
 
     @override
     def _remove_series(self, interval: Interval) -> list[WriteResult]:

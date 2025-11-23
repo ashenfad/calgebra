@@ -120,6 +120,40 @@ class _StubGoogleCalendar:
             default_reminders=getattr(event, "default_reminders", False),
         )
 
+    def get_event(self, event_id: str, *, calendar_id: str | None = None, **kwargs):
+        """Stub for getting an event by ID."""
+        # Find event by ID in our list
+        for event in self._events:
+            if event.id == event_id:
+                return event
+        raise ValueError(f"Event {event_id} not found")
+
+    def delete_event(
+        self, event: str | object, *, calendar_id: str | None = None, **kwargs
+    ):
+        """Stub for deleting an event."""
+        event_id = event if isinstance(event, str) else getattr(event, "id", None)
+        if event_id is None:
+            raise ValueError("Event ID required")
+        # Remove from list
+        self._events = [e for e in self._events if e.id != event_id]
+
+    def update_event(
+        self, event: object, *, calendar_id: str | None = None, **kwargs
+    ):
+        """Stub for updating an event."""
+        # Update the event in our list
+        event_id = getattr(event, "id", None)
+        if event_id:
+            for i, e in enumerate(self._events):
+                if e.id == event_id:
+                    # Update the event in place
+                    self._events[i] = event
+                    return event
+        # If not found, add it
+        self._events.append(event)
+        return event
+
     def get_calendar_list(self):
         return []
 
@@ -770,3 +804,155 @@ def test_add_recurring_rejects_non_event_pattern() -> None:
     # Verify add_event was not called
     assert len(stub.added_events) == 0
 
+
+
+def test_remove_interval_deletes_standalone_event() -> None:
+    """Test that _remove_interval deletes a standalone event."""
+    from calgebra.mutable.gcsa import Event
+
+    zone = ZoneInfo("UTC")
+    start_dt = datetime(2025, 1, 1, 10, 0, 0, tzinfo=zone)
+    end_dt = datetime(2025, 1, 1, 11, 0, 0, tzinfo=zone)
+
+    start_ts = int(start_dt.timestamp())
+    end_ts = int(end_dt.timestamp())
+
+    # Create a standalone event
+    event = Event(
+        id="evt-standalone",
+        calendar_id="primary",
+        calendar_summary="Primary",
+        summary="Standalone Event",
+        description="To be deleted",
+        recurring_event_id=None,  # Standalone
+        is_all_day=False,
+        start=start_ts,
+        end=end_ts,
+    )
+
+    # Create a stub event for the calendar
+    stub_event = _StubEvent(
+        id="evt-standalone",
+        summary="Standalone Event",
+        start=start_dt,
+        end=end_dt,
+        timezone="UTC",
+    )
+
+    calendar, stub = _build_calendar([stub_event])
+
+    # Remove the event
+    results = calendar._remove_interval(event)
+
+    # Verify result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is True
+    assert result.error is None
+    assert result.event == event
+
+    # Verify event was deleted (removed from stub's event list)
+    assert len(stub._events) == 0
+
+
+def test_remove_interval_adds_recurring_instance_to_exdates() -> None:
+    """Test that _remove_interval adds a recurring instance to exdates."""
+    from calgebra.mutable.gcsa import Event
+
+    zone = ZoneInfo("UTC")
+    start_dt = datetime(2025, 1, 6, 10, 0, 0, tzinfo=zone)  # Monday
+    end_dt = datetime(2025, 1, 6, 11, 0, 0, tzinfo=zone)
+
+    start_ts = int(start_dt.timestamp())
+    end_ts = int(end_dt.timestamp())
+
+    # Create a recurring instance
+    instance = Event(
+        id="evt-instance",
+        calendar_id="primary",
+        calendar_summary="Primary",
+        summary="Weekly Meeting",
+        description=None,
+        recurring_event_id="master-event-id",
+        is_all_day=False,
+        start=start_ts,
+        end=end_ts,
+    )
+
+    # Create master event with recurrence
+    master_event = _StubEvent(
+        id="master-event-id",
+        summary="Weekly Meeting",
+        start=start_dt,
+        end=end_dt,
+        timezone="UTC",
+    )
+    # Add recurrence attribute (gcsa stores it as a list)
+    master_event.recurrence = ["FREQ=WEEKLY;BYDAY=MO"]
+
+    calendar, stub = _build_calendar([master_event])
+
+    # Remove the instance
+    results = calendar._remove_interval(instance)
+
+    # Verify result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is True
+    assert result.error is None
+
+    # Verify master event was updated with EXDATE
+    updated_master = stub.get_event("master-event-id")
+    assert updated_master.recurrence is not None
+    rrule_str = updated_master.recurrence[0]
+    assert "EXDATE:" in rrule_str or "EXDATE=" in rrule_str
+    # Check that the instance start time is in EXDATE
+    exdate_str = start_dt.strftime("%Y%m%dT%H%M%SZ")
+    assert exdate_str in rrule_str
+
+
+def test_remove_interval_rejects_non_event() -> None:
+    """Test that _remove_interval rejects non-Event intervals."""
+    from calgebra.interval import Interval
+
+    calendar, stub = _build_calendar([])
+
+    # Try to remove a plain Interval
+    interval = Interval(start=1000, end=2000)
+    results = calendar._remove_interval(interval)
+
+    # Verify error result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is False
+    assert result.error is not None
+    assert isinstance(result.error, TypeError)
+    assert "Expected Event" in str(result.error)
+
+
+def test_remove_interval_rejects_event_without_id() -> None:
+    """Test that _remove_interval rejects events without an ID."""
+    from calgebra.mutable.gcsa import Event
+
+    calendar, stub = _build_calendar([])
+
+    # Create event without ID
+    event = Event(
+        id="",  # Empty ID
+        calendar_id="primary",
+        calendar_summary="Primary",
+        summary="No ID",
+        description=None,
+        start=1000,
+        end=2000,
+    )
+
+    results = calendar._remove_interval(event)
+
+    # Verify error result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is False
+    assert result.error is not None
+    assert isinstance(result.error, ValueError)
+    assert "ID" in str(result.error)
