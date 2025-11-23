@@ -299,7 +299,8 @@ class Intersection(Timeline[IvlOut]):
                 # Filter out exhausted sources for overlap calculation
                 active_current = [ivl for ivl in current if ivl is not None]
                 num_active = len(active_current)
-                # Special case: single source intersection is identity (return all intervals)
+                # Special case: single source intersection is identity
+                # (return all intervals)
                 if len(self.sources) == 1:
                     # Just yield all intervals from the single source
                     for idx in emit_indices:
@@ -312,7 +313,8 @@ class Intersection(Timeline[IvlOut]):
                         except StopIteration:
                             return
                 # For intersection, we need intervals from ALL sources
-                # If any source is exhausted and has no current interval, no intersection possible
+                # If any source is exhausted and has no current interval,
+                # no intersection possible
                 if num_active < len(self.sources):
                     return
 
@@ -325,13 +327,15 @@ class Intersection(Timeline[IvlOut]):
                 if overlap_start < overlap_end:
                     for idx in emit_indices:
                         if current[idx] is not None:
-                            # Skip if we've already processed this interval at this cutoff
+                            # Skip if we've already processed this interval
+                            # at this cutoff
                             if (
                                 last_processed_cutoff[idx] is not None
                                 and last_processed_cutoff[idx] == overlap_end
                             ):
                                 continue
-                            # Convert sentinel values back to None for unbounded intervals
+                            # Convert sentinel values back to None
+                            # for unbounded intervals
                             start_val = (
                                 overlap_start if overlap_start != NEG_INF else None
                             )
@@ -347,7 +351,8 @@ class Intersection(Timeline[IvlOut]):
                         if not exhausted[idx]:
                             try:
                                 current[idx] = next(iterators[idx])
-                                last_processed_cutoff[idx] = None  # Reset for new interval
+                                # Reset for new interval
+                                last_processed_cutoff[idx] = None
                                 advanced = True
                             except StopIteration:
                                 exhausted[idx] = True
