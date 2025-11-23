@@ -558,7 +558,6 @@ class Complement(Timeline[Interval]):
         return generate()
 
 
-
 def flatten(timeline: "Timeline[Any]") -> "Timeline[Interval]":
     """Return a timeline that yields coalesced intervals for the given source.
 
