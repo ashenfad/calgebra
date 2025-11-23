@@ -681,9 +681,49 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
     def _remove_series(self, interval: Interval) -> list[WriteResult]:
         """Remove a recurring series from Google Calendar.
 
-        Not yet implemented - will be added in Phase 3.
+        Deletes the master recurring event, which removes all instances of the series.
+        If the interval has a `recurring_event_id`, deletes that master event.
+        Otherwise, deletes the event by its own ID (assuming it's a master event).
+
+        Args:
+            interval: Event representing the series to remove
+                (can be a master event or an instance)
+
+        Returns:
+            List containing a single WriteResult
         """
-        raise NotImplementedError("Write operations not yet implemented")
+        if not isinstance(interval, Event):
+            return [
+                WriteResult(
+                    success=False,
+                    event=None,
+                    error=TypeError(f"Expected Event, got {type(interval).__name__}"),
+                )
+            ]
+
+        if not interval.id:
+            return [
+                WriteResult(
+                    success=False,
+                    event=None,
+                    error=ValueError("Event must have an ID to remove series"),
+                )
+            ]
+
+        try:
+            # Determine which event ID to delete
+            # If recurring_event_id is set, delete the master
+            # Otherwise, delete the event itself (assuming it's a master)
+            recurring_event_id = getattr(interval, "recurring_event_id", None)
+            master_event_id = recurring_event_id if recurring_event_id else interval.id
+
+            # Delete the master event (this deletes all instances)
+            self.calendar.delete_event(master_event_id, calendar_id=self.calendar_id)
+
+            return [WriteResult(success=True, event=interval, error=None)]
+
+        except Exception as e:
+            return [WriteResult(success=False, event=None, error=e)]
 
 
 def calendars() -> list[GoogleCalendarTimeline]:

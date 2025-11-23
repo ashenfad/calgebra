@@ -956,3 +956,155 @@ def test_remove_interval_rejects_event_without_id() -> None:
     assert result.error is not None
     assert isinstance(result.error, ValueError)
     assert "ID" in str(result.error)
+
+
+def test_remove_series_deletes_master_event() -> None:
+    """Test that _remove_series deletes a master recurring event."""
+    from calgebra.mutable.gcsa import Event
+
+    zone = ZoneInfo("UTC")
+    start_dt = datetime(2025, 1, 6, 10, 0, 0, tzinfo=zone)  # Monday
+    end_dt = datetime(2025, 1, 6, 11, 0, 0, tzinfo=zone)
+
+    start_ts = int(start_dt.timestamp())
+    end_ts = int(end_dt.timestamp())
+
+    # Create a master recurring event
+    master_event = Event(
+        id="master-event-id",
+        calendar_id="primary",
+        calendar_summary="Primary",
+        summary="Weekly Meeting",
+        description=None,
+        recurring_event_id=None,  # Master event
+        is_all_day=False,
+        start=start_ts,
+        end=end_ts,
+    )
+
+    # Create stub master event
+    stub_master = _StubEvent(
+        id="master-event-id",
+        summary="Weekly Meeting",
+        start=start_dt,
+        end=end_dt,
+        timezone="UTC",
+    )
+    stub_master.recurrence = ["FREQ=WEEKLY;BYDAY=MO"]
+
+    calendar, stub = _build_calendar([stub_master])
+
+    # Remove the series
+    results = calendar._remove_series(master_event)
+
+    # Verify result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is True
+    assert result.error is None
+    assert result.event == master_event
+
+    # Verify master event was deleted
+    assert len(stub._events) == 0
+
+
+def test_remove_series_deletes_master_from_instance() -> None:
+    """Test that _remove_series deletes master event when given an instance."""
+    from calgebra.mutable.gcsa import Event
+
+    zone = ZoneInfo("UTC")
+    start_dt = datetime(2025, 1, 6, 10, 0, 0, tzinfo=zone)  # Monday
+    end_dt = datetime(2025, 1, 6, 11, 0, 0, tzinfo=zone)
+
+    start_ts = int(start_dt.timestamp())
+    end_ts = int(end_dt.timestamp())
+
+    # Create a recurring instance
+    instance = Event(
+        id="evt-instance",
+        calendar_id="primary",
+        calendar_summary="Primary",
+        summary="Weekly Meeting",
+        description=None,
+        recurring_event_id="master-event-id",  # Points to master
+        is_all_day=False,
+        start=start_ts,
+        end=end_ts,
+    )
+
+    # Create stub master event
+    stub_master = _StubEvent(
+        id="master-event-id",
+        summary="Weekly Meeting",
+        start=start_dt,
+        end=end_dt,
+        timezone="UTC",
+    )
+    stub_master.recurrence = ["FREQ=WEEKLY;BYDAY=MO"]
+
+    calendar, stub = _build_calendar([stub_master])
+
+    # Remove the series using the instance
+    results = calendar._remove_series(instance)
+
+    # Verify result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is True
+    assert result.error is None
+
+    # Verify master event was deleted (not the instance)
+    assert len(stub._events) == 0
+    # Verify master was deleted, not instance
+    try:
+        stub.get_event("master-event-id")
+        assert False, "Master event should have been deleted"
+    except ValueError:
+        pass  # Expected
+
+
+def test_remove_series_rejects_non_event() -> None:
+    """Test that _remove_series rejects non-Event intervals."""
+    from calgebra.interval import Interval
+
+    calendar, stub = _build_calendar([])
+
+    # Try to remove a plain Interval
+    interval = Interval(start=1000, end=2000)
+    results = calendar._remove_series(interval)
+
+    # Verify error result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is False
+    assert result.error is not None
+    assert isinstance(result.error, TypeError)
+    assert "Expected Event" in str(result.error)
+
+
+def test_remove_series_rejects_event_without_id() -> None:
+    """Test that _remove_series rejects events without an ID."""
+    from calgebra.mutable.gcsa import Event
+
+    calendar, stub = _build_calendar([])
+
+    # Create event without ID
+    event = Event(
+        id="",  # Empty ID
+        calendar_id="primary",
+        calendar_summary="Primary",
+        summary="No ID",
+        description=None,
+        start=1000,
+        end=2000,
+    )
+
+    results = calendar._remove_series(event)
+
+    # Verify error result
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is False
+    assert result.error is not None
+    assert isinstance(result.error, ValueError)
+    assert "ID" in str(result.error)
