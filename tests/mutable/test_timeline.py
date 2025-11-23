@@ -8,7 +8,6 @@ import pytest
 from typing_extensions import override
 
 from calgebra.core import Intersection, Timeline, flatten, intersection, union
-from calgebra.mutable.memory import timeline
 from calgebra.interval import Interval
 from calgebra.metrics import (
     count_intervals,
@@ -17,6 +16,7 @@ from calgebra.metrics import (
     min_duration,
     total_duration,
 )
+from calgebra.mutable.memory import timeline
 from calgebra.properties import (
     Property,
     end,
@@ -436,6 +436,45 @@ def test_intersection_touching_edges_inclusive() -> None:
 
     # No intersection because left ends at 5 (exclusive) and right starts at 5
     assert list((left & right)[:]) == []
+
+
+def test_intersection_handles_exhausted_iterators() -> None:
+    """Test that intersection correctly handles exhausted iterators.
+
+    This tests the bug fix where intersection would stop prematurely when an iterator
+    was exhausted, missing overlaps with remaining intervals from other sources.
+
+    Scenario:
+    - Timeline A: Contains intervals [100, 200) and [150, 160) (overlapping within A)
+    - Timeline B (solid/query bounds): Contains interval [0, 200)
+    - Intersection A & B should return both [100, 200) and [150, 160) since both overlap with [0, 200)
+    """
+    from calgebra.core import solid
+
+    # Timeline A: has two overlapping intervals internally
+    # Interval A1: [100, 200) - longer interval
+    # Interval A2: [150, 160) - shorter interval contained within A1
+    timeline_a = timeline(
+        Interval(start=100, end=200),  # A1
+        Interval(start=150, end=160),  # A2 (contained in A1)
+    )
+
+    # Timeline B (solid/query bounds): single interval [0, 200)
+    query_start = 0
+    query_end = 200
+
+    # Intersect the two timelines
+    # Both intervals from timeline_a overlap with solid's [0, 200), so both should be returned
+    result = list((timeline_a & solid)[query_start:query_end])
+
+    # Both intervals should be returned (they both overlap with solid's interval)
+    assert len(result) == 2, (
+        f"Expected 2 intervals, got {len(result)}. "
+        f"When intersecting timeline_a (with overlapping intervals) and solid, "
+        f"both intervals from timeline_a that overlap with solid should be returned."
+    )
+    assert result[0].start == 100 and result[0].end == 200
+    assert result[1].start == 150 and result[1].end == 160
 
 
 def test_intersection_preserves_metadata_from_all_sources() -> None:
