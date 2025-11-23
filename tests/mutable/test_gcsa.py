@@ -1108,3 +1108,88 @@ def test_remove_series_rejects_event_without_id() -> None:
     assert result.error is not None
     assert isinstance(result.error, ValueError)
     assert "ID" in str(result.error)
+
+
+def test_add_interval_auto_fills_calendar_metadata() -> None:
+    """Test that _add_interval auto-fills calendar_id and calendar_summary."""
+    from calgebra.mutable.gcsa import Event
+
+    zone = ZoneInfo("UTC")
+    start_dt = datetime(2025, 1, 1, 14, 0, 0, tzinfo=zone)
+    end_dt = datetime(2025, 1, 1, 15, 0, 0, tzinfo=zone)
+
+    start_ts = int(start_dt.timestamp())
+    end_ts = int(end_dt.timestamp())
+
+    # Create an Event WITHOUT calendar_id/calendar_summary
+    event = Event(
+        id="",
+        summary="Test Meeting",
+        description=None,
+        is_all_day=False,
+        start=start_ts,
+        end=end_ts,
+    )
+
+    calendar, stub = _build_calendar([])
+
+    # Add the event
+    results = calendar._add_interval(event, metadata={})
+
+    # Verify result has calendar metadata auto-filled
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is True
+    assert result.event is not None
+    assert result.event.calendar_id == calendar.calendar_id
+    assert result.event.calendar_summary == calendar.calendar_summary
+
+
+def test_add_interval_ignores_source_calendar_metadata() -> None:
+    """Test that _add_interval ignores calendar_id/calendar_summary from source calendar."""
+    from calgebra.mutable.gcsa import Event
+
+    zone = ZoneInfo("UTC")
+    start_dt = datetime(2025, 1, 1, 14, 0, 0, tzinfo=zone)
+    end_dt = datetime(2025, 1, 1, 15, 0, 0, tzinfo=zone)
+
+    start_ts = int(start_dt.timestamp())
+    end_ts = int(end_dt.timestamp())
+
+    # Create calendar A with specific ID
+    cal_a, stub_a = _build_calendar(
+        [],
+        calendar_id="calendar-a",
+        calendar_summary="Calendar A",
+    )
+
+    # Create an Event with calendar A's metadata
+    event = Event(
+        id="",
+        calendar_id=cal_a.calendar_id,
+        calendar_summary=cal_a.calendar_summary,
+        summary="Test Meeting",
+        description=None,
+        start=start_ts,
+        end=end_ts,
+    )
+
+    # Create calendar B with different ID
+    cal_b, stub_b = _build_calendar(
+        [],
+        calendar_id="calendar-b",
+        calendar_summary="Calendar B",
+    )
+
+    # Add event to calendar B (should use B's metadata, not A's)
+    results = cal_b._add_interval(event, metadata={})
+
+    # Verify result has calendar B's metadata (not A's)
+    assert len(results) == 1
+    result = results[0]
+    assert result.success is True
+    assert result.event is not None
+    assert result.event.calendar_id == cal_b.calendar_id
+    assert result.event.calendar_summary == cal_b.calendar_summary
+    assert result.event.calendar_id != cal_a.calendar_id  # Should be different
+    assert result.event.calendar_id == "calendar-b"
