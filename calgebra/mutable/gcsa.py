@@ -6,7 +6,7 @@ that reads from and writes to Google Calendar via the gcsa library.
 
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
 from time import time as current_time
 from typing import Any, Literal
@@ -48,7 +48,9 @@ class Event(Interval):
     Attributes:
         id: Google Calendar event ID
         calendar_id: ID of the calendar containing this event
+            (ignored on write - always uses target calendar's ID)
         calendar_summary: Human-readable name of the calendar
+            (ignored on write - always uses target calendar's summary)
         summary: Event title/summary
         description: Event description (optional)
         recurring_event_id: ID of the master recurring event
@@ -60,8 +62,8 @@ class Event(Interval):
     """
 
     id: str
-    calendar_id: str
-    calendar_summary: str
+    calendar_id: str = ""  # Optional for new events (auto-filled by Calendar)
+    calendar_summary: str = ""  # Optional for new events (auto-filled by Calendar)
     summary: str
     description: str | None
     recurring_event_id: str | None = None
@@ -502,6 +504,15 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
         if event.start is None or event.end is None:
             return _error_result(ValueError("Event must have finite start and end"))
 
+        # Always use this calendar's metadata
+        # (ignore any calendar_id/calendar_summary in event)
+        # This allows moving events between calendars
+        event = replace(
+            event,
+            calendar_id=self.calendar_id,
+            calendar_summary=self.calendar_summary,
+        )
+
         try:
             # Determine if event is all-day
             is_all_day = event.is_all_day
@@ -583,6 +594,12 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
             )
 
         try:
+            # Always use this calendar's metadata
+            # (ignore any calendar_id/calendar_summary in metadata)
+            # This allows moving recurring patterns between calendars
+            metadata["calendar_id"] = self.calendar_id
+            metadata["calendar_summary"] = self.calendar_summary
+
             # Merge metadata
             merged_metadata = {**pattern.metadata, **metadata}
 

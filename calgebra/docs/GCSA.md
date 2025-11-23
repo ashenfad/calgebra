@@ -86,13 +86,13 @@ primary = cals[0]
 at = at_tz("US/Pacific")
 
 # Create a timed event
+# Note: calendar_id/calendar_summary are always ignored on write
+# (always uses the target calendar's metadata - allows moving events between calendars)
 meeting = Event.from_datetimes(
     start=at(2025, 1, 15, 14, 0),  # 2:00 PM Pacific
     end=at(2025, 1, 15, 15, 0),    # 3:00 PM Pacific
     summary="Team Meeting",
     description="Weekly team sync",
-    calendar_id=primary.calendar_id,
-    calendar_summary=primary.calendar_summary,
     reminders=[
         Reminder(method="email", minutes=30),
         Reminder(method="popup", minutes=15),
@@ -121,8 +121,6 @@ vacation = Event.from_datetimes(
     start=at(2025, 7, 1),
     end=at(2025, 7, 10),  # 9 days
     summary="Vacation",
-    calendar_id=primary.calendar_id,
-    calendar_summary=primary.calendar_summary,
 )
 
 # Explicitly set all-day
@@ -131,8 +129,6 @@ holiday = Event.from_datetimes(
     end=at(2025, 12, 26),
     summary="Christmas",
     is_all_day=True,  # Force all-day
-    calendar_id=primary.calendar_id,
-    calendar_summary=primary.calendar_summary,
 )
 
 primary.add(vacation)
@@ -406,8 +402,6 @@ event = Event.from_datetimes(
     start=at(2025, 1, 15, 14, 0),
     end=at(2025, 1, 15, 15, 0),
     summary="Meeting",
-    calendar_id=primary.calendar_id,
-    calendar_summary=primary.calendar_summary,
 )
 
 results = primary.add(event)
@@ -436,8 +430,6 @@ event: Event = Event.from_datetimes(
     start=at(2025, 1, 15, 14, 0),
     end=at(2025, 1, 15, 15, 0),
     summary="Meeting",
-    calendar_id=primary.calendar_id,
-    calendar_summary=primary.calendar_summary,
 )
 ```
 
