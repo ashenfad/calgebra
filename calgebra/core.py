@@ -276,38 +276,85 @@ class Intersection(Timeline[IvlOut]):
             emit_indices = list(range(len(self.sources)))
 
         iterators = [iter(source.fetch(start, end)) for source in self.sources]
+        exhausted = [False] * len(iterators)
+        # Track the last cutoff at which each interval was processed
+        # This prevents processing the same overlap multiple times
+        last_processed_cutoff: list[int | None] = [None] * len(iterators)
 
         def generate() -> Iterable[IvlOut]:
             # Initialize: get first interval from each source
-            try:
-                current = [next(iterator) for iterator in iterators]
-            except StopIteration:
+            current: list[IvlOut | None] = []
+            for idx, iterator in enumerate(iterators):
+                try:
+                    current.append(next(iterator))
+                except StopIteration:
+                    exhausted[idx] = True
+                    current.append(None)
+
+            # If all sources are exhausted, no overlaps possible
+            if all(exhausted):
                 return
 
             while True:
-                # Find overlap region across all current intervals
+                # Filter out exhausted sources for overlap calculation
+                active_current = [ivl for ivl in current if ivl is not None]
+                num_active = len(active_current)
+                # Special case: single source intersection is identity (return all intervals)
+                if len(self.sources) == 1:
+                    # Just yield all intervals from the single source
+                    for idx in emit_indices:
+                        if current[idx] is not None:
+                            yield current[idx]
+                    # Advance through all remaining intervals
+                    while True:
+                        try:
+                            yield next(iterators[0])
+                        except StopIteration:
+                            return
+                # For intersection, we need intervals from ALL sources
+                # If any source is exhausted and has no current interval, no intersection possible
+                if num_active < len(self.sources):
+                    return
+
+                # Find overlap region across all active current intervals
                 # Use finite properties to handle None (unbounded) values
-                overlap_start = max(event.finite_start for event in current)
-                overlap_end = min(event.finite_end for event in current)
+                overlap_start = max(event.finite_start for event in active_current)
+                overlap_end = min(event.finite_end for event in active_current)
 
                 # If there's actual overlap, yield trimmed copy from selected sources
                 if overlap_start < overlap_end:
                     for idx in emit_indices:
-                        # Convert sentinel values back to None for unbounded intervals
-                        start_val = overlap_start if overlap_start != NEG_INF else None
-                        end_val = overlap_end if overlap_end != POS_INF else None
-                        yield replace(current[idx], start=start_val, end=end_val)
+                        if current[idx] is not None:
+                            # Skip if we've already processed this interval at this cutoff
+                            if (
+                                last_processed_cutoff[idx] is not None
+                                and last_processed_cutoff[idx] == overlap_end
+                            ):
+                                continue
+                            # Convert sentinel values back to None for unbounded intervals
+                            start_val = (
+                                overlap_start if overlap_start != NEG_INF else None
+                            )
+                            end_val = overlap_end if overlap_end != POS_INF else None
+                            yield replace(current[idx], start=start_val, end=end_val)
+                            last_processed_cutoff[idx] = overlap_end
 
                 # Advance any interval that ends at the overlap boundary
                 cutoff = overlap_end
                 advanced = False
                 for idx, event in enumerate(current):
-                    if event.finite_end == cutoff:
-                        try:
-                            current[idx] = next(iterators[idx])
-                            advanced = True
-                        except StopIteration:
-                            return
+                    if event is not None and event.finite_end == cutoff:
+                        if not exhausted[idx]:
+                            try:
+                                current[idx] = next(iterators[idx])
+                                last_processed_cutoff[idx] = None  # Reset for new interval
+                                advanced = True
+                            except StopIteration:
+                                exhausted[idx] = True
+                                # Keep the last interval from this exhausted source
+                                # so remaining intervals from other sources can still
+                                # be checked against it
+                                advanced = True  # Mark as advanced to continue loop
 
                 # If no interval advanced, we've exhausted all overlaps
                 if not advanced:
