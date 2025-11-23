@@ -19,6 +19,7 @@ from typing_extensions import override
 from calgebra.interval import Interval
 from calgebra.mutable import MutableTimeline, WriteResult
 from calgebra.recurrence import RecurringPattern
+from calgebra.util import DAY
 
 
 @dataclass(frozen=True)
@@ -437,9 +438,128 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
     ) -> list[WriteResult]:
         """Add a recurring pattern to Google Calendar.
 
-        Not yet implemented - will be added in Phase 3.
+        Converts a RecurringPattern to a Google Calendar recurring event
+        with RRULE and handles exdates.
+
+        Args:
+            pattern: RecurringPattern to add (must use Event as interval_class)
+            metadata: Additional metadata to merge with pattern metadata
+
+        Returns:
+            List containing a single WriteResult with the created recurring event
         """
-        raise NotImplementedError("Write operations not yet implemented")
+        if pattern.interval_class is not Event:
+            return [
+                WriteResult(
+                    success=False,
+                    event=None,
+                    error=TypeError(
+                        f"Expected RecurringPattern[Event], "
+                        f"got RecurringPattern[{pattern.interval_class.__name__}]"
+                    ),
+                )
+            ]
+
+        try:
+            # Merge metadata
+            merged_metadata = {**pattern.metadata, **metadata}
+
+            # Determine if all-day (duration == DAY means all-day)
+            is_all_day = pattern.duration_seconds == DAY
+
+            # Get RRULE string
+            rrule_str = pattern.to_rrule_string()
+
+            # Add EXDATE if there are exdates
+            if pattern.exdates:
+                # Convert exdates (timestamps) to EXDATE format
+                # EXDATE format: "EXDATE:20250106T100000Z,20250113T100000Z"
+                exdate_strings = []
+                for exdate_ts in sorted(pattern.exdates):
+                    exdate_dt = _timestamp_to_datetime(exdate_ts)
+                    # Format as RFC 5545 EXDATE: YYYYMMDDTHHMMSSZ
+                    exdate_str = exdate_dt.strftime("%Y%m%dT%H%M%SZ")
+                    exdate_strings.append(exdate_str)
+
+                # Append EXDATE to RRULE string
+                # Note: EXDATE is technically a separate property, but gcsa
+                # accepts it in the recurrence string
+                exdate_part = "EXDATE:" + ",".join(exdate_strings)
+                rrule_str = f"{rrule_str};{exdate_part}"
+
+            # Determine series start date/time
+            # Use current time as DTSTART (or from metadata if provided)
+            # For Google Calendar, we need a concrete start date
+            if "start" in merged_metadata:
+                # Use provided start timestamp
+                series_start_ts = merged_metadata["start"]
+            else:
+                # Use current time as default
+                from time import time
+
+                series_start_ts = int(time())
+
+            # Convert start timestamp to datetime/date
+            if is_all_day:
+                series_start_dt = _timestamp_to_datetime(series_start_ts).date()
+                # For all-day events, calculate end date
+                series_end_dt = datetime.fromtimestamp(
+                    series_start_ts + pattern.duration_seconds, tz=timezone.utc
+                ).date()
+            else:
+                series_start_dt = _timestamp_to_datetime(series_start_ts)
+                # For timed events, add duration
+                series_end_dt = datetime.fromtimestamp(
+                    series_start_ts + pattern.duration_seconds, tz=timezone.utc
+                )
+
+            # Extract Event fields from metadata
+            summary = merged_metadata.get("summary", "Recurring Event")
+            description = merged_metadata.get("description")
+
+            # Convert reminders if provided in metadata
+            reminders = merged_metadata.get("reminders")
+            if isinstance(reminders, list):
+                # Assume they're our Reminder objects
+                gcsa_reminders = _convert_reminders_to_gcsa(reminders)
+            else:
+                gcsa_reminders = None
+
+            # Create gcsa Event with recurrence
+            gcsa_event = GcsaEvent(
+                summary=summary,
+                start=series_start_dt,
+                end=series_end_dt,
+                timezone="UTC" if not is_all_day else None,
+                description=description,
+                recurrence=rrule_str,  # gcsa accepts RRULE string
+                reminders=gcsa_reminders,
+            )
+
+            # Add event to Google Calendar
+            created_event = self.calendar.add_event(
+                gcsa_event, calendar_id=self.calendar_id
+            )
+
+            # Create result Event (representing the master recurring event)
+            # Master events have recurring_event_id = None
+            result_event = Event(
+                id=created_event.id or "",
+                calendar_id=self.calendar_id,
+                calendar_summary=self.calendar_summary,
+                summary=summary,
+                description=description,
+                recurring_event_id=None,  # Master events don't have recurring_event_id
+                is_all_day=is_all_day,
+                reminders=reminders,
+                start=series_start_ts,
+                end=series_start_ts + pattern.duration_seconds,
+            )
+
+            return [WriteResult(success=True, event=result_event, error=None)]
+
+        except Exception as e:
+            return [WriteResult(success=False, event=None, error=e)]
 
     @override
     def _remove_interval(self, interval: Interval) -> list[WriteResult]:
@@ -452,22 +572,6 @@ class GoogleCalendarTimeline(MutableTimeline[Event]):
     @override
     def _remove_series(self, interval: Interval) -> list[WriteResult]:
         """Remove a recurring series from Google Calendar.
-
-        Not yet implemented - will be added in Phase 3.
-        """
-        raise NotImplementedError("Write operations not yet implemented")
-
-    @override
-    def _remove_many(self, intervals: Iterable[Interval]) -> list[WriteResult]:
-        """Remove multiple intervals from Google Calendar.
-
-        Not yet implemented - will be added in Phase 3.
-        """
-        raise NotImplementedError("Write operations not yet implemented")
-
-    @override
-    def _remove_many_series(self, intervals: Iterable[Interval]) -> list[WriteResult]:
-        """Remove multiple recurring series from Google Calendar.
 
         Not yet implemented - will be added in Phase 3.
         """
