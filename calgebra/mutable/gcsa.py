@@ -50,7 +50,7 @@ class Event(Interval):
     """Google Calendar event represented as an interval.
 
     Attributes:
-        id: Google Calendar event ID
+        id: Google Calendar event ID (optional for new events - auto-filled by Calendar)
         calendar_id: ID of the calendar containing this event
             (ignored on write - always uses target calendar's ID)
         calendar_summary: Human-readable name of the calendar
@@ -65,7 +65,7 @@ class Event(Interval):
             (None = use calendar defaults)
     """
 
-    id: str
+    id: str = ""  # Optional for new events (auto-filled by Calendar on add)
     calendar_id: str = ""  # Optional for new events (auto-filled by Calendar)
     calendar_summary: str = ""  # Optional for new events (auto-filled by Calendar)
     summary: str
@@ -87,40 +87,36 @@ class Event(Interval):
             return f"Event('{self.summary}', {start_str}→{end_str}, unbounded)"
 
 
-def _normalize_datetime(
-    dt: datetime | date, edge: Literal["start", "end"], zone: ZoneInfo | None
-) -> datetime:
+def _normalize_datetime(dt: datetime | date, zone: ZoneInfo | None) -> datetime:
     """Normalize a datetime or date to a UTC datetime.
 
-    For date objects, uses the provided zone (or UTC if none) to determine boundaries.
-    For datetime objects, converts to UTC.
+    For date objects, uses the provided zone (or UTC if none) to interpret the date
+    as midnight in that timezone, then converts to UTC.
+
+    For datetime objects, converts directly to UTC.
+
+    Note: Both start and end dates use midnight (time.min) for exclusive end semantics.
+    Google Calendar's all-day events use exclusive end dates (e.g., end="2025-01-02"
+    means the event ends at the start of Jan 2, i.e., end of Jan 1).
     """
     if not isinstance(dt, datetime):
-        # Date object: convert to datetime at day boundary
+        # Date object: interpret as midnight in the provided zone
         tz = zone if zone is not None else timezone.utc
-        dt = datetime.combine(dt, time.min if edge == "start" else time.max)
-        dt = dt.replace(tzinfo=tz)
+        dt = datetime.combine(dt, time.min, tzinfo=tz)
     elif dt.tzinfo is None:
         # Naive datetime: assume provided zone or UTC
         tz = zone if zone is not None else timezone.utc
         dt = dt.replace(tzinfo=tz)
-    else:
-        # Timezone-aware datetime: convert to UTC
-        dt = dt.astimezone(zone) if zone is not None else dt
+    # Convert to UTC (works for both naive-with-tz and aware datetimes)
     return dt.astimezone(timezone.utc)
 
 
-def _to_timestamp(
-    dt: datetime | date, edge: Literal["start", "end"], zone: ZoneInfo | None
-) -> int:
+def _to_timestamp(dt: datetime | date, zone: ZoneInfo | None) -> int:
     """Convert a datetime or date to a Unix timestamp.
 
-    Both Google Calendar and calgebra now use exclusive end semantics.
+    Both Google Calendar and calgebra use exclusive end semantics.
     """
-    normalized = _normalize_datetime(dt, edge, zone)
-
-    # Both start and end can be directly converted
-    # Google Calendar uses exclusive end times, and so does calgebra now
+    normalized = _normalize_datetime(dt, zone)
     return int(normalized.replace(microsecond=0).timestamp())
 
 
@@ -133,12 +129,69 @@ def _is_all_day_event(gcsa_event: Any) -> bool:
     """Check if a gcsa event is an all-day event.
 
     Google Calendar uses start.date (not start.dateTime) for all-day events.
+    For recurring event instances, we also check duration and time.
     """
-    return (
-        hasattr(gcsa_event, "start")
-        and hasattr(gcsa_event.start, "date")
-        and gcsa_event.start.date is not None
-    )
+    if not hasattr(gcsa_event, "start") or not hasattr(gcsa_event, "end"):
+        return False
+
+    # Extract start/end - this handles various Google Calendar formats
+    start_dt = _extract_datetime(gcsa_event.start)
+    end_dt = _extract_datetime(gcsa_event.end)
+
+    # Primary check: If start/end are date objects (not datetime), it's an all-day event
+    # Note: datetime is a subclass of date, so we must check datetime first
+    if isinstance(start_dt, date) and not isinstance(start_dt, datetime):
+        if isinstance(end_dt, date) and not isinstance(end_dt, datetime):
+            return True
+
+    # Secondary check: Google Calendar uses start.date attribute (not method) for all-day events
+    # Need to check if it's actually an attribute, not the datetime.date() method
+    if hasattr(gcsa_event.start, "date"):
+        # Check if it's an attribute (not a method) by seeing if it's callable
+        date_attr = getattr(gcsa_event.start, "date", None)
+        # If it's not callable, it's an attribute (Google Calendar API format)
+        # If it's callable, it's the datetime.date() method (not what we want)
+        if date_attr is not None and not callable(date_attr):
+            return True
+
+    # Fallback for recurring instances: check if duration is ~24 hours and starts at midnight
+    # This handles cases where Google Calendar returns dateTime for recurring all-day instances
+    # Both must be datetime objects (not dates) for this check
+    if isinstance(start_dt, datetime) and isinstance(end_dt, datetime):
+        # Get timezone (use event timezone or UTC)
+        event_tz = (
+            ZoneInfo(gcsa_event.timezone)
+            if hasattr(gcsa_event, "timezone") and gcsa_event.timezone
+            else timezone.utc
+        )
+
+        # Convert to event timezone (use copies to avoid modifying originals)
+        start_local = (
+            start_dt.astimezone(event_tz)
+            if start_dt.tzinfo
+            else start_dt.replace(tzinfo=event_tz)
+        )
+        end_local = (
+            end_dt.astimezone(event_tz)
+            if end_dt.tzinfo
+            else end_dt.replace(tzinfo=event_tz)
+        )
+
+        # Check if starts at midnight
+        if start_local.time() != time.min:
+            return False
+
+        # Check if duration is whole days (all-day events can span multiple days)
+        # Allow up to 1 hour remainder per day for DST transitions
+        duration = end_local - start_local
+        days = duration.days
+        if days >= 1:  # At least 1 day
+            remainder = duration - timedelta(days=days)
+            # Allow up to 1 hour remainder total (for DST transitions)
+            if remainder <= timedelta(hours=1):
+                return True
+
+    return False
 
 
 def _extract_reminders(gcsa_event: Any) -> list[Reminder] | None:
@@ -175,37 +228,24 @@ def _extract_reminders(gcsa_event: Any) -> list[Reminder] | None:
     return reminders if reminders else None
 
 
-def _extract_start_datetime(gcsa_event: Any) -> datetime | date:
-    """Extract the start datetime/date from a gcsa event.
+def _extract_datetime(value: Any) -> datetime | date:
+    """Extract a datetime/date from a gcsa event attribute.
 
-    Google Calendar events have start.dateTime (for timed) or start.date (for all-day).
+    Handles both Google Calendar API format (with .dateTime/.date attributes)
+    and direct datetime/date values (from stubs or other sources).
     """
-    if hasattr(gcsa_event.start, "dateTime") and gcsa_event.start.dateTime is not None:
-        return gcsa_event.start.dateTime
-    elif hasattr(gcsa_event.start, "date") and gcsa_event.start.date is not None:
-        return gcsa_event.start.date
+    if isinstance(value, (datetime, date)):
+        # Value is already a datetime/date directly
+        return value
+    elif hasattr(value, "dateTime") and value.dateTime is not None:
+        # Value is an object with .dateTime attribute (from Google Calendar API)
+        return value.dateTime
+    elif hasattr(value, "date") and value.date is not None:
+        # Value is an object with .date attribute (from Google Calendar API)
+        return value.date
     else:
-        # Fallback: assume start is datetime/date directly
-        return gcsa_event.start
-
-
-def _extract_end_datetime(gcsa_event: Any) -> datetime | date:
-    """Extract the end datetime/date from a gcsa event.
-
-    Google Calendar events have end.dateTime (for timed) or end.date (for all-day).
-    """
-    if isinstance(gcsa_event.end, (datetime, date)):
-        # end is already a datetime/date directly (from our stub)
-        return gcsa_event.end
-    elif hasattr(gcsa_event.end, "dateTime") and gcsa_event.end.dateTime is not None:
-        # end is an object with .dateTime attribute (from Google Calendar API)
-        return gcsa_event.end.dateTime
-    elif hasattr(gcsa_event.end, "date") and gcsa_event.end.date is not None:
-        # end is an object with .date attribute (from Google Calendar API)
-        return gcsa_event.end.date
-    else:
-        # Fallback: assume end is datetime/date directly
-        return gcsa_event.end
+        # Fallback: assume value is datetime/date directly
+        return value
 
 
 def _infer_is_all_day(start_ts: int, end_ts: int, calendar_tz: ZoneInfo | None) -> bool:
@@ -371,25 +411,6 @@ def _handle_write_errors(func: _F) -> _F:
     return wrapper  # type: ignore[return-value]
 
 
-def _get_calendar_timezone(
-    calendar: GoogleCalendar, calendar_id: str
-) -> ZoneInfo | None:
-    """Get the calendar's default timezone.
-
-    Currently returns None (UTC) but can be extended to fetch from calendar settings.
-
-    Args:
-        calendar: GoogleCalendar client instance
-        calendar_id: Calendar ID
-
-    Returns:
-        Calendar's timezone, or None to use UTC
-    """
-    # TODO: Fetch actual calendar timezone from Google Calendar API
-    # For now, return None which means UTC
-    return None
-
-
 def _validate_event(
     interval: Interval, require_id: bool = True
 ) -> tuple[Event | None, list[WriteResult] | None]:
@@ -426,8 +447,9 @@ def _validate_event(
 class Calendar(MutableTimeline[Event]):
     """Timeline backed by the Google Calendar API using local credentials.
 
-    Events are converted to UTC timestamps. Each event's own timezone (if specified)
-    is used when interpreting all-day events or naive datetimes from the API.
+    Events are converted to UTC timestamps. All-day events are interpreted using
+    the calendar's timezone (fetched from Google Calendar API), while timed events
+    use the event's own timezone (if specified) or UTC.
 
     Supports full read/write operations including:
     - Creating single and recurring events
@@ -452,8 +474,21 @@ class Calendar(MutableTimeline[Event]):
         self.calendar_id: str = calendar_id
         self.calendar_summary: str = calendar_summary
         self.calendar: GoogleCalendar = (
-            client if client is not None else GoogleCalendar(self.calendar_id)
+            client if client is not None else GoogleCalendar()
         )
+        # Fetch calendar timezone for interpreting all-day event dates.
+        # Google Calendar uses the calendar's timezone (not UTC) for all-day events.
+        # We cache this to avoid repeated API calls.
+        self._calendar_timezone: ZoneInfo | None = None
+        try:
+            cal_info = self.calendar.get_calendar(calendar_id=self.calendar_id)
+            tz_str = getattr(cal_info, "timezone", None)
+            if tz_str:
+                self._calendar_timezone = ZoneInfo(tz_str)
+        except Exception:
+            # Gracefully handle: API errors, stub/mock calendars without get_calendar,
+            # invalid timezone strings, etc. Fall back to UTC (None) for all-day events.
+            pass
 
     @override
     def __str__(self) -> str:
@@ -488,8 +523,21 @@ class Calendar(MutableTimeline[Event]):
             is_all_day = _is_all_day_event(e)
             recurring_event_id = getattr(e, "recurring_event_id", None)
             reminders = _extract_reminders(e)
-            start_dt = _extract_start_datetime(e)
-            end_dt = _extract_end_datetime(e)
+            start_dt = _extract_datetime(e.start)
+            end_dt = _extract_datetime(e.end)
+
+            # For all-day events, normalize dates using the calendar's timezone.
+            # Google Calendar interprets all-day event dates in the calendar's timezone, not UTC.
+            # For timed events, use the event's timezone.
+            if is_all_day:
+                # Use cached calendar timezone, fallback to event timezone (for testing/stubs), then UTC
+                zone_for_timestamp = (
+                    self._calendar_timezone
+                    if self._calendar_timezone is not None
+                    else event_zone if e.timezone else ZoneInfo(_UTC_TIMEZONE)
+                )
+            else:
+                zone_for_timestamp = event_zone
 
             yield Event(
                 id=e.id,
@@ -500,8 +548,8 @@ class Calendar(MutableTimeline[Event]):
                 recurring_event_id=recurring_event_id,
                 is_all_day=is_all_day,
                 reminders=reminders,
-                start=_to_timestamp(start_dt, "start", event_zone),
-                end=_to_timestamp(end_dt, "end", event_zone),
+                start=_to_timestamp(start_dt, zone_for_timestamp),
+                end=_to_timestamp(end_dt, zone_for_timestamp),
             )
 
     @override
@@ -531,11 +579,12 @@ class Calendar(MutableTimeline[Event]):
         if event.start is None or event.end is None:
             return _error_result(ValueError("Event must have finite start and end"))
 
-        # Always use this calendar's metadata
-        # (ignore any calendar_id/calendar_summary in event)
-        # This allows moving events between calendars
+        # Always use this calendar's metadata and strip any existing ID
+        # (ignore any calendar_id/calendar_summary/id in event)
+        # This allows moving/copying events between calendars - always creates new event
         event = replace(
             event,
+            id="",  # Strip ID so Google Calendar creates a new event
             calendar_id=self.calendar_id,
             calendar_summary=self.calendar_summary,
         )
@@ -543,9 +592,14 @@ class Calendar(MutableTimeline[Event]):
         # Determine if event is all-day
         is_all_day = event.is_all_day
         if is_all_day is None:
-            # Auto-infer: need calendar's default timezone
-            calendar_tz = _get_calendar_timezone(self.calendar, self.calendar_id)
-            is_all_day = _infer_is_all_day(event.start, event.end, calendar_tz)
+            # Auto-infer: use cached calendar timezone
+            # Only infer if event has finite start/end (already checked above)
+            if event.start is not None and event.end is not None:
+                is_all_day = _infer_is_all_day(
+                    event.start, event.end, self._calendar_timezone
+                )
+            else:
+                is_all_day = False
 
         # Convert timestamps to datetime/date objects
         start_dt, end_dt = _convert_timestamps_to_datetime(
