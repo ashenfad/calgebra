@@ -477,6 +477,42 @@ def test_intersection_handles_exhausted_iterators() -> None:
     assert result[1].start == 150 and result[1].end == 160
 
 
+def test_intersection_identical_times_from_same_source() -> None:
+    """Test that intersection emits all intervals with identical times from same source.
+
+    This tests the bug fix where intersection would miss intervals when:
+    1. Multiple intervals from an emit source have identical start/end times
+    2. A mask source's interval ends before the emit source intervals end
+    3. The emit source intervals were processed but not advanced (causing a stall)
+
+    Scenario:
+    - Timeline A (emit): Two events with identical times [10, 30) and [10, 30)
+    - Timeline B (mask): Single interval [5, 20) that ends before A's intervals
+    - Both A intervals should be emitted, trimmed to the overlap [10, 20)
+    """
+    from calgebra.core import solid
+
+    # Two intervals with identical times - both should be emitted
+    timeline_a = timeline(
+        LabeledInterval(start=10, end=30, label="event1"),
+        LabeledInterval(start=10, end=30, label="event2"),
+    )
+
+    # Mask ends at 20, before timeline_a's intervals end at 30
+    # This triggers the stall condition: mask advances (exhausts), but
+    # emit source intervals don't end at cutoff (20 != 30)
+    result = list((timeline_a & solid)[5:20])
+
+    # Both intervals should be returned, trimmed to [10, 20)
+    assert len(result) == 2, (
+        f"Expected 2 intervals (both events with identical times), got {len(result)}. "
+        f"The intersection should emit all intervals from the same source that have "
+        f"identical start/end times, not just the first one."
+    )
+    assert result[0] == LabeledInterval(start=10, end=20, label="event1")
+    assert result[1] == LabeledInterval(start=10, end=20, label="event2")
+
+
 def test_intersection_preserves_metadata_from_all_sources() -> None:
     primary = DummyTimeline(
         LabeledInterval(start=0, end=5, label="primary"),
