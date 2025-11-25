@@ -355,7 +355,7 @@ def test_fetch_populates_recurring_event_id() -> None:
 
 def test_fetch_populates_reminders() -> None:
     """Test that reminders are populated correctly."""
-    from calgebra.mutable.gcsa import Reminder
+    from calgebra.gcsa import Reminder
 
     zone = ZoneInfo("UTC")
     start_dt = datetime(2025, 1, 1, 9, 0, 0, tzinfo=zone)
@@ -425,7 +425,7 @@ def test_fetch_populates_reminders() -> None:
 
 def test_add_interval_creates_timed_event() -> None:
     """Test that _add_interval creates a timed event correctly."""
-    from calgebra.mutable.gcsa import Event, Reminder
+    from calgebra.gcsa import Event, Reminder
 
     zone = ZoneInfo("UTC")
     start_dt = datetime(2025, 1, 1, 14, 0, 0, tzinfo=zone)
@@ -485,7 +485,7 @@ def test_add_interval_creates_timed_event() -> None:
 
 def test_add_interval_creates_all_day_event() -> None:
     """Test that _add_interval creates an all-day event correctly."""
-    from calgebra.mutable.gcsa import Event
+    from calgebra.gcsa import Event
 
     zone = ZoneInfo("UTC")
     # All-day event: start and end at midnight
@@ -530,7 +530,7 @@ def test_add_interval_creates_all_day_event() -> None:
 
 def test_add_interval_auto_infers_all_day() -> None:
     """Test that _add_interval auto-infers all-day status when is_all_day=None."""
-    from calgebra.mutable.gcsa import Event
+    from calgebra.gcsa import Event
 
     zone = ZoneInfo("UTC")
     # Event spanning whole days at midnight boundaries
@@ -596,7 +596,7 @@ def test_add_interval_rejects_non_event() -> None:
 
 def test_add_interval_rejects_unbounded_interval() -> None:
     """Test that _add_interval rejects intervals with None start/end."""
-    from calgebra.mutable.gcsa import Event
+    from calgebra.gcsa import Event
 
     calendar, stub = _build_calendar([])
 
@@ -627,7 +627,7 @@ def test_add_interval_rejects_unbounded_interval() -> None:
 
 def test_add_recurring_creates_recurring_event() -> None:
     """Test that _add_recurring creates a recurring event correctly."""
-    from calgebra.mutable.gcsa import Event
+    from calgebra.gcsa import Event
     from calgebra.recurrence import RecurringPattern
     from calgebra.util import HOUR
 
@@ -684,7 +684,7 @@ def test_add_recurring_creates_recurring_event() -> None:
 
 def test_add_recurring_creates_all_day_recurring_event() -> None:
     """Test that _add_recurring creates an all-day recurring event."""
-    from calgebra.mutable.gcsa import Event
+    from calgebra.gcsa import Event
     from calgebra.recurrence import RecurringPattern
     from calgebra.util import DAY
 
@@ -727,7 +727,7 @@ def test_add_recurring_includes_exdates() -> None:
     """Test that _add_recurring includes EXDATE for excluded dates."""
     from datetime import timezone
 
-    from calgebra.mutable.gcsa import Event
+    from calgebra.gcsa import Event
     from calgebra.recurrence import RecurringPattern
     from calgebra.util import DAY, HOUR
 
@@ -802,7 +802,7 @@ def test_add_recurring_rejects_non_event_pattern() -> None:
 
 def test_remove_interval_deletes_standalone_event() -> None:
     """Test that _remove_interval deletes a standalone event."""
-    from calgebra.mutable.gcsa import Event
+    from calgebra.gcsa import Event
 
     zone = ZoneInfo("UTC")
     start_dt = datetime(2025, 1, 1, 10, 0, 0, tzinfo=zone)
@@ -851,7 +851,7 @@ def test_remove_interval_deletes_standalone_event() -> None:
 
 def test_remove_interval_adds_recurring_instance_to_exdates() -> None:
     """Test that _remove_interval adds a recurring instance to exdates."""
-    from calgebra.mutable.gcsa import Event
+    from calgebra.gcsa import Event
 
     zone = ZoneInfo("UTC")
     start_dt = datetime(2025, 1, 6, 10, 0, 0, tzinfo=zone)  # Monday
@@ -926,7 +926,7 @@ def test_remove_interval_rejects_non_event() -> None:
 
 def test_remove_interval_rejects_event_without_id() -> None:
     """Test that _remove_interval rejects events without an ID."""
-    from calgebra.mutable.gcsa import Event
+    from calgebra.gcsa import Event
 
     calendar, stub = _build_calendar([])
 
@@ -954,7 +954,7 @@ def test_remove_interval_rejects_event_without_id() -> None:
 
 def test_remove_series_deletes_master_event() -> None:
     """Test that _remove_series deletes a master recurring event."""
-    from calgebra.mutable.gcsa import Event
+    from calgebra.gcsa import Event
 
     zone = ZoneInfo("UTC")
     start_dt = datetime(2025, 1, 6, 10, 0, 0, tzinfo=zone)  # Monday
@@ -1004,7 +1004,7 @@ def test_remove_series_deletes_master_event() -> None:
 
 def test_remove_series_deletes_master_from_instance() -> None:
     """Test that _remove_series deletes master event when given an instance."""
-    from calgebra.mutable.gcsa import Event
+    from calgebra.gcsa import Event
 
     zone = ZoneInfo("UTC")
     start_dt = datetime(2025, 1, 6, 10, 0, 0, tzinfo=zone)  # Monday
@@ -1078,7 +1078,7 @@ def test_remove_series_rejects_non_event() -> None:
 
 def test_remove_series_rejects_event_without_id() -> None:
     """Test that _remove_series rejects events without an ID."""
-    from calgebra.mutable.gcsa import Event
+    from calgebra.gcsa import Event
 
     calendar, stub = _build_calendar([])
 
@@ -1106,7 +1106,7 @@ def test_remove_series_rejects_event_without_id() -> None:
 
 def test_add_interval_auto_fills_calendar_metadata() -> None:
     """Test that _add_interval auto-fills calendar_id and calendar_summary."""
-    from calgebra.mutable.gcsa import Event
+    from calgebra.gcsa import Event
 
     zone = ZoneInfo("UTC")
     start_dt = datetime(2025, 1, 1, 14, 0, 0, tzinfo=zone)
@@ -1141,7 +1141,7 @@ def test_add_interval_auto_fills_calendar_metadata() -> None:
 
 def test_add_interval_ignores_source_calendar_metadata() -> None:
     """Test that _add_interval ignores calendar_id/calendar_summary from source calendar."""
-    from calgebra.mutable.gcsa import Event
+    from calgebra.gcsa import Event
 
     zone = ZoneInfo("UTC")
     start_dt = datetime(2025, 1, 1, 14, 0, 0, tzinfo=zone)
