@@ -1,6 +1,6 @@
 import heapq
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import replace
 from datetime import datetime
 from functools import reduce
@@ -229,6 +229,65 @@ class Union(Timeline[IvlOut]):
         return merged
 
 
+class _SourceState:
+    """Per-source state for the intersection algorithm.
+
+    Tracks the current interval, exhaustion status, and processing history
+    for a single source in the intersection.
+    """
+
+    def __init__(self, iterator: Iterable[Interval]) -> None:
+        self._iterator: Iterator[Interval] = iter(iterator)
+        self.current: Interval | None = None
+        self.exhausted: bool = False
+        self.last_processed_cutoff: int | None = None
+        # Initialize with first interval
+        self.advance()
+
+    def advance(self) -> bool:
+        """Advance to next interval. Returns True if state changed."""
+        if self.exhausted:
+            return False
+        try:
+            self.current = next(self._iterator)
+            self.last_processed_cutoff = None
+            return True
+        except StopIteration:
+            self.exhausted = True
+            # Keep current interval for continued overlap checks with other sources
+            return True  # State changed (now exhausted)
+
+    def advance_if_ends_at(self, cutoff: int) -> bool:
+        """Advance if current interval ends at cutoff. Returns True if advanced."""
+        if (
+            self.current is not None
+            and self.current.finite_end == cutoff
+            and not self.exhausted
+        ):
+            return self.advance()
+        return False
+
+    def advance_if_stalled(self, cutoff: int) -> bool:
+        """Advance if processed at cutoff but doesn't end there.
+
+        This handles the case where a mask source advanced but this emit source's
+        interval extends past the cutoff. Without this, we'd miss subsequent
+        intervals with identical start/end times.
+        """
+        if (
+            self.current is not None
+            and not self.exhausted
+            and self.last_processed_cutoff == cutoff
+            and self.current.finite_end != cutoff
+        ):
+            return self.advance()
+        return False
+
+    def was_processed_at(self, cutoff: int) -> bool:
+        """Check if already processed at this cutoff (to avoid duplicates)."""
+        return self.last_processed_cutoff == cutoff
+
+
 class Intersection(Timeline[IvlOut]):
     def __init__(self, *sources: Timeline[IvlOut]):
         self.sources: tuple[Timeline[IvlOut], ...] = _flatten_sources(
@@ -245,125 +304,89 @@ class Intersection(Timeline[IvlOut]):
     def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
         """Compute intersection using a multi-way merge with sliding window.
 
-        Algorithm: Maintains one "current" interval from each source and advances
-        them in lockstep. When all current intervals overlap, yields a trimmed copy
-        from sources (behavior depends on source types).
+        Algorithm:
+        1. Maintain one "current" interval from each source
+        2. Find the overlap region across all current intervals
+        3. Yield trimmed copies from emit sources
+        4. Advance sources whose intervals end at the overlap boundary
+        5. Handle stall condition when emit sources extend past mask boundaries
+        6. Repeat until no more overlaps possible
 
-        Auto-flattening optimization:
-        - All mask sources: Yields one interval per overlap (auto-flattened)
-        - Mixed mask/rich: Yields only from rich sources (preserves metadata)
-        - All rich sources: Yields from all sources (preserves metadata)
+        Emit behavior (based on source types):
+        - All mask sources: Emit one interval per overlap (auto-flattened)
+        - Mixed mask/rich: Emit only from rich sources (preserves metadata)
+        - All rich sources: Emit from all sources
 
-        Key invariant: overlap_start <= overlap_end means all sources have coverage.
+        The algorithm correctly handles multiple intervals with identical times
+        from the same source by detecting and resolving stall conditions.
         """
         if not self.sources:
             return ()
 
-        # Determine behavior based on source types
+        # Determine which sources to emit from based on mask/rich types
         mask_sources = [s._is_mask for s in self.sources]
-        all_mask = all(mask_sources)
-        any_mask = any(mask_sources)
-
-        # Get indices of sources to emit from
-        if all_mask:
-            # All mask: emit just one interval per overlap (auto-flatten)
-            emit_indices = [0]
-        elif any_mask:
-            # Mixed: emit only from rich sources (preserve their metadata)
-            emit_indices = [i for i, is_mask in enumerate(mask_sources) if not is_mask]
+        if all(mask_sources):
+            emit_indices = frozenset([0])  # All mask: emit just one (auto-flatten)
+        elif any(mask_sources):
+            emit_indices = frozenset(
+                i for i, is_mask in enumerate(mask_sources) if not is_mask
+            )
         else:
-            # All rich: emit from all (current behavior)
-            emit_indices = list(range(len(self.sources)))
+            emit_indices = frozenset(range(len(self.sources)))
 
-        iterators = [iter(source.fetch(start, end)) for source in self.sources]
-        exhausted = [False] * len(iterators)
-        # Track the last cutoff at which each interval was processed
-        # This prevents processing the same overlap multiple times
-        last_processed_cutoff: list[int | None] = [None] * len(iterators)
+        # Initialize per-source state
+        states = [_SourceState(source.fetch(start, end)) for source in self.sources]
 
         def generate() -> Iterable[IvlOut]:
-            # Initialize: get first interval from each source
-            current: list[IvlOut | None] = []
-            for idx, iterator in enumerate(iterators):
-                try:
-                    current.append(next(iterator))
-                except StopIteration:
-                    exhausted[idx] = True
-                    current.append(None)
+            # Early exit if all sources exhausted on init (no intervals)
+            if all(s.exhausted and s.current is None for s in states):
+                return
 
-            # If all sources are exhausted, no overlaps possible
-            if all(exhausted):
+            # Special case: single source intersection is identity
+            if len(states) == 1:
+                state = states[0]
+                while state.current is not None:
+                    yield state.current
+                    state.advance()
+                    if state.exhausted:
+                        break  # Don't re-yield the last interval
                 return
 
             while True:
-                # Filter out exhausted sources for overlap calculation
-                active_current = [ivl for ivl in current if ivl is not None]
-                num_active = len(active_current)
-                # Special case: single source intersection is identity
-                # (return all intervals)
-                if len(self.sources) == 1:
-                    # Just yield all intervals from the single source
-                    for idx in emit_indices:
-                        if current[idx] is not None:
-                            yield current[idx]
-                    # Advance through all remaining intervals
-                    while True:
-                        try:
-                            yield next(iterators[0])
-                        except StopIteration:
-                            return
-                # For intersection, we need intervals from ALL sources
-                # If any source is exhausted and has no current interval,
-                # no intersection possible
-                if num_active < len(self.sources):
-                    return
+                # Check if all sources have a current interval
+                active = [s.current for s in states if s.current is not None]
+                if len(active) < len(states):
+                    return  # Need intervals from ALL sources for intersection
 
-                # Find overlap region across all active current intervals
-                # Use finite properties to handle None (unbounded) values
-                overlap_start = max(event.finite_start for event in active_current)
-                overlap_end = min(event.finite_end for event in active_current)
+                # Find overlap region across all current intervals
+                overlap_start = max(ivl.finite_start for ivl in active)
+                overlap_end = min(ivl.finite_end for ivl in active)
 
-                # If there's actual overlap, yield trimmed copy from selected sources
+                # Emit trimmed intervals from emit sources
                 if overlap_start < overlap_end:
                     for idx in emit_indices:
-                        if current[idx] is not None:
-                            # Skip if we've already processed this interval
-                            # at this cutoff
-                            if (
-                                last_processed_cutoff[idx] is not None
-                                and last_processed_cutoff[idx] == overlap_end
-                            ):
-                                continue
-                            # Convert sentinel values back to None
-                            # for unbounded intervals
-                            start_val = (
-                                overlap_start if overlap_start != NEG_INF else None
-                            )
-                            end_val = overlap_end if overlap_end != POS_INF else None
-                            yield replace(current[idx], start=start_val, end=end_val)
-                            last_processed_cutoff[idx] = overlap_end
+                        state = states[idx]
+                        if state.current is None or state.was_processed_at(overlap_end):
+                            continue
+                        # Convert sentinel values back to None for unbounded intervals
+                        start_val = overlap_start if overlap_start != NEG_INF else None
+                        end_val = overlap_end if overlap_end != POS_INF else None
+                        yield replace(state.current, start=start_val, end=end_val)
+                        state.last_processed_cutoff = overlap_end
 
-                # Advance any interval that ends at the overlap boundary
+                # Advance sources whose intervals end at the overlap boundary
                 cutoff = overlap_end
-                advanced = False
-                for idx, event in enumerate(current):
-                    if event is not None and event.finite_end == cutoff:
-                        if not exhausted[idx]:
-                            try:
-                                current[idx] = next(iterators[idx])
-                                # Reset for new interval
-                                last_processed_cutoff[idx] = None
-                                advanced = True
-                            except StopIteration:
-                                exhausted[idx] = True
-                                # Keep the last interval from this exhausted source
-                                # so remaining intervals from other sources can still
-                                # be checked against it
-                                advanced = True  # Mark as advanced to continue loop
+                advanced = any(s.advance_if_ends_at(cutoff) for s in states)
 
-                # If no interval advanced, we've exhausted all overlaps
+                # Handle stall condition: emit sources processed but extending past cutoff
+                # This ensures we get all intervals with identical times from same source
                 if not advanced:
-                    return
+                    advanced = any(
+                        states[idx].advance_if_stalled(cutoff) for idx in emit_indices
+                    )
+
+                if not advanced:
+                    return  # No progress possible, done
 
         return generate()
 
