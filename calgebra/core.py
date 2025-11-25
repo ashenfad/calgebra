@@ -378,8 +378,9 @@ class Intersection(Timeline[IvlOut]):
                 cutoff = overlap_end
                 advanced = any(s.advance_if_ends_at(cutoff) for s in states)
 
-                # Handle stall condition: emit sources processed but extending past cutoff
-                # This ensures we get all intervals with identical times from same source
+                # Handle stall condition: emit sources processed but extending past
+                # cutoff. This ensures we get all intervals with identical times
+                # from same source
                 if not advanced:
                     advanced = any(
                         states[idx].advance_if_stalled(cutoff) for idx in emit_indices
