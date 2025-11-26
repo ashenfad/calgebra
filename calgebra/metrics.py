@@ -79,9 +79,7 @@ def _period_windows(
 
     if period == "day":
         # Snap to midnight-to-midnight
-        current = datetime(
-            start_dt.year, start_dt.month, start_dt.day, tzinfo=zone
-        )
+        current = datetime(start_dt.year, start_dt.month, start_dt.day, tzinfo=zone)
         while current < end_dt:
             next_day = current + timedelta(days=1)
             label = current.date()
@@ -115,9 +113,7 @@ def _period_windows(
             if current.month == 12:
                 next_month = datetime(current.year + 1, 1, 1, tzinfo=zone)
             else:
-                next_month = datetime(
-                    current.year, current.month + 1, 1, tzinfo=zone
-                )
+                next_month = datetime(current.year, current.month + 1, 1, tzinfo=zone)
             label = current.date()
             win_start = int(current.timestamp())
             win_end = int(next_month.timestamp())
@@ -184,6 +180,7 @@ def _extremum_duration(tl, win_start, win_end, find_max: bool):
 
     return extremum
 
+
 def _windowed_agg(tl, start, end, tz, period, agg):
     """Helper to materialize timeline once and apply agg to each period.
 
@@ -213,6 +210,7 @@ def _windowed_agg(tl, start, end, tz, period, agg):
         (label, agg(cached_timeline, win_start, win_end))
         for label, win_start, win_end in windows
     ]
+
 
 def total_duration(
     timeline: Timeline[Interval],
@@ -278,6 +276,7 @@ def max_duration(
         List of (period_start_date, longest_interval) tuples.
         Empty periods return None.
     """
+
     def _agg(tl, win_start, win_end):
         return _extremum_duration(tl, win_start, win_end, find_max=True)
 
@@ -305,6 +304,7 @@ def min_duration(
         List of (period_start_date, shortest_interval) tuples.
         Empty periods return None.
     """
+
     def _agg(tl, win_start, win_end):
         return _extremum_duration(tl, win_start, win_end, find_max=False)
 
@@ -378,6 +378,7 @@ def coverage_ratio(
         ... )
         >>> # Returns 30 tuples: [(date(2025,11,1), 0.73), (date(2025,11,2), 0.81), ...]
     """
+
     def _agg(tl, win_start, win_end):
         span = win_end - win_start
         if span <= 0:
