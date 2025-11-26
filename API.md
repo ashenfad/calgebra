@@ -144,11 +144,131 @@ critical_work = timeline & has_all(tags, {"work", "urgent"})
 **Note:** Use `one_of()` for scalar fields and `has_any()`/`has_all()` for collection fields.
 
 ## Metrics (`calgebra.metrics`)
-- `total_duration(timeline, start, end)` → seconds covered (uses `flatten`, exclusive end)
-- `max_duration(timeline, start, end)` → longest interval clamped to bounds (returns `Interval | None`)
-- `min_duration(timeline, start, end)` → shortest interval clamped to bounds (returns `Interval | None`)
-- `count_intervals(timeline, start, end)` → number of events in slice
-- `coverage_ratio(timeline, start, end)` → fraction of window covered (`float`)
+
+All metric functions support **periodic aggregations** for efficient time-series analysis.
+
+### Function Signatures
+
+All metrics share a consistent signature pattern:
+
+```python
+metric_function(
+    timeline: Timeline,
+    start: date | datetime | int,
+    end: date | datetime | int,
+    period: Literal["day", "week", "month", "year", "full"] = "full",
+    tz: str = "UTC"
+) -> list[tuple[date, ReturnType]]
+```
+
+**Parameters:**
+- `timeline`: Timeline to aggregate
+- `start`: Query start (date → midnight in tz, datetime → as-is, int → Unix timestamp)
+- `end`: Query end (exclusive)
+- `period`: Aggregation period (default: `"full"`)
+  - `"day"` - Full calendar days (midnight to midnight)
+  - `"week"` - ISO weeks (Monday through Sunday)
+  - `"month"` - Calendar months (1st to last day)
+  - `"year"` - Calendar years (Jan 1 to Dec 31)
+  - `"full"` - Exact query bounds (no calendar snapping)
+- `tz`: Timezone for date interpretation and period boundaries (default: `"UTC"`)
+
+**Returns:** List of `(period_start_date, value)` tuples
+
+**Period alignment:** Periods snap to calendar boundaries even if query doesn't. Querying Mon 3pm → Fri 9am with `period="day"` returns 5 full calendar days (Mon 00:00 → Sat 00:00).
+
+### Available Metrics
+
+#### `total_duration()` → `list[tuple[date, int]]`
+Total seconds covered per period (automatically flattens overlapping intervals).
+
+```python
+from datetime import date
+from calgebra import total_duration
+
+# Daily total duration for November
+daily = total_duration(
+    cal_union,
+    start=date(2025, 11, 1),
+    end=date(2025, 12, 1),
+    period="day",
+    tz="US/Pacific"
+)
+# Returns: [(date(2025,11,1), 28800), (date(2025,11,2), 14400), ...]
+```
+
+#### `coverage_ratio()` → `list[tuple[date, float]]`
+Fraction of each period covered (0.0 to 1.0). Automatically flattens overlapping intervals.
+
+```python
+# Daily coverage ratio for November
+daily = coverage_ratio(
+    cal_union,
+    start=date(2025, 11, 1),
+    end=date(2025, 12, 1),
+    period="day",
+    tz="US/Pacific"
+)
+# Returns: [(date(2025,11,1), 0.73), (date(2025,11,2), 0.41), ...]
+```
+
+#### `count_intervals()` → `list[tuple[date, int]]`
+Number of intervals per period.
+
+```python
+# Weekly event counts
+weekly = count_intervals(timeline, date(2025, 11, 1), date(2025, 12, 1), period="week")
+```
+
+#### `max_duration()` → `list[tuple[date, Interval | None]]`
+Longest interval per period, or None if empty.
+
+```python
+# Find longest meeting each day
+longest = max_duration(meetings, date(2025, 11, 1), date(2025, 11, 8), period="day")
+```
+
+#### `min_duration()` → `list[tuple[date, Interval | None]]`
+Shortest interval per period, or None if empty.
+
+```python
+# Find shortest meeting each week
+shortest = min_duration(meetings, date(2025, 11, 1), date(2025, 12, 1), period="week")
+```
+
+### Performance
+
+**Efficient:** Timeline data is fetched once, then aggregated across all periods.
+
+```python
+# Bad: 30 days × 7 calendars = 210 API calls
+for day in november_days:
+    ratio = coverage_ratio(cal_union, day.start, day.end)[0][1]
+
+# Good: 7 API calls (one per calendar)
+daily = coverage_ratio(cal_union, date(2025, 11, 1), date(2025, 12, 1), period="day")
+```
+
+### Empty Periods
+
+Empty periods return appropriate null values:
+- `total_duration`: `0` seconds
+- `coverage_ratio`: `0.0`
+- `count_intervals`: `0`
+- `max_duration` / `min_duration`: `None`
+
+### Timezone Handling
+
+Periods respect the specified timezone, including DST transitions:
+- Spring forward: 23-hour days
+- Fall back: 25-hour days
+
+```python
+# November 2024 includes DST fall-back (Nov 3)
+daily = total_duration(timeline, date(2024, 11, 1), date(2024, 11, 5), 
+                       period="day", tz="US/Pacific")
+# Nov 3 will have 25 hours worth of data
+```
 
 ## Recurring Patterns (`calgebra.recurrence`)
 Timezone-aware recurrence pattern generators backed by `python-dateutil`'s RFC 5545 implementation.
