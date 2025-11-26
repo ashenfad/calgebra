@@ -812,18 +812,118 @@ simple_coverage = flatten(enriched_calendar)
 combined = flatten(calendar_a & calendar_b)  # Without flatten: yields 2 intervals per overlap
 ```
 
-**Metrics** automatically flatten when needed:
+**Metrics** support efficient periodic aggregations:
 ```python
-from calgebra.metrics import total_duration, max_duration, min_duration, count_intervals, coverage_ratio
+from datetime import date
+from calgebra.metrics import total_duration, coverage_ratio, count_intervals
 
-merged = alice_calendar | bob_calendar
+# Get daily coverage for November (one fetch, 30 results!)
+daily = coverage_ratio(
+    cal_union,
+    start=date(2025, 11, 1),
+    end=date(2025, 12, 1),
+    period="day",
+    tz="US/Pacific"
+)
+# Returns: [(date(2025,11,1), 0.73), (date(2025,11,2), 0.81), ...]
 
-# All helpers flatten internally where needed
-busy_seconds = total_duration(merged, start, end)
-longest_busy = max_duration(merged, start, end)
-shortest_busy = min_duration(merged, start, end)
-meeting_count = count_intervals(alice_calendar, start, end)
-utilization = coverage_ratio(merged, start, end)
+# Weekly totals
+weekly = total_duration(meetings, date(2025, 11, 1), date(2025, 12, 1), period="week")
+
+# Monthly event counts
+monthly = count_intervals(calendar, date(2025, 1, 1), date(2026, 1, 1), period="month")
+```
+
+**Single aggregates** (use `period="full"`):
+```python
+# Total coverage for entire month
+total = coverage_ratio(calendar, date(2025, 11, 1), date(2025, 12, 1))[0][1]
+```
+
+All metrics automatically flatten overlapping intervals and support calendar-aligned periods (`day`, `week`, `month`, `year`).
+
+## Periodic Aggregations
+
+The metrics module provides time-series analysis capabilities for analyzing calendars over multiple periods.
+
+### Efficient Time-Series Analysis
+
+Instead of making repeated calls (which causes N×M API requests), fetch once and aggregate across periods:
+
+```python
+from datetime import date
+from calgebra import coverage_ratio
+from calgebra.gcsa import calendars
+
+# Get all team calendars
+cal_a, cal_b, cal_c = calendars(["alice@", "bob@", "charlie@"])
+team_calendar = cal_a | cal_b | cal_c
+
+# Daily coverage for November - fetches each calendar once!
+daily_coverage = coverage_ratio(
+    team_calendar,
+    start=date(2025, 11, 1),
+    end=date(2025, 12, 1),
+    period="day",
+    tz="US/Pacific"
+)
+
+# Analyze results
+for day, ratio in daily_coverage:
+    if ratio > 0.8:
+        print(f"{day}: Team very busy ({ratio:.0%})")
+```
+
+### Period Types
+
+All metrics support these period types:
+- `"day"` - Full calendar days (midnight to midnight)
+- `"week"` - ISO weeks (Monday through Sunday)
+- `"month"` - Calendar months (1st to last day)
+- `"year"` - Calendar years (Jan 1 to Dec 31)
+- `"full"` - Exact query bounds (default, no calendar snapping)
+
+### Flexible Bounds
+
+Metrics accept flexible bound types for convenience:
+```python
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
+# Date objects (midnight in specified timezone)
+daily = coverage_ratio(cal, date(2025, 11, 1), date(2025, 12, 1), period="day")
+
+# Timezone-aware datetimes
+pacific = ZoneInfo("US/Pacific")
+hourly_detail = total_duration(
+    cal,
+    datetime(2025, 11, 1, 9, 0, tzinfo=pacific),
+    datetime(2025, 11, 1, 17, 0, tzinfo=pacific)
+)
+
+# Unix timestamps (backward compatible)
+legacy = count_intervals(cal, 1730419200, 1733097600)
+```
+
+### Calendar Alignment
+
+Periods "snap to the grid" - if you query Mon 3pm → Fri 9am with `period="day"`, you get 5 full calendar days (Mon 00:00 → Sat 00:00). This makes results predictable and useful for dashboards.
+
+### Working with Results
+
+```python
+from calgebra import coverage_ratio, max_duration
+from datetime import date
+
+# Get daily metrics
+daily_coverage = coverage_ratio(meetings, date(2025, 11, 1), date(2025, 11, 8), period="day")
+daily_longest = max_duration(meetings, date(2025, 11, 1), date(2025, 11, 8), period="day")
+
+# Combine metrics
+for (day, ratio), (_, longest) in zip(daily_coverage, daily_longest):
+    if ratio > 0.5:
+        duration_hrs = (longest.end - longest.start) / 3600 if longest else 0
+        print(f"{day}: {ratio:.0%} busy, longest meeting: {duration_hrs:.1f}h")
 ```
 
 The helpers clamp to the provided bounds, so partially overlapping intervals report their coverage inside the window.

@@ -584,7 +584,7 @@ def test_total_duration_flattens_union() -> None:
     # total_duration(tl, 0, 15) -> tl[0:15] -> query [0, 15)
     # Combined covers [0, 15) fully (0-5, 3-12, 10-15)
     # Query [0, 15) is fully covered -> duration 15
-    assert total_duration(combined, 0, 15) == 15
+    assert total_duration(combined, 0, 15)[0][1] == 15
 
 
 def test_flatten_returns_coalesced_intervals() -> None:
@@ -608,7 +608,7 @@ def test_max_duration_reports_longest_run() -> None:
         Interval(start=5, end=9),
     )
 
-    assert max_duration(timeline, 0, 10) == Interval(start=5, end=9)
+    assert max_duration(timeline, 0, 10)[0][1] == Interval(start=5, end=9)
 
 
 def test_min_duration_reports_shortest_run() -> None:
@@ -617,7 +617,7 @@ def test_min_duration_reports_shortest_run() -> None:
         Interval(start=5, end=9),
     )
 
-    assert min_duration(timeline, 0, 10) == Interval(start=0, end=2)
+    assert min_duration(timeline, 0, 10)[0][1] == Interval(start=0, end=2)
 
 
 def test_max_duration_can_use_flatten() -> None:
@@ -627,7 +627,7 @@ def test_max_duration_can_use_flatten() -> None:
     )
     overlap = DummyTimeline(Interval(start=2, end=6))
 
-    assert max_duration(flatten(timeline | overlap), 0, 10) == Interval(start=0, end=9)
+    assert max_duration(flatten(timeline | overlap), 0, 10)[0][1] == Interval(start=0, end=9)
 
 
 def test_min_duration_can_use_flatten() -> None:
@@ -637,7 +637,7 @@ def test_min_duration_can_use_flatten() -> None:
     )
     overlap = DummyTimeline(Interval(start=2, end=6))
 
-    assert min_duration(flatten(timeline | overlap), 0, 10) == Interval(start=0, end=9)
+    assert min_duration(flatten(timeline | overlap), 0, 10)[0][1] == Interval(start=0, end=9)
 
 
 def test_count_intervals_counts_slice_results() -> None:
@@ -646,7 +646,7 @@ def test_count_intervals_counts_slice_results() -> None:
         Interval(start=5, end=9),
     )
 
-    assert count_intervals(timeline, 0, 10) == 2
+    assert count_intervals(timeline, 0, 10)[0][1] == 2
 
 
 def test_coverage_ratio_returns_fraction() -> None:
@@ -669,7 +669,7 @@ def test_coverage_ratio_returns_fraction() -> None:
     # Timeline has [0, 4) (duration 4) and [5, 6) (duration 1)
     # Query [0, 6) intersects both fully.
     # Covered duration = 5. Window duration = 6. Ratio = 5/6
-    assert coverage_ratio(timeline, 0, 6) == 5 / 6
+    assert coverage_ratio(timeline, 0, 6)[0][1] == 5 / 6
 
 
 def test_timeline_accepts_timezone_aware_datetime_slicing() -> None:
