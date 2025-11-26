@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from typing import Literal, TypeVar
 from zoneinfo import ZoneInfo
@@ -134,7 +135,7 @@ def _period_windows(
     return windows
 
 
-def _total_duration(tl, win_start, win_end):
+def _total_duration(tl: Timeline[Interval], win_start: int, win_end: int) -> int:
     """Compute total duration within window, flattening overlaps."""
     total = 0
     for ivl in flatten(tl)[win_start:win_end]:
@@ -148,7 +149,9 @@ def _total_duration(tl, win_start, win_end):
     return total
 
 
-def _extremum_duration(tl, win_start, win_end, find_max: bool):
+def _extremum_duration(
+    tl: Timeline[Ivl], win_start: int, win_end: int, find_max: bool
+) -> Ivl | None:
     """Find longest or shortest interval within window.
 
     Args:
@@ -181,7 +184,14 @@ def _extremum_duration(tl, win_start, win_end, find_max: bool):
     return extremum
 
 
-def _windowed_agg(tl, start, end, tz, period, agg):
+def _windowed_agg(
+    tl: Timeline[Ivl],
+    start: date | datetime | int,
+    end: date | datetime | int,
+    tz: str,
+    period: Literal["day", "week", "month", "year", "full"],
+    agg: Callable[[Timeline[Ivl], int, int], Ivl],
+) -> list[tuple[date, Ivl]]:
     """Helper to materialize timeline once and apply agg to each period.
 
     Args:
