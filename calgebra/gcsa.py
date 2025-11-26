@@ -119,10 +119,6 @@ def _normalize_datetime(dt: datetime | date, zone: ZoneInfo | None) -> datetime:
     as midnight in that timezone, then converts to UTC.
 
     For datetime objects, converts directly to UTC.
-
-    Note: Both start and end dates use midnight (time.min) for exclusive end semantics.
-    Google Calendar's all-day events use exclusive end dates (e.g., end="2025-01-02"
-    means the event ends at the start of Jan 2, i.e., end of Jan 1).
     """
     if not isinstance(dt, datetime):
         # Date object: interpret as midnight in the provided zone
