@@ -327,7 +327,7 @@ tax_deadline = recurring(freq="yearly", month=4, day_of_month=15, tz="UTC")
 For common patterns, use these ergonomic wrappers:
 
 #### `day_of_week(days, tz="UTC")`
-Convenience wrapper for filtering by day(s) of the week. Equivalent to `recurring(freq="weekly", day=days, tz=tz)`.
+Convenience wrapper for filtering by day(s) of the week. Returns `flatten(recurring(freq="weekly", day=days, tz=tz))` — adjacent days are merged into continuous intervals.
 
 - `days`: Single day name or list (e.g., `"monday"`, `["tuesday", "thursday"]`)
 - `tz`: IANA timezone name
@@ -340,7 +340,7 @@ weekends = day_of_week(["saturday", "sunday"], tz="UTC")
 ```
 
 #### `time_of_day(start=0, duration=DAY, tz="UTC")`
-Convenience wrapper for daily time windows. Equivalent to `recurring(freq="daily", start=start, duration=duration, tz=tz)`.
+Convenience wrapper for daily time windows. Returns `flatten(recurring(freq="daily", start=start, duration=duration, tz=tz))` — consecutive days are merged.
 
 - `start`: Start time in seconds from midnight (default: 0)
 - `duration`: Duration in seconds (default: DAY = full day)

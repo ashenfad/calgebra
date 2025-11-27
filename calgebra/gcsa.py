@@ -31,7 +31,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
 from functools import wraps
-from time import time as current_time
 from typing import Any, Callable, Literal, TypeVar
 from zoneinfo import ZoneInfo
 
@@ -41,7 +40,7 @@ from gcsa.reminders import EmailReminder, PopupReminder
 from gcsa.reminders import Reminder as GcsaReminder
 from typing_extensions import override
 
-from calgebra.interval import Interval
+from calgebra.interval import Interval, IvlOut
 from calgebra.mutable import MutableTimeline, WriteResult
 from calgebra.recurrence import RecurringPattern
 from calgebra.util import DAY
@@ -674,7 +673,7 @@ class Calendar(MutableTimeline[Event]):
     @override
     @_handle_write_errors
     def _add_recurring(
-        self, pattern: RecurringPattern[Event], metadata: dict[str, Any]
+        self, pattern: RecurringPattern[IvlOut], metadata: dict[str, Any]
     ) -> list[WriteResult]:
         """Add a recurring pattern to Google Calendar.
 
@@ -682,20 +681,13 @@ class Calendar(MutableTimeline[Event]):
         with RRULE and handles exdates.
 
         Args:
-            pattern: RecurringPattern to add (must use Event as interval_class)
+            pattern: RecurringPattern to add (can use any interval_class)
             metadata: Additional metadata to merge with pattern metadata
+                     (must include 'summary' at minimum for Event creation)
 
         Returns:
             List containing a single WriteResult with the created recurring event
         """
-        if pattern.interval_class is not Event:
-            return _error_result(
-                TypeError(
-                    f"Expected RecurringPattern[Event], "
-                    f"got RecurringPattern[{pattern.interval_class.__name__}]"
-                )
-            )
-
         # Always use this calendar's metadata
         # (ignore any calendar_id/calendar_summary in metadata)
         # This allows moving recurring patterns between calendars
@@ -708,8 +700,8 @@ class Calendar(MutableTimeline[Event]):
         # Determine if all-day (duration == DAY means all-day)
         is_all_day = pattern.duration_seconds == DAY
 
-        # Get RRULE string
-        rrule_str = pattern.to_rrule_string()
+        # Get RRULE string with required "RRULE:" prefix for Google Calendar API
+        rrule_str = f"RRULE:{pattern.to_rrule_string()}"
 
         # Add EXDATE if there are exdates
         if pattern.exdates:
@@ -718,10 +710,25 @@ class Calendar(MutableTimeline[Event]):
                 exdate_str = _format_exdate(exdate_ts)
                 rrule_str = _add_exdate_to_rrule(rrule_str, exdate_str)
 
-        # Determine series start date/time
-        # Use current time as DTSTART (or from metadata if provided)
-        # For Google Calendar, we need a concrete start date
-        series_start_ts = merged_metadata.get("start", int(current_time()))
+        # Determine series start date/time (DTSTART for Google Calendar)
+        # Priority:
+        #   1. metadata["start"] - explicit first occurrence timestamp
+        #   2. pattern.anchor_timestamp - if pattern was created with full timestamp
+        #   3. Compute from pattern's time-of-day + today's date
+        if "start" in merged_metadata:
+            series_start_ts = merged_metadata["start"]
+        elif pattern.anchor_timestamp is not None:
+            series_start_ts = pattern.anchor_timestamp
+        else:
+            # No anchor: use today + time-of-day
+            now_in_tz = datetime.now(pattern.zone)
+            today_midnight = now_in_tz.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            start_delta = timedelta(seconds=pattern.start_seconds)
+            series_start_dt_tz = today_midnight + start_delta
+            series_start_ts = int(series_start_dt_tz.timestamp())
+
         series_end_ts = series_start_ts + pattern.duration_seconds
 
         # Convert start timestamp to datetime/date

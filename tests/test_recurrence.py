@@ -71,11 +71,16 @@ def test_recurring_biweekly():
     )
 
     # Should get 2 Mondays (Jan 13, Jan 27)
-    # Jan 6 is skipped because it is an "Odd" week relative to the Monday Epoch (1969-12-29)
+    # Jan 6 is skipped because it is an "Odd" week relative to the Monday Epoch
+    # (1969-12-29)
     # Epoch-aligned phase ensures consistent results regardless of query start.
     assert len(biweekly) == 2
-    assert biweekly[0].start == int(datetime(2025, 1, 13, 0, 0, 0, tzinfo=timezone.utc).timestamp())
-    assert biweekly[1].start == int(datetime(2025, 1, 27, 0, 0, 0, tzinfo=timezone.utc).timestamp())
+    assert biweekly[0].start == int(
+        datetime(2025, 1, 13, 0, 0, 0, tzinfo=timezone.utc).timestamp()
+    )
+    assert biweekly[1].start == int(
+        datetime(2025, 1, 27, 0, 0, 0, tzinfo=timezone.utc).timestamp()
+    )
 
 
 def test_recurring_monthly_first_weekday():
@@ -361,7 +366,8 @@ def test_recurring_paging_merges_fragments():
 
     start = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
-    # Weekly pattern spanning multiple months (will use multiple pages internally for long queries)
+    # Weekly pattern spanning multiple months (will use multiple pages internally for
+    # long queries)
     weekly = recurring(freq="weekly", day="monday", tz="UTC")
 
     # Get 10 results
@@ -385,18 +391,18 @@ def test_recurring_duration_exceeds_interval():
     the query start. The lookback should find all of them, and after flattening
     they should create continuous coverage.
     """
-    from calgebra import DAY
+    from calgebra import DAY, flatten
 
     # Daily events with 3-day duration: each event overlaps with next 2
     # Query starts on Jan 5
     query_start = int(datetime(2025, 1, 5, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     query_end = int(datetime(2025, 1, 10, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
-    long_events = recurring(freq="daily", duration=3 * DAY, tz="UTC")
+    long_events = flatten(recurring(freq="daily", duration=3 * DAY, tz="UTC"))
 
     results = list(long_events[query_start:query_end])
 
-    # recurring() returns flattened intervals, so overlapping events merge
+    # flatten() merges overlapping intervals
     # Daily events with 3-day duration create continuous coverage
     # Should get one continuous interval covering the entire query range
     assert len(results) == 1
@@ -434,23 +440,22 @@ def test_recurring_weekly_with_multi_day_duration():
 
 
 def test_recurring_flatten_merges_overlapping_durations():
-    """Test that overlapping recurring events are already flattened by recurring()."""
-    from calgebra import DAY, recurring
-    from calgebra.recurrence import RecurringPattern
+    """Test that flatten() merges overlapping recurring events."""
+    from calgebra import DAY, flatten, recurring
 
     query_start = int(datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     query_end = int(datetime(2025, 1, 10, 0, 0, 0, tzinfo=timezone.utc).timestamp())
 
     # Daily events with 2-day duration: creates continuous coverage
-    # recurring() already applies flatten(), so check raw timeline first
-    raw = RecurringPattern(freq="daily", duration=2 * DAY, tz="UTC")
-    raw_results = list(raw.fetch(query_start, query_end))
+    # recurring() returns raw pattern, flatten() merges overlapping
+    raw = recurring(freq="daily", duration=2 * DAY, tz="UTC")
+    raw_results = list(raw[query_start:query_end])
 
     # Raw should have many overlapping intervals (one per day)
     assert len(raw_results) >= 10
 
-    # recurring() returns flattened results
-    flattened = recurring(freq="daily", duration=2 * DAY, tz="UTC")
+    # flatten() merges overlapping intervals
+    flattened = flatten(recurring(freq="daily", duration=2 * DAY, tz="UTC"))
     flattened_results = list(flattened[query_start:query_end])
 
     # After flatten: should be one continuous interval
@@ -467,7 +472,7 @@ def test_recurring_lookback_multiple_previous():
     Without proper lookback, events starting before the query but extending
     into it would be missed, causing gaps in coverage.
     """
-    from calgebra import DAY
+    from calgebra import DAY, flatten
 
     # Start query on Jan 10
     query_start = int(datetime(2025, 1, 10, 0, 0, 0, tzinfo=timezone.utc).timestamp())
@@ -479,7 +484,7 @@ def test_recurring_lookback_multiple_previous():
     # Jan 8 extends to Jan 13 (overlaps with query start)
     # Jan 9 extends to Jan 14 (overlaps with query start)
     # Jan 10+ extends to Jan 15+ (starts at/after query start)
-    long_events = recurring(freq="daily", duration=5 * DAY, tz="UTC")
+    long_events = flatten(recurring(freq="daily", duration=5 * DAY, tz="UTC"))
 
     results = list(long_events[query_start:query_end])
 
@@ -493,7 +498,8 @@ def test_recurring_lookback_multiple_previous():
 
 
 def test_recurring_raw_lookback_captures_all_overlaps():
-    """Test that raw recurring timeline (before flatten) captures all overlapping events.
+    """Test that raw recurring timeline (before flatten) captures all overlapping
+    events.
 
     This directly tests the _generate_page lookback logic.
     """
@@ -669,8 +675,9 @@ def test_rrule_string_complex_pattern():
 
 def test_rrule_string_direct_helper():
     """Test rrule_kwargs_to_rrule_string helper function directly."""
+    from dateutil.rrule import FR, MO, MONTHLY, WEEKLY
+
     from calgebra.recurrence import rrule_kwargs_to_rrule_string
-    from dateutil.rrule import WEEKLY, MONTHLY, MO, FR
 
     # Test with dateutil constants directly
     kwargs = {"freq": WEEKLY, "byweekday": [MO], "interval": 2}
@@ -689,7 +696,15 @@ def test_rrule_string_all_weekdays():
 
     pattern = RecurringPattern(
         freq="weekly",
-        day=["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+        day=[
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+        ],
     )
     rrule_str = pattern.to_rrule_string()
     assert rrule_str.startswith("FREQ=WEEKLY;BYDAY=")
