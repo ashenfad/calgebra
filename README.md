@@ -40,7 +40,7 @@ Intervals use **exclusive end bounds** (`[start, end)`), matching Python slicing
 - **Transformations**: `buffer()` (add time around intervals), `merge_within()` (coalesce nearby intervals)
 - **Google Calendar**: `calgebra.gcsa.calendars()` for read/write operations
 
-**→ [Tutorial](TUTORIAL.md)** | **[API Reference](API.md)** | **[Google Calendar Guide](calgebra/docs/GCSA.md)**
+**→ **[Quick-start](docs/QUICK-START.md)** | **[Tutorial](docs/TUTORIAL.md)** | **[API Reference](docs/API.md)** | **[Google Calendar](docs/GCSA.md)**
 
 
 ## License

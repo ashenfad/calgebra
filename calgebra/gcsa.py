@@ -910,8 +910,9 @@ def calendars() -> list[Calendar]:
         List of Calendar instances, one per accessible calendar
     """
     client = GoogleCalendar()
-    return [
+    cals = (
         Calendar(e.id, e.summary, client=client)
         for e in client.get_calendar_list()
         if e.id is not None and e.summary is not None
-    ]
+    )
+    return sorted(cals, key=lambda c: c.calendar_id)

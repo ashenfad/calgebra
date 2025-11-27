@@ -855,9 +855,9 @@ from datetime import date
 from calgebra import coverage_ratio
 from calgebra.gcsa import calendars
 
-# Get all team calendars
-cal_a, cal_b, cal_c = calendars(["alice@", "bob@", "charlie@"])
-team_calendar = cal_a | cal_b | cal_c
+# Get all calendars
+cals = calendars()
+team_calendar = union(*cals)
 
 # Daily coverage for November - fetches each calendar once!
 daily_coverage = coverage_ratio(
