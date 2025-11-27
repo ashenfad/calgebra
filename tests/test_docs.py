@@ -11,7 +11,7 @@ def test_docs_dict_exists() -> None:
 
 def test_docs_keys() -> None:
     """Verify expected documentation keys exist."""
-    expected_keys = {"readme", "tutorial", "api", "gcsa"}
+    expected_keys = {"readme", "tutorial", "api", "gcsa", "quick_start"}
     assert set(calgebra.docs.keys()) == expected_keys
 
 
