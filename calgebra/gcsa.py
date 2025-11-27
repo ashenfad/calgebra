@@ -613,17 +613,16 @@ class Calendar(MutableTimeline[Event]):
             calendar_summary=self.calendar_summary,
         )
 
+        # Re-assert for type checker (replace() doesn't preserve type narrowing)
+        assert event.start is not None and event.end is not None
+
         # Determine if event is all-day
         is_all_day = event.is_all_day
         if is_all_day is None:
-            # Auto-infer: use cached calendar timezone
-            # Only infer if event has finite start/end (already checked above)
-            if event.start is not None and event.end is not None:
-                is_all_day = _infer_is_all_day(
-                    event.start, event.end, self._calendar_timezone
-                )
-            else:
-                is_all_day = False
+            # Auto-infer from start/end alignment to midnight
+            is_all_day = _infer_is_all_day(
+                event.start, event.end, self._calendar_timezone
+            )
 
         # Convert timestamps to datetime/date objects
         start_dt, end_dt = _convert_timestamps_to_datetime(
