@@ -62,6 +62,31 @@ events = list(primary[start:end])
 events = list(primary[1735689600:1738368000])
 ```
 
+### Reverse Iteration
+
+Get events in reverse chronological order using step `-1`:
+
+```python
+from itertools import islice
+from calgebra.gcsa import calendars
+from calgebra import at_tz
+
+cals = calendars()
+primary = cals[0]
+at = at_tz("US/Pacific")
+
+# All events, newest first
+recent_first = list(primary[at("2025-01-01"):at("2025-02-01"):-1])
+
+# Last 5 events (stops after 5)
+last_5 = list(islice(primary[at("2024-01-01"):at("2025-01-01"):-1], 5))
+
+# Most recent event
+most_recent = next(primary[at("2024-01-01"):at("2025-01-01"):-1], None)
+```
+
+**Note:** Reverse iteration requires a finite `end` bound (defaults `start` to 1 year before). Forward iteration works without `start` (API defaults to "now"), but explicit bounds are recommended.
+
 **Event Properties:**
 - `id`: Google Calendar event ID
 - `calendar_id`: Calendar containing this event

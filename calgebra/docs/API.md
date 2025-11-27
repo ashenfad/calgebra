@@ -31,12 +31,16 @@ events = timeline(
 ```
 
 ### `Timeline[IvlOut]`
-- `fetch(start, end)` → iterable of intervals within bounds (inclusive start, exclusive end)
+- `fetch(start, end, *, reverse=False)` → iterable of intervals within bounds (inclusive start, exclusive end)
 - `__getitem__(slice)` → shorthand for `fetch`, accepts int or timezone-aware datetime slice bounds
   - Integer seconds (Unix timestamps): `timeline[1735689600:1767225600]` (exclusive end)
   - Timezone-aware datetime: `timeline[datetime(2025, 1, 1, tzinfo=timezone.utc):...]`
   - Naive datetimes are rejected with TypeError
   - **Automatic clipping**: Intervals are automatically clipped to query bounds. Any interval extending beyond `[start:end)` will be trimmed to fit. This ensures accurate aggregations and consistent set operations.
+  - **Reverse iteration**: Use step `-1` to iterate in reverse chronological order:
+    - `timeline[start:end:-1]` — events in `[start, end)`, newest first
+    - `timeline[end:start:-1]` — same (bounds are normalized)
+    - Only step values of `1`, `-1`, or `None` are supported
 - Set-like operators:
   - `timeline | other` → `Union`
   - `timeline & other` → `Intersection` or `Filtered`
@@ -427,6 +431,92 @@ daily_incidents = incidents & day_of_week("monday")
 ```
 
 **Note:** Unlike `flatten()`, `merge_within()` preserves metadata from the first interval in each merged group. Use `flatten()` when you don't need to preserve metadata and want all adjacent/overlapping intervals coalesced regardless of gap size.
+
+## Reverse Iteration
+
+All timelines support reverse chronological iteration using Python's slice step syntax.
+
+### Basic Usage
+
+```python
+from itertools import islice
+from calgebra import at_tz
+
+at = at_tz("US/Pacific")
+
+# Forward iteration (default)
+events = list(calendar[at("2025-01-01"):at("2025-02-01")])
+
+# Reverse iteration
+events_reversed = list(calendar[at("2025-01-01"):at("2025-02-01"):-1])
+
+# Get last 5 events (efficient - stops after 5)
+last_5 = list(islice(calendar[at("2024-01-01"):at("2025-01-01"):-1], 5))
+
+# Most recent event
+most_recent = next(calendar[start:end:-1], None)
+```
+
+### Bounds Normalization
+
+For reverse iteration, bounds are normalized to `[min, max)` regardless of order:
+
+```python
+# These are equivalent:
+calendar[100:500:-1]  # Bounds in "natural" order
+calendar[500:100:-1]  # Bounds swapped
+
+# Both yield events in [100, 500), newest first
+```
+
+### Step Validation
+
+Only step values of `1`, `-1`, or `None` (defaults to `1`) are supported:
+
+```python
+calendar[start:end:1]    # ✅ Forward (explicit)
+calendar[start:end]      # ✅ Forward (default)
+calendar[start:end:-1]   # ✅ Reverse
+
+calendar[start:end:2]    # ❌ ValueError
+calendar[start:end:0]    # ❌ ValueError
+```
+
+### Composition
+
+Reverse iteration works with all timeline operations:
+
+```python
+# Union
+combined = (cal1 | cal2)[start:end:-1]
+
+# Intersection
+overlaps = (cal1 & cal2)[start:end:-1]
+
+# Difference
+free_time = (business_hours - busy)[start:end:-1]
+
+# Filters
+long_events = (calendar & (hours >= 2))[start:end:-1]
+
+# Transforms
+buffered = buffer(calendar, before=HOUR)[start:end:-1]
+```
+
+### Bound Requirements
+
+Iteration requires a finite "origin" — the point where iteration begins:
+
+| Timeline | Forward (needs `start`) | Reverse (needs `end`) |
+|----------|-------------------------|----------------------|
+| `MemoryTimeline` / `timeline()` | Optional | Optional |
+| `RecurringPattern` | **Required** | **Required** |
+| `Calendar` (GCSA) | Recommended* | **Required** |
+| Composed (`\|`, `&`, `-`, `~`) | Inherits | Inherits |
+
+\* Google Calendar API defaults to "now" if `start` is omitted, but explicit bounds are recommended for predictable behavior.
+
+**Note:** Infinite sources (recurring patterns, Google Calendar) cannot iterate from ±∞, so they require a finite origin for the direction of travel. The opposite bound is always optional. For in-memory timelines, both bounds are optional since the data is finite.
 
 ## Module Exports (`calgebra.__init__`)
 - `Interval`, `Timeline`, `Filter`, `Property`
