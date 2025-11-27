@@ -771,7 +771,9 @@ def test_add_recurring_includes_exdates() -> None:
 
 
 def test_add_recurring_rejects_non_event_pattern() -> None:
-    """Test that _add_recurring rejects patterns with non-Event interval_class."""
+    """Test that _add_recurring accepts RecurringPattern[Interval] and promotes it
+    using metadata.
+    """
     from calgebra.interval import Interval
     from calgebra.recurrence import RecurringPattern
     from calgebra.util import DAY
@@ -783,21 +785,26 @@ def test_add_recurring_rejects_non_event_pattern() -> None:
         freq="daily",
         duration=DAY,
         tz="UTC",
-        interval_class=Interval,  # Not Event!
+        interval_class=Interval,  # Base Interval, not Event
     )
 
-    results = calendar._add_recurring(pattern, metadata={})
+    # Pass metadata with summary to create Event fields
+    results = calendar._add_recurring(pattern, metadata={"summary": "Daily Pattern"})
 
-    # Verify error result
+    # Verify success - now accepts Interval and promotes via metadata
     assert len(results) == 1
     result = results[0]
-    assert result.success is False
-    assert result.error is not None
-    assert isinstance(result.error, TypeError)
-    assert "Expected RecurringPattern[Event]" in str(result.error)
+    assert result.success is True
+    assert result.error is None
+    assert result.event is not None
+    assert result.event.summary == "Daily Pattern"
+    assert result.event.is_all_day is True
 
-    # Verify add_event was not called
-    assert len(stub.added_events) == 0
+    # Verify add_event was called
+    assert len(stub.added_events) == 1
+    gcsa_event = stub.added_events[0]["event"]
+    assert gcsa_event.summary == "Daily Pattern"
+
 
 
 def test_remove_interval_deletes_standalone_event() -> None:
@@ -1140,7 +1147,9 @@ def test_add_interval_auto_fills_calendar_metadata() -> None:
 
 
 def test_add_interval_ignores_source_calendar_metadata() -> None:
-    """Test that _add_interval ignores calendar_id/calendar_summary from source calendar."""
+    """Test that _add_interval ignores calendar_id/calendar_summary from source
+    calendar.
+    """
     from calgebra.gcsa import Event
 
     zone = ZoneInfo("UTC")

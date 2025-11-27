@@ -26,7 +26,7 @@ def test_day_of_week_single_day():
 
 def test_day_of_week_multiple_days():
     """Test generating intervals for multiple days of the week.
-    
+
     Adjacent days are merged by flatten, so Mon-Fri becomes one interval.
     """
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
@@ -40,7 +40,7 @@ def test_day_of_week_multiple_days():
 
     # Adjacent days are merged into one continuous interval
     assert len(days) == 1
-    
+
     # Verify it covers Monday through Friday
     monday_start = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     friday_end = int(datetime(2025, 1, 11, 0, 0, 0, tzinfo=timezone.utc).timestamp())
@@ -95,7 +95,7 @@ def test_day_of_week_requires_finite_start():
 
 def test_time_of_day_full_day():
     """Test time_of_day with default full day.
-    
+
     Adjacent full days are merged by flatten into one continuous interval.
     """
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
@@ -123,9 +123,7 @@ def test_time_of_day_specific_hours():
     assert len(work_hours) == 1
 
     expected_start = int(datetime(2025, 1, 6, 9, 0, 0, tzinfo=timezone.utc).timestamp())
-    expected_end = int(
-        datetime(2025, 1, 6, 17, 0, 0, tzinfo=timezone.utc).timestamp()
-    )
+    expected_end = int(datetime(2025, 1, 6, 17, 0, 0, tzinfo=timezone.utc).timestamp())
 
     assert work_hours[0] == Interval(start=expected_start, end=expected_end)
 
@@ -199,9 +197,7 @@ def test_composition_business_hours():
 
     # Check first day is Monday 9-5
     expected_start = int(datetime(2025, 1, 6, 9, 0, 0, tzinfo=timezone.utc).timestamp())
-    expected_end = int(
-        datetime(2025, 1, 6, 17, 0, 0, tzinfo=timezone.utc).timestamp()
-    )
+    expected_end = int(datetime(2025, 1, 6, 17, 0, 0, tzinfo=timezone.utc).timestamp())
     assert hours[0] == Interval(start=expected_start, end=expected_end)
 
 
@@ -273,7 +269,7 @@ def test_composition_with_calendar():
 
 def test_weekend_pattern():
     """Test creating weekend pattern with day_of_week.
-    
+
     Adjacent days (Saturday and Sunday) are merged into one continuous interval.
     """
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())
@@ -288,8 +284,6 @@ def test_weekend_pattern():
     saturday_start = int(
         datetime(2025, 1, 11, 0, 0, 0, tzinfo=timezone.utc).timestamp()
     )
-    sunday_end = int(
-        datetime(2025, 1, 13, 0, 0, 0, tzinfo=timezone.utc).timestamp()
-    )
+    sunday_end = int(datetime(2025, 1, 13, 0, 0, 0, tzinfo=timezone.utc).timestamp())
     assert days[0].start == saturday_start
     assert days[0].end == sunday_end

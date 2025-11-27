@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from typing_extensions import override
 
-from calgebra import Interval, Timeline, buffer, merge_within, minutes
+from calgebra import Interval, Timeline, buffer, merge_within
 
 
 @dataclass(frozen=True, kw_only=True)

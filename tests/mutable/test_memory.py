@@ -1,6 +1,5 @@
 """Tests for MemoryTimeline."""
 
-from datetime import datetime, timezone
 
 from calgebra import Interval
 from calgebra.mutable.memory import MemoryTimeline
