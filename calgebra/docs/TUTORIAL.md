@@ -853,7 +853,7 @@ Instead of making repeated calls (which causes N×M API requests), fetch once an
 ```python
 from datetime import date
 from calgebra import coverage_ratio
-from calgebra.gcsa import calendars
+from calgebra.gcsa import calendars, union
 
 # Get all calendars
 cals = calendars()
