@@ -66,13 +66,20 @@ class DummyTimeline(Timeline[Ivl], Generic[Ivl]):
         )
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[Ivl]:
-        for event in self._events:
-            if start is not None and event.end < start:
-                continue
-            if end is not None and event.start > end:
-                break
-            yield event
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[Ivl]:
+        # Filter events within bounds
+        matching = [
+            event
+            for event in self._events
+            if not (start is not None and event.end < start)
+            and not (end is not None and event.start > end)
+        ]
+        if reverse:
+            yield from reversed(matching)
+        else:
+            yield from matching
 
 
 def test_fetch_respects_bounds() -> None:

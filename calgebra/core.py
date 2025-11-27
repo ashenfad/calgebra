@@ -14,8 +14,20 @@ from calgebra.interval import NEG_INF, POS_INF, Interval, IvlIn, IvlOut
 class Timeline(ABC, Generic[IvlOut]):
 
     @abstractmethod
-    def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
-        """Yield events ordered by start/end within the provided bounds."""
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[IvlOut]:
+        """Yield events within the provided bounds.
+
+        Args:
+            start: Start timestamp (inclusive), None for unbounded
+            end: End timestamp (exclusive), None for unbounded
+            reverse: If True, yield events in reverse chronological order
+
+        Returns:
+            Iterable of events, ordered by (start, end) ascending if reverse=False,
+            or descending if reverse=True.
+        """
         pass
 
     @property
@@ -31,6 +43,16 @@ class Timeline(ABC, Generic[IvlOut]):
     def __getitem__(self, item: slice) -> Iterable[IvlOut]:
         start = self._coerce_bound(item.start, "start")
         end_bound = self._coerce_bound(item.stop, "end")
+        step = item.step
+
+        # Validate step parameter
+        if step is not None and step not in (1, -1):
+            raise ValueError(
+                f"Timeline slicing only supports step of 1 or -1, got {step}.\n"
+                f"Use step=-1 for reverse iteration: timeline[end:start:-1]"
+            )
+
+        reverse = step == -1
 
         # Convert exclusive slice bound to inclusive interval bound
         # Python slicing [start:end] excludes end
@@ -38,14 +60,21 @@ class Timeline(ABC, Generic[IvlOut]):
         # So we use the end bound directly
         end = end_bound
 
+        # Normalize bounds for reverse iteration: [min, max) regardless of order
+        # This prioritizes calendar semantics over strict Python slice behavior
+        if start is not None and end is not None and start > end:
+            start, end = end, start
+
         # Automatically clip intervals to query bounds via intersection with solid
         # timeline
         # This ensures correct behavior for aggregations and set operations
         # Skip clipping if both bounds are unbounded (no clipping needed)
         if start is None and end is None:
-            return self.fetch(start, end)
+            return self.fetch(start, end, reverse=reverse)
         # Cast solid to compatible type since intersection preserves self's type
-        return (self & cast("Timeline[IvlOut]", solid)).fetch(start, end)
+        return (self & cast("Timeline[IvlOut]", solid)).fetch(
+            start, end, reverse=reverse
+        )
 
     def _coerce_bound(self, bound: Any, edge: Literal["start", "end"]) -> int | None:
         """Convert slice bounds to integer seconds (Unix timestamps).
@@ -189,7 +218,10 @@ class _SolidTimeline(Timeline[Interval]):
         return True
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[Interval]:
+        # Single interval, reverse doesn't matter
         yield Interval(start=start, end=end)
 
 
@@ -222,10 +254,22 @@ class Union(Timeline[IvlOut]):
         return all(s._is_mask for s in self.sources)
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
-        streams = [source.fetch(start, end) for source in self.sources]
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[IvlOut]:
+        streams = [source.fetch(start, end, reverse=reverse) for source in self.sources]
         # Use finite properties for sorting to handle None (unbounded) values
-        merged = heapq.merge(*streams, key=lambda e: (e.finite_start, e.finite_end))
+        if reverse:
+            # For reverse, sort descending by (start, end)
+            merged = heapq.merge(
+                *streams,
+                key=lambda e: (-e.finite_start, -e.finite_end),
+            )
+        else:
+            merged = heapq.merge(
+                *streams,
+                key=lambda e: (e.finite_start, e.finite_end),
+            )
         return merged
 
 
@@ -301,7 +345,9 @@ class Intersection(Timeline[IvlOut]):
         return all(s._is_mask for s in self.sources)
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[IvlOut]:
         """Compute intersection using a multi-way merge with sliding window.
 
         Algorithm:
@@ -389,6 +435,10 @@ class Intersection(Timeline[IvlOut]):
                 if not advanced:
                     return  # No progress possible, done
 
+        if reverse:
+            # Materialize and reverse for reverse iteration
+            # This is simpler than implementing a full reverse sweep algorithm
+            return reversed(list(generate()))
         return generate()
 
 
@@ -404,8 +454,14 @@ class Filtered(Timeline[IvlOut]):
         return self.source._is_mask
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
-        return (e for e in self.source.fetch(start, end) if self.filter.apply(e))
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[IvlOut]:
+        return (
+            e
+            for e in self.source.fetch(start, end, reverse=reverse)
+            if self.filter.apply(e)
+        )
 
 
 class Difference(Timeline[IvlOut]):
@@ -424,7 +480,9 @@ class Difference(Timeline[IvlOut]):
         return self.source._is_mask
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[IvlOut]:
         """Subtract intervals using a sweep-line algorithm.
 
         Algorithm: For each source interval, scan through subtractor intervals
@@ -512,6 +570,9 @@ class Difference(Timeline[IvlOut]):
                     end_val = event_end if event_end != POS_INF else None
                     yield replace(event, start=start_val, end=end_val)
 
+        if reverse:
+            # Materialize and reverse for reverse iteration
+            return reversed(list(generate()))
         return generate()
 
 
@@ -529,7 +590,9 @@ class Complement(Timeline[Interval]):
         return True
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[Interval]:
         """Generate gaps by inverting the source timeline.
 
         Algorithm: Scan through source intervals and emit intervals for the spaces
@@ -579,6 +642,12 @@ class Complement(Timeline[Interval]):
                 gap_end = end if end_bound != POS_INF else None
                 yield Interval(start=gap_start, end=gap_end)
 
+        if reverse:
+            # Materialize and reverse for reverse iteration
+            # A proper reverse algorithm would scan backward, but gaps are
+            # computed relative to source intervals, making streaming reverse
+            # complex. Materialize-and-reverse is correct and simple.
+            return reversed(list(generate()))
         return generate()
 
 
