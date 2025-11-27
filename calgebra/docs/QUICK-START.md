@@ -113,6 +113,24 @@ results = primary.add(new_event)
 team_busy = union(*cals)
 ```
 
+## Reverse Iteration
+
+```python
+from itertools import islice
+
+# Get events in reverse chronological order
+recent_first = list(calendar[start:end:-1])
+
+# Get last 5 events (stops after 5)
+last_5 = list(islice(calendar[start:end:-1], 5))
+
+# Most recent event
+most_recent = next(calendar[start:end:-1], None)
+
+# Works with all operations
+free_slots_recent = list((business_hours - busy)[start:end:-1])
+```
+
 ## Common Patterns
 
 **Find meeting slots:**
@@ -133,6 +151,12 @@ has_conflict = any(conflicts[start:end])
 ```python
 available = business_hours - my_calendar
 free_slots = list(available[at("2025-01-15"):at("2025-01-16")])
+```
+
+**Last N events:**
+```python
+from itertools import islice
+last_10 = list(islice(calendar[at("2020-01-01"):at("2025-01-01"):-1], 10))
 ```
 
 **Overlap between timezones:**
