@@ -519,7 +519,15 @@ class Calendar(MutableTimeline[Event]):
         )
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[Event]:
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[Event]:
+        if reverse:
+            return self._fetch_reverse(start, end)
+        return self._fetch_forward(start, end)
+
+    def _fetch_forward(self, start: int | None, end: int | None) -> Iterable[Event]:
+        """Forward iteration through calendar events."""
         start_dt = _timestamp_to_datetime(start) if start is not None else None
         # Both calgebra and Google Calendar now use exclusive end bounds
         end_dt = _timestamp_to_datetime(end) if end is not None else None
@@ -545,8 +553,8 @@ class Calendar(MutableTimeline[Event]):
             is_all_day = _is_all_day_event(e)
             recurring_event_id = getattr(e, "recurring_event_id", None)
             reminders = _extract_reminders(e)
-            start_dt = _extract_datetime(e.start)
-            end_dt = _extract_datetime(e.end)
+            evt_start_dt = _extract_datetime(e.start)
+            evt_end_dt = _extract_datetime(e.end)
 
             # For all-day events, normalize dates using the calendar's timezone.
             # Google Calendar interprets all-day event dates in the calendar's
@@ -572,9 +580,41 @@ class Calendar(MutableTimeline[Event]):
                 recurring_event_id=recurring_event_id,
                 is_all_day=is_all_day,
                 reminders=reminders,
-                start=_to_timestamp(start_dt, zone_for_timestamp),
-                end=_to_timestamp(end_dt, zone_for_timestamp),
+                start=_to_timestamp(evt_start_dt, zone_for_timestamp),
+                end=_to_timestamp(evt_end_dt, zone_for_timestamp),
             )
+
+    def _fetch_reverse(self, start: int | None, end: int | None) -> Iterable[Event]:
+        """Reverse iteration through calendar events using windowed pagination.
+
+        Google Calendar API doesn't support reverse ordering or previous page
+        tokens, so we fetch in time windows moving backward and reverse each
+        window's results.
+        """
+        if end is None:
+            raise ValueError(
+                "Reverse iteration on Calendar requires finite end bound.\n"
+                "Fix: Use explicit end when slicing: calendar[start:end:-1]\n"
+                "Example: list(calendar[at('2024-01-01'):at('2025-01-01'):-1])"
+            )
+
+        # Default start to 1 year before end if not specified
+        if start is None:
+            start = end - (365 * DAY)
+
+        # Window size: 30 days is reasonable for most calendars
+        window_size = 30 * DAY
+
+        current_end = end
+
+        while current_end > start:
+            window_start = max(start, current_end - window_size)
+
+            # Fetch this window forward, then reverse
+            window_events = list(self._fetch_forward(window_start, current_end))
+            yield from reversed(window_events)
+
+            current_end = window_start
 
     @override
     @_handle_write_errors

@@ -416,3 +416,81 @@ def test_reverse_single_interval():
     result = list(tl[0:200:-1])
     assert result == [Interval(start=50, end=100)]
 
+
+# === GCSA Calendar reverse tests ===
+
+
+def test_gcsa_calendar_reverse_requires_end_bound():
+    """Test that reverse iteration on Calendar requires end bound."""
+    from unittest.mock import MagicMock
+
+    from calgebra.gcsa import Calendar
+
+    # Create mock calendar
+    mock_client = MagicMock()
+    mock_client.get_calendar.return_value = MagicMock(timezone="UTC")
+    mock_client.get_events.return_value = iter([])
+
+    cal = Calendar("test@example.com", "Test Calendar", client=mock_client)
+
+    with pytest.raises(ValueError, match="Reverse iteration on Calendar requires"):
+        list(cal[::-1])
+
+
+def test_gcsa_calendar_reverse_with_mock():
+    """Test reverse iteration on Calendar with mocked events."""
+    from unittest.mock import MagicMock
+
+    from calgebra.gcsa import Calendar
+
+    # Create mock events
+    mock_event1 = MagicMock()
+    mock_event1.id = "event1"
+    mock_event1.summary = "First Event"
+    mock_event1.description = None
+    mock_event1.start = datetime(2025, 1, 10, 10, 0, tzinfo=timezone.utc)
+    mock_event1.end = datetime(2025, 1, 10, 11, 0, tzinfo=timezone.utc)
+    mock_event1.timezone = "UTC"
+    mock_event1.recurring_event_id = None
+    mock_event1.reminders = []
+    mock_event1.default_reminders = True
+
+    mock_event2 = MagicMock()
+    mock_event2.id = "event2"
+    mock_event2.summary = "Second Event"
+    mock_event2.description = None
+    mock_event2.start = datetime(2025, 1, 20, 14, 0, tzinfo=timezone.utc)
+    mock_event2.end = datetime(2025, 1, 20, 15, 0, tzinfo=timezone.utc)
+    mock_event2.timezone = "UTC"
+    mock_event2.recurring_event_id = None
+    mock_event2.reminders = []
+    mock_event2.default_reminders = True
+
+    # Create mock calendar
+    mock_client = MagicMock()
+    mock_client.get_calendar.return_value = MagicMock(timezone="UTC")
+
+    # Return events for any time window query
+    mock_client.get_events.return_value = iter([mock_event1, mock_event2])
+
+    cal = Calendar("test@example.com", "Test Calendar", client=mock_client)
+
+    # Query window
+    jan1 = int(datetime(2025, 1, 1, tzinfo=timezone.utc).timestamp())
+    feb1 = int(datetime(2025, 2, 1, tzinfo=timezone.utc).timestamp())
+
+    # Forward iteration
+    forward = list(cal[jan1:feb1])
+    assert len(forward) == 2
+    assert forward[0].summary == "First Event"
+    assert forward[1].summary == "Second Event"
+
+    # For reverse, we need to reset the mock to return events again
+    mock_client.get_events.return_value = iter([mock_event1, mock_event2])
+
+    # Reverse iteration
+    reverse = list(cal[jan1:feb1:-1])
+    assert len(reverse) == 2
+    assert reverse[0].summary == "Second Event"
+    assert reverse[1].summary == "First Event"
+
