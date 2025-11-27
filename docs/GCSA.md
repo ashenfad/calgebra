@@ -147,11 +147,11 @@ cals = calendars()
 primary = cals[0]
 at = at_tz("US/Pacific")
 
-# Weekly meeting (every Monday at 2 PM)
+# Weekly meeting (every Monday at 2 PM, starting Jan 6, 2025)
 weekly_pattern = recurring(
     freq="weekly",
     day="monday",
-    start=at(2025, 1, 6, 14, 0),  # First occurrence
+    start=at(2025, 1, 6, 14, 0),  # First occurrence (tz inferred from datetime)
     duration=1 * HOUR,
 )
 
@@ -167,11 +167,15 @@ if results[0].success:
     print(f"Recurring event created: {results[0].event.id}")
 ```
 
-**Recurring Event Metadata:**
+**Pattern Parameters** (`recurring()`):
+- `start`: First occurrence as datetime/timestamp, OR seconds from midnight (time-of-day only)
+- `duration`: Event duration in seconds
+- `tz`: Timezone (inferred from `start` if datetime with tzinfo, otherwise defaults to UTC)
+
+**Metadata Parameters** (`add()`):
 - `summary`: Event title
 - `description`: Event description
 - `reminders`: List of `Reminder` objects
-- `start`: First occurrence timestamp (if not provided, uses current time)
 
 **Supported Recurrence Patterns:**
 - `freq`: `"daily"`, `"weekly"`, `"monthly"`, `"yearly"`
@@ -186,7 +190,7 @@ if results[0].success:
 ```python
 from calgebra import recurring, HOUR
 
-# Every weekday at 9 AM
+# Every weekday at 9 AM, starting Jan 6, 2025
 workdays = recurring(
     freq="weekly",
     day=["monday", "tuesday", "wednesday", "thursday", "friday"],
@@ -194,7 +198,7 @@ workdays = recurring(
     duration=8 * HOUR,
 )
 
-# First Monday of every month
+# First Monday of every month at 10 AM
 monthly = recurring(
     freq="monthly",
     day="monday",
@@ -203,7 +207,7 @@ monthly = recurring(
     duration=1 * HOUR,
 )
 
-# Every 2 weeks
+# Every 2 weeks on Friday at 3 PM
 biweekly = recurring(
     freq="weekly",
     day="friday",
@@ -321,7 +325,7 @@ at = at_tz("US/Pacific")
 focus_time = recurring(
     freq="weekly",
     day=["monday", "tuesday", "wednesday", "thursday", "friday"],
-    start=at(2025, 1, 6, 14, 0),  # 2 PM
+    start=at(2025, 1, 6, 14, 0),
     duration=2 * HOUR,
 )
 

@@ -26,7 +26,7 @@ from dateutil.rrule import (
 )
 from typing_extensions import override
 
-from calgebra.core import Timeline, flatten, solid
+from calgebra.core import Timeline, flatten
 from calgebra.interval import Interval
 from calgebra.util import DAY, WEEK
 
@@ -225,9 +225,9 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
         week: int | None = None,
         day_of_month: int | list[int] | None = None,
         month: int | list[int] | None = None,
-        start: int = 0,
+        start: datetime | int = 0,
         duration: int = DAY,
-        tz: str = "UTC",
+        tz: str | None = None,
         interval_class: type[IvlOut] = Interval,  # type: ignore
         exdates: Iterable[int] | None = None,
         **metadata: Any,
@@ -244,30 +244,49 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
                 (1=first, -1=last, 2=second, etc.)
             day_of_month: Day(s) of month (1-31, or -1 for last day)
             month: Month(s) for yearly patterns (1-12)
-            start: Start time of each occurrence in seconds from midnight (default 0)
+            start: Either a full timestamp (seconds since epoch) or time-of-day
+                (seconds from midnight). If > DAY, treated as timestamp with
+                anchor date extracted. If <= DAY, treated as time-of-day only.
             duration: Duration of each occurrence in seconds (default DAY = full day)
-            tz: IANA timezone name
+            tz: IANA timezone name (inferred from start if datetime with tzinfo)
             interval_class: Class to instantiate for each interval (default: Interval)
-            **metadata: Additional metadata fields to apply to each interval
-            day: Day(s) of week to include
-            week: Week number(s) (1-53)
-            day_of_month: Day(s) of month (1-31)
-            month: Month(s) (1-12)
-            start: Start time in seconds from epoch (default 0)
-            duration: Duration in seconds (default DAY)
-            tz: IANA timezone name (default "UTC")
-            interval_class: Class to use for generated intervals
             exdates: Optional set of excluded start timestamps (seconds from epoch)
             **metadata: Additional metadata to store on generated intervals
         """
         self.freq = freq
         self.interval = interval
-        self.start_seconds = start
         self.duration_seconds = duration
-        self.zone = ZoneInfo(tz)
         self.interval_class = interval_class
         self.metadata = metadata
         self.exdates = set(exdates) if exdates else set()
+
+        # Infer timezone: explicit tz > start's tzinfo > UTC
+        if tz is not None:
+            self.zone = ZoneInfo(tz)
+        elif isinstance(start, datetime) and start.tzinfo is not None:
+            self.zone = start.tzinfo  # type: ignore[assignment]
+        else:
+            self.zone = ZoneInfo("UTC")
+
+        # Interpret start: can be datetime, timestamp (int > DAY), or time-of-day
+        if isinstance(start, datetime):
+            # datetime object: use directly as anchor
+            anchor_dt = start if start.tzinfo else start.replace(tzinfo=self.zone)
+            self.anchor_timestamp: int | None = int(anchor_dt.timestamp())
+            self.start_seconds = (
+                anchor_dt.hour * 3600 + anchor_dt.minute * 60 + anchor_dt.second
+            )
+        elif start > DAY:
+            # Large int: treat as Unix timestamp
+            anchor_dt = datetime.fromtimestamp(start, tz=self.zone)
+            self.anchor_timestamp = start
+            self.start_seconds = (
+                anchor_dt.hour * 3600 + anchor_dt.minute * 60 + anchor_dt.second
+            )
+        else:
+            # Small int: seconds from midnight (mask-style, no anchor)
+            self.anchor_timestamp = None
+            self.start_seconds = start
 
         # Store original recurrence parameters for easy reconstruction
         self.day = day
@@ -476,9 +495,9 @@ def recurring(
     week: int | None = None,
     day_of_month: int | list[int] | None = None,
     month: int | list[int] | None = None,
-    start: int = 0,
+    start: datetime | int = 0,
     duration: int = DAY,
-    tz: str = "UTC",
+    tz: str | None = None,
 ) -> Timeline[Interval]:
     """
     Create a timeline with recurring intervals based on frequency and constraints.
@@ -493,9 +512,10 @@ def recurring(
         week: Which week of month (1=first, -1=last). Only for freq="monthly"
         day_of_month: Day(s) of month (1-31, or -1 for last day). For freq="monthly"
         month: Month(s) (1-12). For freq="yearly"
-        start: Start time of each occurrence in seconds from midnight (default 0)
+        start: Either a datetime/timestamp (first occurrence) or seconds from midnight
+            (time-of-day only). If > 86400, treated as timestamp with anchor date.
         duration: Duration of each occurrence in seconds (default DAY = full day)
-        tz: IANA timezone name (e.g., "UTC", "US/Pacific")
+        tz: IANA timezone name (inferred from start's tzinfo if not provided)
 
     Returns:
         Timeline yielding recurring intervals
@@ -558,8 +578,7 @@ def recurring(
         >>> mondays = recurring(freq="weekly", day="monday", tz="UTC")
         >>> next_five = list(islice(mondays[start:], 5))
     """
-    # Generate raw recurring intervals with lookback for overlaps
-    raw = RecurringPattern(
+    return RecurringPattern(
         freq,
         interval=interval,
         day=day,
@@ -570,9 +589,6 @@ def recurring(
         duration=duration,
         tz=tz,
     )
-
-    # Compose: merge recurring pattern, then clamp to query bounds
-    return solid & flatten(raw)
 
 
 def day_of_week(days: Day | list[Day], tz: str = "UTC") -> Timeline[Interval]:
@@ -601,7 +617,7 @@ def day_of_week(days: Day | list[Day], tz: str = "UTC") -> Timeline[Interval]:
         ...     ["monday", "tuesday", "wednesday", "thursday", "friday"]
         ... )
     """
-    return recurring(freq="weekly", day=days, tz=tz)
+    return flatten(recurring(freq="weekly", day=days, tz=tz))
 
 
 def time_of_day(
@@ -657,4 +673,4 @@ def time_of_day(
             f"  )\n"
         )
 
-    return recurring(freq="daily", start=start, duration=duration, tz=tz)
+    return flatten(recurring(freq="daily", start=start, duration=duration, tz=tz))

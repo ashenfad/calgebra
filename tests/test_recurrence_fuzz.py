@@ -1,9 +1,11 @@
 
 import random
+from datetime import datetime, timezone
+
 import pytest
-from datetime import datetime, timedelta, timezone
-from dateutil.rrule import rrule, DAILY, WEEKLY, MONTHLY, YEARLY, MO
-from calgebra import recurring, DAY
+from dateutil.rrule import DAILY, MONTHLY, WEEKLY, YEARLY, rrule
+
+from calgebra import DAY, recurring
 from calgebra.interval import Interval
 
 WEEK = 7 * DAY
@@ -37,63 +39,63 @@ def get_ground_truth(freq_str, interval, start_ts, end_ts, duration):
     # If we want to test complex patterns, we'd need to mirror that in SUT.
     # For now, let's test the core "interval > 1" phase logic.
     rules = rrule(freq, interval=interval, dtstart=dtstart)
-    
+
     # Convert query bounds to datetime for filtering
     # Note: rrule yields datetimes. We need to check overlaps.
-    
+
     # Optimization: We can use rrule.between if we are careful about overlaps.
     # But to be safe and match the "infinite stream" concept, let's just
     # find the first one before start and iterate.
-    
+
     # We need to catch events that start before 'start_ts' but end after it.
     # Max lookback needed is interval * freq_len + duration.
     # But since we start from Epoch, we can just iterate forward.
     # To avoid iterating from 1970 every time, we can use `after` to jump close.
-    
+
     # Jump to just before query start
     # We want the occurrence just before (start_ts - duration) to be safe
     safe_start_dt = datetime.fromtimestamp(start_ts - duration, tz=timezone.utc)
-    
+
     # rrule.between is exclusive of start? inclusive?
     # inc=True means inclusive.
     # We'll get a slice that definitely covers the window.
     query_end_dt = datetime.fromtimestamp(end_ts, tz=timezone.utc)
-    
+
     # Get candidates
     candidates = rules.between(safe_start_dt, query_end_dt, inc=True)
-    
+
     # Also check one before safe_start_dt just in case (for long durations)
     before = rules.before(safe_start_dt, inc=False)
     if before:
         candidates.insert(0, before)
-        
+
     results = []
     for dt in candidates:
         # Convert to Interval with exclusive end
         start = int(dt.timestamp())
         end = start + duration
-        
+
         # Check overlap with [start_ts, end_ts)
         # Interval is [start, end) (exclusive end)
         # Query is [start_ts, end_ts) (exclusive end)
-        
+
         # Overlap logic for exclusive ends:
         # max(start, start_ts) < min(end, end_ts)
-        
+
         overlap_start = max(start, start_ts)
         overlap_end = min(end, end_ts)
-        
+
         if overlap_start < overlap_end:
             results.append(Interval(start=overlap_start, end=overlap_end))
-            
+
     # Flatten results to match recurring() behavior (which merges adjacent/overlapping)
     if not results:
         return []
-        
+
     results.sort(key=lambda x: x.start)
     merged = []
     current = results[0]
-    
+
     for next_ivl in results[1:]:
         # Merge if overlap or adjacent
         # With exclusive ends: [a,b) and [b,c) are adjacent
@@ -103,7 +105,7 @@ def get_ground_truth(freq_str, interval, start_ts, end_ts, duration):
             merged.append(current)
             current = next_ivl
     merged.append(current)
-            
+
     return merged
 
 @pytest.mark.parametrize("execution_number", range(50))
@@ -116,46 +118,57 @@ def test_fuzz_recurrence_phase(execution_number):
     freq = random.choice(["daily", "weekly", "monthly", "yearly"])
     interval = random.randint(1, 5)
     duration = random.randint(1, 24) * 3600 # 1 hour to 1 day
-    
+
     # Random query window in recent times (2020-2030)
     base_ts = int(datetime(2020, 1, 1, tzinfo=timezone.utc).timestamp())
     range_span = 10 * 365 * 24 * 3600
-    
+
     query_start = base_ts + random.randint(0, range_span)
     # Query length: 1 day to 100 days
     query_len = random.randint(DAY, 100 * DAY)
     query_end = query_start + query_len
-    
+
     # System Under Test
     # Note: We use default start=0 (midnight) to match ground truth rrule defaults
-    timeline = recurring(freq=freq, interval=interval, duration=duration, tz="UTC")
-    
+    # flatten() is needed because ground truth merges overlapping intervals
+    from calgebra import flatten
+    timeline = flatten(
+        recurring(freq=freq, interval=interval, duration=duration, tz="UTC")
+    )
+
     # Fetch
     # recurring()[start:end] returns intervals overlapping [start, end)
     actual = list(timeline[query_start:query_end])
-    
+
     # Ground Truth
     expected = get_ground_truth(freq, interval, query_start, query_end, duration)
-    
+
     # Compare
-    # We only care about start times for equality checking usually, 
+    # We only care about start times for equality checking usually,
     # but let's check full intervals.
-    
+
     # Debug info
     if actual != expected:
-        print(f"\nFAILURE Params:")
+        print("\nFAILURE Params:")
         print(f"  Freq: {freq}")
         print(f"  Interval: {interval}")
         print(f"  Duration: {duration}")
         print(f"  Query: {query_start} to {query_end}")
-        print(f"  Query DT: {datetime.fromtimestamp(query_start, tz=timezone.utc)} to {datetime.fromtimestamp(query_end, tz=timezone.utc)}")
-        
+        print(
+            f"  Query DT: {datetime.fromtimestamp(query_start, tz=timezone.utc)} to "
+            f"{datetime.fromtimestamp(query_end, tz=timezone.utc)}"
+        )
+
         print(f"\nExpected ({len(expected)}):")
         for ivl in expected:
-            print(f"  {datetime.fromtimestamp(ivl.start, tz=timezone.utc)} ({ivl.start})")
-            
+            print(
+                f"  {datetime.fromtimestamp(ivl.start, tz=timezone.utc)} ({ivl.start})"
+            )
+
         print(f"\nActual ({len(actual)}):")
         for ivl in actual:
-            print(f"  {datetime.fromtimestamp(ivl.start, tz=timezone.utc)} ({ivl.start})")
-            
+            print(
+                f"  {datetime.fromtimestamp(ivl.start, tz=timezone.utc)} ({ivl.start})"
+            )
+
     assert actual == expected
