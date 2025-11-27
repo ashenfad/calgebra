@@ -402,11 +402,19 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
         return start_dt
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[IvlOut]:
         """Generate recurring intervals using a single continuous rrule iterator.
 
-        Supports unbounded end queries.
+        Supports unbounded end queries (forward) and chunked reverse iteration.
         """
+        if reverse:
+            return self._fetch_reverse(start, end)
+        return self._fetch_forward(start, end)
+
+    def _fetch_forward(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
+        """Forward iteration through recurrences."""
         if start is None:
             raise ValueError(
                 "Recurring timeline requires finite start, got start=None.\n"
@@ -485,6 +493,46 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
         )
 
         return base_interval
+
+    def _fetch_reverse(self, start: int | None, end: int | None) -> Iterable[IvlOut]:
+        """Reverse iteration through recurrences using chunked approach.
+
+        Since rrule only generates forward, we fetch chunks and reverse them.
+        Each chunk contains occurrences in a time window, yielded in reverse order.
+        """
+        if end is None:
+            raise ValueError(
+                "Reverse iteration requires finite end bound, got end=None.\n"
+                "Fix: Use explicit end when slicing: recurring(...)[end:start:-1]\n"
+                "Example: list(mondays[now::-1])"
+            )
+
+        # Use chunked approach: fetch windows of time backward
+        # Chunk size based on frequency for reasonable batch sizes
+        if self.freq == "daily":
+            chunk_size = 30 * DAY  # ~30 occurrences per chunk
+        elif self.freq == "weekly":
+            chunk_size = 12 * WEEK  # ~12 occurrences per chunk
+        elif self.freq == "monthly":
+            chunk_size = 365 * DAY  # ~12 occurrences per chunk
+        else:  # yearly
+            chunk_size = 5 * 365 * DAY  # ~5 occurrences per chunk
+
+        current_end = end
+        effective_start = start if start is not None else end - (10 * 365 * DAY)
+
+        while current_end > effective_start:
+            chunk_start = max(effective_start, current_end - chunk_size)
+
+            # Fetch this chunk forward, then reverse
+            chunk = list(self._fetch_forward(chunk_start, current_end))
+            yield from reversed(chunk)
+
+            current_end = chunk_start
+
+            # Stop if we hit the start bound
+            if start is not None and current_end <= start:
+                break
 
 
 def recurring(

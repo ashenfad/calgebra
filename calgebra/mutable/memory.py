@@ -75,12 +75,15 @@ class MemoryTimeline(MutableTimeline[Interval]):
             list(self._add_interval(interval, vars(interval)))
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[Interval]:
         """Fetch intervals by unioning recurring patterns and static storage.
 
         Args:
             start: Start timestamp (inclusive), None for unbounded
             end: End timestamp (exclusive), None for unbounded
+            reverse: If True, yield intervals in reverse chronological order
 
         Returns:
             Iterator of intervals in the given range
@@ -89,18 +92,23 @@ class MemoryTimeline(MutableTimeline[Interval]):
 
         # 1. Recurring patterns
         for _, pattern in self._recurring_patterns:
-            iterators.append(pattern.fetch(start, end))
+            iterators.append(pattern.fetch(start, end, reverse=reverse))
 
         # 2. Static intervals (optimized fetch)
         if self._static_intervals:
-            iterators.append(self._fetch_static(start, end))
+            iterators.append(self._fetch_static(start, end, reverse=reverse))
 
         # Merge all streams while maintaining sort order
         # Note: heapq.merge expects sorted inputs, which we guarantee
-        # Use finite_start for comparison to handle None
+        if reverse:
+            return heapq.merge(
+                *iterators, key=lambda x: (-x.finite_start, -x.finite_end)
+            )
         return heapq.merge(*iterators, key=lambda x: x.finite_start)
 
-    def _fetch_static(self, start: int | None, end: int | None) -> Iterable[Interval]:
+    def _fetch_static(
+        self, start: int | None, end: int | None, reverse: bool = False
+    ) -> Iterable[Interval]:
         """Fetch from static intervals with binary search optimization."""
         if not self._static_intervals:
             return
@@ -115,8 +123,9 @@ class MemoryTimeline(MutableTimeline[Interval]):
             end_idx = bisect.bisect_right(
                 self._static_intervals, end, key=lambda interval: interval.finite_start
             )
-        # Iterate through potentially overlapping intervals
-        # We start from 0 because an early interval could be very long and overlap
+
+        # Collect matching intervals
+        matching: list[Interval] = []
         for i in range(end_idx):
             interval = self._static_intervals[i]
 
@@ -124,7 +133,12 @@ class MemoryTimeline(MutableTimeline[Interval]):
             if start is not None and interval.finite_end <= start:
                 continue
 
-            yield interval
+            matching.append(interval)
+
+        if reverse:
+            yield from reversed(matching)
+        else:
+            yield from matching
 
     @override
     def _add_interval(

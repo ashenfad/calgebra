@@ -235,13 +235,17 @@ def test_composition_with_calendar():
             self.events = list(events)
 
         @override
-        def fetch(self, start, end):
-            for event in self.events:
-                if start is not None and event.end < start:
-                    continue
-                if end is not None and event.start > end:
-                    break
-                yield event
+        def fetch(self, start, end, *, reverse: bool = False):
+            matching = [
+                event
+                for event in self.events
+                if not (start is not None and event.end < start)
+                and not (end is not None and event.start > end)
+            ]
+            if reverse:
+                yield from reversed(matching)
+            else:
+                yield from matching
 
     # Monday with a 10am-11am meeting
     monday = int(datetime(2025, 1, 6, 0, 0, 0, tzinfo=timezone.utc).timestamp())

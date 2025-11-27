@@ -22,13 +22,19 @@ class SimpleTimeline(Timeline[Interval]):
         self._events = tuple(sorted(events, key=lambda e: (e.start, e.end)))
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[Interval]:
-        for event in self._events:
-            if start is not None and event.end < start:
-                continue
-            if end is not None and event.start > end:
-                break
-            yield event
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[Interval]:
+        matching = [
+            event
+            for event in self._events
+            if not (start is not None and event.end < start)
+            and not (end is not None and event.start > end)
+        ]
+        if reverse:
+            yield from reversed(matching)
+        else:
+            yield from matching
 
 
 class EventTimeline(Timeline[Event]):
@@ -38,13 +44,19 @@ class EventTimeline(Timeline[Event]):
         self._events = tuple(sorted(events, key=lambda e: (e.start, e.end)))
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[Event]:
-        for event in self._events:
-            if start is not None and event.end < start:
-                continue
-            if end is not None and event.start > end:
-                break
-            yield event
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[Event]:
+        matching = [
+            event
+            for event in self._events
+            if not (start is not None and event.end < start)
+            and not (end is not None and event.start > end)
+        ]
+        if reverse:
+            yield from reversed(matching)
+        else:
+            yield from matching
 
 
 # buffer() tests

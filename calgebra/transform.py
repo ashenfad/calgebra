@@ -25,8 +25,10 @@ class _Buffered(Timeline[Ivl], Generic[Ivl]):
         self.after: int = after
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[Ivl]:
-        for interval in self.source.fetch(start, end):
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[Ivl]:
+        for interval in self.source.fetch(start, end, reverse=reverse):
             # Handle unbounded intervals (None values)
             buffered_start = (
                 interval.start - self.before if interval.start is not None else None
@@ -49,7 +51,16 @@ class _MergedWithin(Timeline[Ivl], Generic[Ivl]):
         self.gap: int = gap
 
     @override
-    def fetch(self, start: int | None, end: int | None) -> Iterable[Ivl]:
+    def fetch(
+        self, start: int | None, end: int | None, *, reverse: bool = False
+    ) -> Iterable[Ivl]:
+        if reverse:
+            # Materialize and reverse - merge logic depends on forward order
+            return reversed(list(self._fetch_forward(start, end)))
+        return self._fetch_forward(start, end)
+
+    def _fetch_forward(self, start: int | None, end: int | None) -> Iterable[Ivl]:
+        """Forward merge iteration."""
         current: Ivl | None = None
 
         for interval in self.source.fetch(start, end):
