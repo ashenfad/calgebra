@@ -264,7 +264,9 @@ def test_flatten_with_unbounded_intervals():
 
 
 def test_flatten_with_unbounded_query():
-    """Test that flatten supports unbounded queries (since it uses double complement)."""
+    """Test that flatten supports unbounded queries (since it uses double
+    complement).
+    """
     # Overlapping regular intervals
     tl = timeline(
         Interval(start=1000, end=2000),

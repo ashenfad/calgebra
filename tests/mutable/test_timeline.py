@@ -223,7 +223,7 @@ def test_complement_yields_mask_intervals() -> None:
     ]
 
     # Verify they're actually mask Interval objects
-    assert all(type(gap) == Interval for gap in complement)
+    assert all(isinstance(gap, Interval) for gap in complement)
 
 
 def test_filter_applies_property_comparisons() -> None:
@@ -447,7 +447,8 @@ def test_intersection_handles_exhausted_iterators() -> None:
     Scenario:
     - Timeline A: Contains intervals [100, 200) and [150, 160) (overlapping within A)
     - Timeline B (solid/query bounds): Contains interval [0, 200)
-    - Intersection A & B should return both [100, 200) and [150, 160) since both overlap with [0, 200)
+    - Intersection A & B should return both [100, 200) and [150, 160) since both
+      overlap with [0, 200)
     """
     from calgebra.core import solid
 
@@ -464,7 +465,8 @@ def test_intersection_handles_exhausted_iterators() -> None:
     query_end = 200
 
     # Intersect the two timelines
-    # Both intervals from timeline_a overlap with solid's [0, 200), so both should be returned
+    # Both intervals from timeline_a overlap with solid's [0, 200), so both should
+    # be returned
     result = list((timeline_a & solid)[query_start:query_end])
 
     # Both intervals should be returned (they both overlap with solid's interval)
@@ -627,7 +629,10 @@ def test_max_duration_can_use_flatten() -> None:
     )
     overlap = DummyTimeline(Interval(start=2, end=6))
 
-    assert max_duration(flatten(timeline | overlap), 0, 10)[0][1] == Interval(start=0, end=9)
+    assert (
+        max_duration(flatten(timeline | overlap), 0, 10)[0][1]
+        == Interval(start=0, end=9)
+    )
 
 
 def test_min_duration_can_use_flatten() -> None:
@@ -637,7 +642,10 @@ def test_min_duration_can_use_flatten() -> None:
     )
     overlap = DummyTimeline(Interval(start=2, end=6))
 
-    assert min_duration(flatten(timeline | overlap), 0, 10)[0][1] == Interval(start=0, end=9)
+    assert (
+        min_duration(flatten(timeline | overlap), 0, 10)[0][1]
+        == Interval(start=0, end=9)
+    )
 
 
 def test_count_intervals_counts_slice_results() -> None:
