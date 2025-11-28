@@ -160,6 +160,58 @@ primary.add(vacation)
 primary.add(holiday)
 ```
 
+## Writing Multiple Events
+
+When creating multiple events, pass them as a collection to `.add()` rather than calling `.add()` in a loop. This uses Google's batch API to create all events in a single HTTP request:
+
+```python
+from calgebra.gcsa import calendars, Event
+from calgebra import at_tz
+
+cals = calendars()
+primary = cals[0]
+at = at_tz("US/Pacific")
+
+# Create multiple events
+events = [
+    Event.from_datetimes(
+        start=at(2025, 1, 15, 9, 0),
+        end=at(2025, 1, 15, 10, 0),
+        summary="Morning standup",
+    ),
+    Event.from_datetimes(
+        start=at(2025, 1, 15, 14, 0),
+        end=at(2025, 1, 15, 15, 0),
+        summary="Design review",
+    ),
+    Event.from_datetimes(
+        start=at(2025, 1, 15, 16, 0),
+        end=at(2025, 1, 15, 17, 0),
+        summary="Sprint planning",
+    ),
+]
+
+# ✅ Good: Single call, single HTTP request
+results = primary.add(events)
+
+# ❌ Avoid: Multiple calls, multiple HTTP requests
+# for event in events:
+#     primary.add(event)  # Slow! Each call is a separate network round-trip
+```
+
+**Performance:** Batch operations are significantly faster—typically 5-10x for 10+ events. This is especially important when running in environments with timeout constraints (e.g., agent frameworks, serverless functions).
+
+Each event in the batch gets its own `WriteResult`:
+
+```python
+results = primary.add(events)
+for i, result in enumerate(results):
+    if result.success:
+        print(f"Event {i} created: {result.event.id}")
+    else:
+        print(f"Event {i} failed: {result.error}")
+```
+
 ## Writing Recurring Events
 
 Create recurring events using `calgebra`'s `recurring()` patterns:
