@@ -466,6 +466,157 @@ def _validate_event(
     return interval, None
 
 
+@dataclass
+class _PreparedEvent:
+    """Event prepared for writing to Google Calendar."""
+
+    event: Event  # Event with calendar metadata set
+    start: int  # Start timestamp
+    end: int  # End timestamp
+    is_all_day: bool
+    start_dt: datetime | date
+    end_dt: datetime | date
+
+
+def _prepare_event_for_add(
+    interval: Interval,
+    calendar_id: str,
+    calendar_summary: str,
+    calendar_tz: ZoneInfo | None,
+) -> _PreparedEvent | WriteResult:
+    """Validate and prepare an event for adding to Google Calendar.
+
+    Args:
+        interval: Interval to validate and prepare
+        calendar_id: Target calendar ID
+        calendar_summary: Target calendar summary
+        calendar_tz: Calendar timezone for all-day inference
+
+    Returns:
+        PreparedEvent if valid, or WriteResult with error if invalid
+    """
+    # Validate event type
+    validated, error_result = _validate_event(interval, require_id=False)
+    if error_result:
+        return error_result[0]
+
+    event = validated
+    assert event is not None
+
+    # Validate bounds
+    if event.start is None or event.end is None:
+        return WriteResult(
+            success=False,
+            event=event,
+            error=ValueError("Event must have finite start and end"),
+        )
+
+    start = event.start
+    end = event.end
+
+    # Set calendar metadata and strip ID
+    event = replace(
+        event,
+        id="",
+        calendar_id=calendar_id,
+        calendar_summary=calendar_summary,
+    )
+
+    # Infer all-day if not specified
+    is_all_day = event.is_all_day
+    if is_all_day is None:
+        is_all_day = _infer_is_all_day(start, end, calendar_tz)
+
+    # Convert timestamps to datetime/date
+    start_dt, end_dt = _convert_timestamps_to_datetime(start, end, is_all_day)
+
+    return _PreparedEvent(
+        event=event,
+        start=start,
+        end=end,
+        is_all_day=is_all_day,
+        start_dt=start_dt,
+        end_dt=end_dt,
+    )
+
+
+def _build_gcsa_event(prepared: _PreparedEvent) -> GcsaEvent:
+    """Build a gcsa Event object from prepared event data."""
+    gcsa_reminders = _convert_reminders_to_gcsa(prepared.event.reminders)
+    return GcsaEvent(
+        summary=prepared.event.summary,
+        start=prepared.start_dt,
+        end=prepared.end_dt,
+        timezone=_UTC_TIMEZONE if not prepared.is_all_day else None,
+        description=prepared.event.description,
+        reminders=gcsa_reminders,
+    )
+
+
+def _build_event_body(prepared: _PreparedEvent) -> dict[str, Any]:
+    """Build raw API event body dict from prepared event data.
+
+    Used for batch API which requires raw dicts instead of gcsa objects.
+    """
+    body: dict[str, Any] = {
+        "summary": prepared.event.summary,
+        "start": {},
+        "end": {},
+    }
+
+    if prepared.is_all_day:
+        body["start"]["date"] = (
+            prepared.start_dt.isoformat()
+            if hasattr(prepared.start_dt, "isoformat")
+            else str(prepared.start_dt)
+        )
+        body["end"]["date"] = (
+            prepared.end_dt.isoformat()
+            if hasattr(prepared.end_dt, "isoformat")
+            else str(prepared.end_dt)
+        )
+    else:
+        assert isinstance(prepared.start_dt, datetime)
+        assert isinstance(prepared.end_dt, datetime)
+        body["start"]["dateTime"] = prepared.start_dt.isoformat()
+        body["start"]["timeZone"] = _UTC_TIMEZONE
+        body["end"]["dateTime"] = prepared.end_dt.isoformat()
+        body["end"]["timeZone"] = _UTC_TIMEZONE
+
+    if prepared.event.description:
+        body["description"] = prepared.event.description
+
+    if prepared.event.reminders is not None:
+        body["reminders"] = {
+            "useDefault": False,
+            "overrides": [
+                {"method": r.method, "minutes": r.minutes}
+                for r in prepared.event.reminders
+            ],
+        }
+
+    return body
+
+
+def _build_result_event(
+    prepared: _PreparedEvent,
+    event_id: str,
+) -> Event:
+    """Build result Event from prepared data and created event ID."""
+    return Event(
+        id=event_id,
+        calendar_id=prepared.event.calendar_id,
+        calendar_summary=prepared.event.calendar_summary,
+        summary=prepared.event.summary,
+        description=prepared.event.description,
+        recurring_event_id=None,
+        is_all_day=prepared.is_all_day,
+        reminders=prepared.event.reminders,
+        start=prepared.start,
+        end=prepared.end,
+    )
+
+
 class Calendar(MutableTimeline[Event]):
     """Timeline backed by the Google Calendar API using local credentials.
 
@@ -633,56 +784,20 @@ class Calendar(MutableTimeline[Event]):
         Returns:
             List containing a single WriteResult with the created event
         """
-        # Validate event (ID not required for add operations)
-        event, error_result = _validate_event(interval, require_id=False)
-        if error_result:
-            return error_result
-
-        assert event is not None  # For type checker
-
-        if event.start is None or event.end is None:
-            return _error_result(ValueError("Event must have finite start and end"))
-
-        # Always use this calendar's metadata and strip any existing ID
-        # (ignore any calendar_id/calendar_summary/id in event)
-        # This allows moving/copying events between calendars - always creates new event
-        event = replace(
-            event,
-            id="",  # Strip ID so Google Calendar creates a new event
-            calendar_id=self.calendar_id,
-            calendar_summary=self.calendar_summary,
+        # Prepare event for writing
+        result = _prepare_event_for_add(
+            interval,
+            self.calendar_id,
+            self.calendar_summary,
+            self._calendar_timezone,
         )
+        if isinstance(result, WriteResult):
+            return [result]
 
-        # Re-assert for type checker (replace() doesn't preserve type narrowing)
-        assert event.start is not None and event.end is not None
+        prepared = result
 
-        # Determine if event is all-day
-        is_all_day = event.is_all_day
-        if is_all_day is None:
-            # Auto-infer from start/end alignment to midnight
-            is_all_day = _infer_is_all_day(
-                event.start, event.end, self._calendar_timezone
-            )
-
-        # Convert timestamps to datetime/date objects
-        start_dt, end_dt = _convert_timestamps_to_datetime(
-            event.start, event.end, is_all_day
-        )
-
-        # Convert reminders
-        gcsa_reminders = _convert_reminders_to_gcsa(event.reminders)
-
-        # Create gcsa Event object
-        gcsa_event = GcsaEvent(
-            summary=event.summary,
-            start=start_dt,
-            end=end_dt,
-            timezone=_UTC_TIMEZONE if not is_all_day else None,
-            description=event.description,
-            reminders=gcsa_reminders,
-        )
-
-        # Add event to Google Calendar
+        # Create gcsa Event and add to calendar
+        gcsa_event = _build_gcsa_event(prepared)
         created_event = self.calendar.add_event(
             gcsa_event, calendar_id=self.calendar_id
         )
@@ -693,20 +808,8 @@ class Calendar(MutableTimeline[Event]):
                 ValueError("Google Calendar did not return an event ID")
             )
 
-        # Convert created event back to our Event format
-        result_event = Event(
-            id=created_event.id,
-            calendar_id=self.calendar_id,
-            calendar_summary=self.calendar_summary,
-            summary=event.summary,
-            description=event.description,
-            recurring_event_id=None,  # Single events don't have recurring_event_id
-            is_all_day=is_all_day,
-            reminders=event.reminders,
-            start=event.start,
-            end=event.end,
-        )
-
+        # Build result event
+        result_event = _build_result_event(prepared, created_event.id)
         return [WriteResult(success=True, event=result_event, error=None)]
 
     @override
@@ -771,9 +874,18 @@ class Calendar(MutableTimeline[Event]):
         series_end_ts = series_start_ts + pattern.duration_seconds
 
         # Convert start timestamp to datetime/date
-        series_start_dt, series_end_dt = _convert_timestamps_to_datetime(
-            series_start_ts, series_end_ts, is_all_day
-        )
+        # For recurring events, use the pattern's timezone so BYDAY is interpreted correctly
+        if is_all_day:
+            series_start_dt: datetime | date = _timestamp_to_datetime(
+                series_start_ts
+            ).date()
+            series_end_dt: datetime | date = _timestamp_to_datetime(
+                series_end_ts
+            ).date()
+        else:
+            # Convert to pattern's timezone, not UTC
+            series_start_dt = datetime.fromtimestamp(series_start_ts, tz=pattern.zone)
+            series_end_dt = datetime.fromtimestamp(series_end_ts, tz=pattern.zone)
 
         # Extract Event fields from metadata
         summary = merged_metadata.get("summary", "Recurring Event")
@@ -794,11 +906,14 @@ class Calendar(MutableTimeline[Event]):
             validated_reminders = None
 
         # Create gcsa Event with recurrence
+        # Use pattern's timezone for recurring events so BYDAY is interpreted correctly
+        # (e.g., "Tuesday 6pm Pacific" should stay Tuesday, not become Wednesday in UTC)
+        event_timezone = str(pattern.zone) if not is_all_day else None
         gcsa_event = GcsaEvent(
             summary=summary,
             start=series_start_dt,
             end=series_end_dt,
-            timezone=_UTC_TIMEZONE if not is_all_day else None,
+            timezone=event_timezone,
             description=description,
             reminders=gcsa_reminders,
             recurrence=rrule_str,  # gcsa accepts RRULE string
@@ -914,6 +1029,94 @@ class Calendar(MutableTimeline[Event]):
                 return _error_result(ValueError(f"Failed to update master event: {e}"))
 
         return [WriteResult(success=True, event=instance, error=None)]
+
+    @override
+    def _add_many(
+        self, intervals: Iterable[Interval], metadata: dict[str, Any]
+    ) -> list[WriteResult]:
+        """Add multiple events to Google Calendar using batch API.
+
+        Uses Google's batch HTTP request API to create multiple events in a
+        single network round-trip, significantly improving performance for
+        bulk operations.
+
+        Args:
+            intervals: Iterable of Event intervals to write
+            metadata: Metadata to apply to all events
+
+        Returns:
+            List of WriteResult objects (one per event)
+        """
+        # Convert to list so we can iterate twice
+        events_list = list(intervals)
+        if not events_list:
+            return []
+
+        # Prepare results storage (indexed by request_id)
+        results: dict[str, WriteResult] = {}
+        prepared_data: dict[str, _PreparedEvent] = {}  # request_id -> prepared event
+
+        def callback(
+            request_id: str,
+            response: Any,
+            exception: Exception | None,
+        ) -> None:
+            """Handle batch response for each event."""
+            prepared = prepared_data[request_id]
+            if exception is not None:
+                results[request_id] = WriteResult(
+                    success=False, event=prepared.event, error=exception
+                )
+            else:
+                result_event = _build_result_event(prepared, response.get("id", ""))
+                results[request_id] = WriteResult(
+                    success=True, event=result_event, error=None
+                )
+
+        # Build batch request
+        batch = self.calendar.service.new_batch_http_request(callback=callback)
+
+        for idx, interval in enumerate(events_list):
+            request_id = str(idx)
+
+            # Prepare event for writing
+            result = _prepare_event_for_add(
+                interval,
+                self.calendar_id,
+                self.calendar_summary,
+                self._calendar_timezone,
+            )
+            if isinstance(result, WriteResult):
+                results[request_id] = result
+                continue
+
+            prepared = result
+            prepared_data[request_id] = prepared
+
+            # Build event body and add to batch
+            body = _build_event_body(prepared)
+            request = self.calendar.service.events().insert(
+                calendarId=self.calendar_id, body=body
+            )
+            batch.add(request, request_id=request_id)
+
+        # Execute batch (single HTTP request)
+        try:
+            batch.execute()
+        except Exception as e:
+            # If batch execution fails entirely, return error for all
+            return [
+                WriteResult(success=False, event=None, error=e) for _ in events_list
+            ]
+
+        # Return results in original order
+        return [
+            results.get(
+                str(i),
+                WriteResult(success=False, event=None, error=ValueError("Missing")),
+            )
+            for i in range(len(events_list))
+        ]
 
     @override
     @_handle_write_errors

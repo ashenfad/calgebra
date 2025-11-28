@@ -726,3 +726,37 @@ def test_rrule_string_error_unsupported_freq():
 
     with pytest.raises(ValueError, match="Unsupported frequency"):
         rrule_kwargs_to_rrule_string({"freq": 999})
+
+
+def test_recurring_validates_start_matches_day():
+    """Test that start datetime must fall on one of the specified days."""
+    # Sept 1, 2025 is a Monday
+    monday_sept_1 = datetime(2025, 9, 1, 18, 0, tzinfo=timezone.utc)
+
+    # Should fail: start is Monday but day specifies Tuesday/Thursday
+    with pytest.raises(ValueError, match="is a monday.*but day="):
+        recurring(
+            freq="weekly",
+            day=["tuesday", "thursday"],
+            start=monday_sept_1,
+            duration=HOUR,
+        )
+
+    # Should succeed: start is Monday and day includes Monday
+    pattern = recurring(
+        freq="weekly",
+        day=["monday", "wednesday"],
+        start=monday_sept_1,
+        duration=HOUR,
+    )
+    assert pattern is not None
+
+    # Should succeed: using time-of-day only (no anchor date)
+    pattern = recurring(
+        freq="weekly",
+        day=["tuesday", "thursday"],
+        start=18 * HOUR,  # 6 PM, time-of-day only
+        duration=HOUR,
+        tz="UTC",
+    )
+    assert pattern is not None

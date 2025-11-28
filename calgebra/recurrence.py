@@ -269,6 +269,7 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
             self.zone = ZoneInfo("UTC")
 
         # Interpret start: can be datetime, timestamp (int > DAY), or time-of-day
+        anchor_dt: datetime | None = None
         if isinstance(start, datetime):
             # datetime object: use directly as anchor
             anchor_dt = start if start.tzinfo else start.replace(tzinfo=self.zone)
@@ -287,6 +288,32 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
             # Small int: seconds from midnight (mask-style, no anchor)
             self.anchor_timestamp = None
             self.start_seconds = start
+
+        # Validate: if day is specified and start is a full datetime/timestamp,
+        # the start date should fall on one of the specified days
+        if day is not None and anchor_dt is not None:
+            days_list = [day] if isinstance(day, str) else day
+            # Get the weekday of anchor_dt (0=Monday, 6=Sunday)
+            anchor_weekday = anchor_dt.weekday()
+            # Map day names to weekday integers
+            day_name_to_int = {
+                "monday": 0,
+                "tuesday": 1,
+                "wednesday": 2,
+                "thursday": 3,
+                "friday": 4,
+                "saturday": 5,
+                "sunday": 6,
+            }
+            valid_weekdays = {day_name_to_int[d.lower()] for d in days_list}
+            if anchor_weekday not in valid_weekdays:
+                anchor_day_name = list(day_name_to_int.keys())[anchor_weekday]
+                raise ValueError(
+                    f"start date ({anchor_dt.date()}) is a {anchor_day_name}, "
+                    f"but day={day!r} specifies different day(s).\n"
+                    f"Hint: Use a start date that falls on one of the specified days, "
+                    f"or use time-of-day only (e.g., start=18*HOUR)."
+                )
 
         # Store original recurrence parameters for easy reconstruction
         self.day = day
