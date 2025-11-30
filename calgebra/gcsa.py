@@ -649,19 +649,26 @@ class Calendar(MutableTimeline[Event]):
         self.calendar: GoogleCalendar = (
             client if client is not None else GoogleCalendar()
         )
-        # Fetch calendar timezone for interpreting all-day event dates.
-        # Google Calendar uses the calendar's timezone (not UTC) for all-day events.
-        # We cache this to avoid repeated API calls.
-        self._calendar_timezone: ZoneInfo | None = None
+        # Calendar timezone for interpreting all-day event dates.
+        # Fetched lazily on first access to avoid API calls during __init__.
+        self.__calendar_timezone: ZoneInfo | None = None
+        self.__calendar_timezone_fetched: bool = False
+
+    @property
+    def _calendar_timezone(self) -> ZoneInfo | None:
+        """Get calendar timezone, fetching from API on first access."""
+        if not self.__calendar_timezone_fetched:
+            self.__calendar_timezone_fetched = True
         try:
             cal_info = self.calendar.get_calendar(calendar_id=self.calendar_id)
             tz_str = getattr(cal_info, "timezone", None)
             if tz_str:
-                self._calendar_timezone = ZoneInfo(tz_str)
+                self.__calendar_timezone = ZoneInfo(tz_str)
         except Exception:
             # Gracefully handle: API errors, stub/mock calendars without get_calendar,
             # invalid timezone strings, etc. Fall back to UTC (None) for all-day events.
             pass
+        return self.__calendar_timezone
 
     @override
     def __str__(self) -> str:
@@ -874,14 +881,10 @@ class Calendar(MutableTimeline[Event]):
         series_end_ts = series_start_ts + pattern.duration_seconds
 
         # Convert start timestamp to datetime/date
-        # For recurring events, use the pattern's timezone so BYDAY is interpreted correctly
+        # For recurring events, use the pattern's tz so BYDAY is interpreted correctly
         if is_all_day:
-            series_start_dt: datetime | date = _timestamp_to_datetime(
-                series_start_ts
-            ).date()
-            series_end_dt: datetime | date = _timestamp_to_datetime(
-                series_end_ts
-            ).date()
+            series_start_dt = _timestamp_to_datetime(series_start_ts).date()
+            series_end_dt = _timestamp_to_datetime(series_end_ts).date()
         else:
             # Convert to pattern's timezone, not UTC
             series_start_dt = datetime.fromtimestamp(series_start_ts, tz=pattern.zone)
@@ -1047,14 +1050,13 @@ class Calendar(MutableTimeline[Event]):
         Returns:
             List of WriteResult objects (one per event)
         """
-        # Convert to list so we can iterate twice
         events_list = list(intervals)
         if not events_list:
             return []
 
         # Prepare results storage (indexed by request_id)
         results: dict[str, WriteResult] = {}
-        prepared_data: dict[str, _PreparedEvent] = {}  # request_id -> prepared event
+        prepared_data: dict[str, _PreparedEvent] = {}
 
         def callback(
             request_id: str,

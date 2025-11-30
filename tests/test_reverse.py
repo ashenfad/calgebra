@@ -11,10 +11,9 @@ from calgebra import (
     flatten,
     recurring,
     time_of_day,
-    union,
 )
-from calgebra.core import Complement, Difference, Intersection, Timeline, Union
-from calgebra.mutable.memory import MemoryTimeline, timeline
+from calgebra.core import Timeline
+from calgebra.mutable.memory import timeline
 from calgebra.transform import buffer, merge_within
 from calgebra.util import DAY, HOUR
 
