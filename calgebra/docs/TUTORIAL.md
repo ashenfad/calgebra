@@ -114,6 +114,7 @@ timeline[at("2025-01-01"):at("2025-12-31")]
 The `at_tz()` helper accepts multiple input formats:
 
 ```python
+from datetime import date, datetime
 from calgebra import at_tz
 
 at = at_tz("US/Pacific")
@@ -125,6 +126,12 @@ at("2024-01-01")  # datetime(2024, 1, 1, 0, 0, tzinfo=ZoneInfo('US/Pacific'))
 at("2024-01-01T15:30:00")  # 3:30 PM Pacific
 at("2024-01-01T15:30:45")  # With seconds
 
+# Date objects → midnight in timezone
+at(date(2024, 1, 1))  # datetime(2024, 1, 1, 0, 0, tzinfo=ZoneInfo('US/Pacific'))
+
+# Naive datetime objects → attach timezone
+at(datetime(2024, 1, 1, 15, 30))  # 3:30 PM Pacific
+
 # Components → build datetime
 at(2024, 1, 1)              # Midnight
 at(2024, 1, 1, 15, 30)      # 3:30 PM
@@ -134,6 +141,8 @@ at(2024, 1, 1, 15, 30, 45)  # With seconds
 eastern = at_tz("US/Eastern")
 timeline[at("2024-01-01"):eastern("2024-12-31")]
 ```
+
+**Note:** Timezone-aware datetimes are rejected—`at_tz()` is for *creating* timezone-aware datetimes, not converting between timezones. Use `.astimezone()` for conversion.
 
 This pattern is especially useful for interactive queries and scripts where you're working in a consistent timezone.
 

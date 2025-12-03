@@ -1,6 +1,6 @@
 """Tests for at_tz helper function."""
 
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -195,3 +195,105 @@ def test_at_tz_preserves_dst_behavior():
     # After DST (PDT = UTC-7)
     summer = at(2024, 7, 1, 12, 0, 0)
     assert summer.utcoffset().total_seconds() == -7 * 3600
+
+
+def test_at_tz_with_date_object():
+    """Test creating datetime from date object (midnight in specified timezone)."""
+    at = at_tz("US/Pacific")
+    result = at(date(2024, 1, 1))
+
+    expected = datetime(2024, 1, 1, 0, 0, 0, tzinfo=ZoneInfo("US/Pacific"))
+    assert result == expected
+    assert result.tzinfo == ZoneInfo("US/Pacific")
+
+
+def test_at_tz_with_date_object_different_timezones():
+    """Test date objects produce correct midnight in different timezones."""
+    pacific = at_tz("US/Pacific")
+    eastern = at_tz("US/Eastern")
+
+    d = date(2024, 1, 1)
+    pacific_dt = pacific(d)
+    eastern_dt = eastern(d)
+
+    # Both should be midnight in their respective timezones
+    assert pacific_dt.hour == 0
+    assert eastern_dt.hour == 0
+
+    # But different actual timestamps (3 hours apart)
+    assert pacific_dt.timestamp() != eastern_dt.timestamp()
+    # Pacific midnight is 3 hours after Eastern midnight
+    assert pacific_dt.timestamp() - eastern_dt.timestamp() == 3 * 3600
+
+
+def test_at_tz_with_naive_datetime():
+    """Test creating datetime from naive datetime object."""
+    at = at_tz("US/Pacific")
+    result = at(datetime(2024, 1, 1, 15, 30, 45))
+
+    expected = datetime(2024, 1, 1, 15, 30, 45, tzinfo=ZoneInfo("US/Pacific"))
+    assert result == expected
+    assert result.tzinfo == ZoneInfo("US/Pacific")
+
+
+def test_at_tz_with_naive_datetime_preserves_time():
+    """Test that naive datetime time components are preserved."""
+    at = at_tz("US/Pacific")
+    naive = datetime(2024, 6, 15, 10, 30, 45, 123456)
+    result = at(naive)
+
+    assert result.year == 2024
+    assert result.month == 6
+    assert result.day == 15
+    assert result.hour == 10
+    assert result.minute == 30
+    assert result.second == 45
+    assert result.microsecond == 123456
+    assert result.tzinfo == ZoneInfo("US/Pacific")
+
+
+def test_at_tz_with_naive_datetime_different_timezones():
+    """Test naive datetime gets correct timezone attached."""
+    pacific = at_tz("US/Pacific")
+    eastern = at_tz("US/Eastern")
+
+    naive = datetime(2024, 1, 1, 12, 0, 0)
+    pacific_dt = pacific(naive)
+    eastern_dt = eastern(naive)
+
+    # Same wall-clock time
+    assert pacific_dt.hour == eastern_dt.hour == 12
+
+    # Different actual timestamps
+    assert pacific_dt.timestamp() != eastern_dt.timestamp()
+
+
+def test_at_tz_rejects_aware_datetime():
+    """Test that datetime with timezone raises an error."""
+    at = at_tz("US/Pacific")
+
+    aware_dt = datetime(2024, 1, 1, 12, 0, 0, tzinfo=ZoneInfo("UTC"))
+    with pytest.raises(ValueError, match="already has timezone"):
+        at(aware_dt)
+
+
+def test_at_tz_rejects_aware_datetime_same_timezone():
+    """Test that datetime with same timezone still raises an error."""
+    at = at_tz("US/Pacific")
+
+    # Even if it's the same timezone, we reject it for consistency
+    aware_dt = datetime(2024, 1, 1, 12, 0, 0, tzinfo=ZoneInfo("US/Pacific"))
+    with pytest.raises(ValueError, match="already has timezone"):
+        at(aware_dt)
+
+
+def test_at_tz_rejects_aware_datetime_helpful_message():
+    """Test that error message for aware datetime is helpful."""
+    at = at_tz("US/Pacific")
+
+    aware_dt = datetime(2024, 1, 1, 12, 0, 0, tzinfo=ZoneInfo("US/Eastern"))
+    with pytest.raises(ValueError, match="Pass a naive datetime"):
+        at(aware_dt)
+
+    with pytest.raises(ValueError, match="astimezone"):
+        at(aware_dt)

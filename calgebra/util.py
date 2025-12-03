@@ -4,7 +4,7 @@ Time unit constants represent durations in seconds.
 These are used throughout the API for consistent time representation.
 """
 
-from datetime import datetime, time
+from datetime import date, datetime, time
 from typing import Callable, overload
 from zoneinfo import ZoneInfo
 
@@ -30,11 +30,12 @@ def at_tz(tz: str) -> Callable[..., datetime]:
         tz: IANA timezone name (e.g., "US/Pacific", "Europe/London", "UTC")
 
     Returns:
-        A function that accepts date/datetime strings or datetime components
-        and returns timezone-aware datetime objects.
+        A function that accepts date/datetime strings, date/datetime objects,
+        or datetime components and returns timezone-aware datetime objects.
 
     Examples:
         >>> from calgebra import at_tz
+        >>> from datetime import date, datetime
         >>>
         >>> # Create a factory for Pacific time
         >>> at = at_tz("US/Pacific")
@@ -45,6 +46,14 @@ def at_tz(tz: str) -> Callable[..., datetime]:
         >>>
         >>> # Parse datetime strings
         >>> at("2024-01-01T15:30:00")
+        datetime(2024, 1, 1, 15, 30, tzinfo=ZoneInfo('US/Pacific'))
+        >>>
+        >>> # From date object (midnight in specified timezone)
+        >>> at(date(2024, 1, 1))
+        datetime(2024, 1, 1, 0, 0, tzinfo=ZoneInfo('US/Pacific'))
+        >>>
+        >>> # From naive datetime object (attach timezone)
+        >>> at(datetime(2024, 1, 1, 15, 30))
         datetime(2024, 1, 1, 15, 30, tzinfo=ZoneInfo('US/Pacific'))
         >>>
         >>> # Create from components
@@ -67,6 +76,12 @@ def at_tz(tz: str) -> Callable[..., datetime]:
     def at(date_or_datetime: str) -> datetime: ...
 
     @overload
+    def at(d: date) -> datetime: ...
+
+    @overload
+    def at(dt: datetime) -> datetime: ...
+
+    @overload
     def at(
         year: int,
         month: int,
@@ -81,14 +96,16 @@ def at_tz(tz: str) -> Callable[..., datetime]:
 
         Accepts either:
         - A date/datetime string in ISO 8601: "2024-01-01" or "2024-01-01T15:30:00"
+        - A date object: date(2024, 1, 1) -> midnight in timezone
+        - A naive datetime object: datetime(2024, 1, 1, 15, 30) -> attach timezone
         - Datetime components: (year, month, day, hour=0, minute=0, second=0)
 
         Returns:
             A timezone-aware datetime object in the factory's timezone.
 
         Raises:
-            ValueError: If string is invalid or already has a conflicting timezone
-            TypeError: If arguments don't match either accepted pattern
+            ValueError: If string/datetime already has a conflicting timezone
+            TypeError: If arguments don't match any accepted pattern
         """
         # String input
         if len(args) == 1 and isinstance(args[0], str):
@@ -119,6 +136,23 @@ def at_tz(tz: str) -> Callable[..., datetime]:
             # Naive datetime string -> apply timezone
             return parsed.replace(tzinfo=zone)
 
+        # Datetime object input (must check before date since datetime is subclass)
+        if len(args) == 1 and isinstance(args[0], datetime):
+            dt = args[0]
+            if dt.tzinfo is not None:
+                raise ValueError(
+                    f"datetime already has timezone: {dt.tzinfo}\n"
+                    f"at_tz() creates timezone-aware datetimes, not conversion.\n"
+                    f"Either:\n"
+                    f"  - Pass a naive datetime (no tzinfo)\n"
+                    f"  - Use dt.astimezone() for conversion"
+                )
+            return dt.replace(tzinfo=zone)
+
+        # Date object input -> midnight in specified timezone
+        if len(args) == 1 and isinstance(args[0], date):
+            return datetime.combine(args[0], time.min, tzinfo=zone)
+
         # Args input (year, month, day, ...)
         if args and isinstance(args[0], int):
             # Add timezone to kwargs
@@ -132,6 +166,8 @@ def at_tz(tz: str) -> Callable[..., datetime]:
         raise TypeError(
             f"at() accepts either:\n"
             f"  - Date/datetime string: at('2024-01-01'), at('2024-01-01T15:30:00')\n"
+            f"  - Date object: at(date(2024, 1, 1))\n"
+            f"  - Naive datetime: at(datetime(2024, 1, 1, 15, 30))\n"
             f"  - Datetime components: at(2024, 1, 1), at(2024, 1, 1, 15, 30)\n"
             f"Got: {args}"
         )
