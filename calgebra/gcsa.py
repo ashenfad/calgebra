@@ -659,15 +659,15 @@ class Calendar(MutableTimeline[Event]):
         """Get calendar timezone, fetching from API on first access."""
         if not self.__calendar_timezone_fetched:
             self.__calendar_timezone_fetched = True
-        try:
-            cal_info = self.calendar.get_calendar(calendar_id=self.calendar_id)
-            tz_str = getattr(cal_info, "timezone", None)
-            if tz_str:
-                self.__calendar_timezone = ZoneInfo(tz_str)
-        except Exception:
-            # Gracefully handle: API errors, stub/mock calendars without get_calendar,
-            # invalid timezone strings, etc. Fall back to UTC (None) for all-day events.
-            pass
+            try:
+                cal_info = self.calendar.get_calendar(calendar_id=self.calendar_id)
+                tz_str = getattr(cal_info, "timezone", None)
+                if tz_str:
+                    self.__calendar_timezone = ZoneInfo(tz_str)
+            except Exception:
+                # Gracefully handle: API errors, stub/mock calendars without get_calendar,
+                # invalid timezone strings, etc. Fall back to UTC (None) for all-day events.
+                pass
         return self.__calendar_timezone
 
     @override
