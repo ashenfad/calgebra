@@ -369,62 +369,51 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
     def _get_safe_anchor(self, start_dt: datetime) -> datetime:
         """Calculate a phase-aligned start date for rrule near the target date.
 
-        Ensures that the rrule sequence maintains its phase (e.g., "every 2 weeks")
-        regardless of where we start generating.
-        Derives the anchor from the Epoch to ensure stable defaults for unspecified
-        fields (e.g., day of month, time of day).
+        If the pattern was created with an anchored datetime/timestamp, align the
+        recurrence phase to that anchor. Otherwise fall back to the epoch-based
+        alignment used previously.
         """
-        # If interval is 1, we still need to align to Epoch to ensure stable defaults
-        # (e.g. day of month) if they are not specified in rrule_kwargs.
-        # However, if interval=1, any "aligned" date is valid phase-wise.
-        # But to be safe against "random day of month" issues, we should always
-        # align to the grid if possible.
+        # Prefer the original anchor for phase alignment; otherwise use legacy defaults:
+        # - weekly aligns to the Monday before epoch
+        # - others align to epoch (1970-01-01)
+        if getattr(self, "anchor_timestamp", None) is not None:
+            base_anchor = datetime.fromtimestamp(self.anchor_timestamp, tz=self.zone)
+        elif self.freq == "weekly":
+            base_anchor = datetime(1969, 12, 29, tzinfo=self.zone)  # Monday before epoch
+        else:
+            base_anchor = self._epoch
 
-        # Calculate offset from epoch in frequency units
         if self.freq == "daily":
-            # Days since epoch
-            delta_days = (start_dt.date() - self._epoch.date()).days
+            delta_days = (start_dt.date() - base_anchor.date()).days
             offset = delta_days % self.interval
-            # Anchor = Start - Offset (days)
-            # But we want to preserve Epoch's time/etc.
-            # So Anchor = Epoch + (TotalDays - Offset)
             aligned_days = delta_days - offset
-            return self._epoch + timedelta(days=aligned_days)
+            return base_anchor + timedelta(days=aligned_days)
 
         elif self.freq == "weekly":
-            # Weeks since epoch (1970-01-01 was a Thursday)
-            # We align to the Monday before epoch (1969-12-29) to match
-            # rrule's ISO week boundaries
-            epoch_monday = datetime(1969, 12, 29, tzinfo=self.zone)
-            delta_days = (start_dt.date() - epoch_monday.date()).days
+            # Align in whole weeks relative to the anchor
+            delta_days = (start_dt.date() - base_anchor.date()).days
             weeks = delta_days // 7
             offset = weeks % self.interval
             aligned_weeks = weeks - offset
-            return epoch_monday + timedelta(weeks=aligned_weeks)
+            return base_anchor + timedelta(weeks=aligned_weeks)
 
         elif self.freq == "monthly":
-            # Months since epoch
-            delta_years = start_dt.year - self._epoch.year
-            delta_months = start_dt.month - self._epoch.month
+            # Months since anchor
+            delta_years = start_dt.year - base_anchor.year
+            delta_months = start_dt.month - base_anchor.month
             total_months = delta_years * 12 + delta_months
             offset = total_months % self.interval
 
-            # Logic: (Year * 12 + Month - 1) - offset
             target_total = total_months - offset
-            # Reconstruct Year/Month (0-indexed month for math, then +1)
-            # We add epoch year/month back in implicitly because total_months was delta
-            abs_total = (self._epoch.year * 12 + self._epoch.month - 1) + target_total
+            abs_total = (base_anchor.year * 12 + base_anchor.month - 1) + target_total
             year = abs_total // 12
             month = (abs_total % 12) + 1
-            # Use self._epoch to preserve day=1, time=00:00
-            return self._epoch.replace(year=year, month=month)
+            return base_anchor.replace(year=year, month=month)
 
         elif self.freq == "yearly":
-            # Years since epoch
-            delta_years = start_dt.year - self._epoch.year
+            delta_years = start_dt.year - base_anchor.year
             offset = delta_years % self.interval
-            # Use self._epoch to preserve month=1, day=1
-            return self._epoch.replace(year=start_dt.year - offset)
+            return base_anchor.replace(year=start_dt.year - offset)
 
         return start_dt
 

@@ -205,7 +205,8 @@ class MemoryTimeline(MutableTimeline[Interval]):
             freq=cast(Literal["daily", "weekly", "monthly", "yearly"], pattern.freq),
             interval=pattern.interval,
             duration=pattern.duration_seconds,
-            start=pattern.start_seconds,
+            # Preserve anchored start if provided; otherwise retain time-of-day start
+            start=pattern.anchor_timestamp or pattern.start_seconds,
             tz=str(pattern.zone),
             interval_class=pattern.interval_class,
             exdates=pattern.exdates,
