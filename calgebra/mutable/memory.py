@@ -206,7 +206,11 @@ class MemoryTimeline(MutableTimeline[Interval]):
             interval=pattern.interval,
             duration=pattern.duration_seconds,
             # Preserve anchored start if provided; otherwise retain time-of-day start
-            start=pattern.anchor_timestamp or pattern.start_seconds,
+            start=(
+                pattern.anchor_timestamp
+                if pattern.anchor_timestamp is not None
+                else pattern.start_seconds
+            ),
             tz=str(pattern.zone),
             interval_class=pattern.interval_class,
             exdates=pattern.exdates,
