@@ -379,7 +379,8 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
         if getattr(self, "anchor_timestamp", None) is not None:
             base_anchor = datetime.fromtimestamp(self.anchor_timestamp, tz=self.zone)
         elif self.freq == "weekly":
-            base_anchor = datetime(1969, 12, 29, tzinfo=self.zone)  # Monday before epoch
+            # Align to the Monday before the epoch for weekly phase
+            base_anchor = datetime(1969, 12, 29, tzinfo=self.zone)
         else:
             base_anchor = self._epoch
 
