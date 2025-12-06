@@ -41,6 +41,10 @@ events = timeline(
     - `timeline[start:end:-1]` — events in `[start, end)`, newest first
     - `timeline[end:start:-1]` — same (bounds are normalized)
     - Only step values of `1`, `-1`, or `None` are supported
+  - **Reverse limits**:
+    - Intersection, difference, complement, and recurring patterns materialize reverse slices in memory. Keep reverse queries bounded and avoid huge/unbounded ranges.
+    - Recurring reverse requires a finite `end`; forward requires a finite `start`. When `start` is omitted for reverse, a ~10-year lookback is used.
+    - Google Calendar reverse fetches 30-day windows forward then reverses each window; if `start` is omitted it defaults to a 1-year lookback.
 - Set-like operators:
   - `timeline | other` → `Union`
   - `timeline & other` → `Intersection` or `Filtered`
