@@ -665,8 +665,9 @@ class Calendar(MutableTimeline[Event]):
                 if tz_str:
                     self.__calendar_timezone = ZoneInfo(tz_str)
             except Exception:
-                # Gracefully handle: API errors, stub/mock calendars without get_calendar,
-                # invalid timezone strings, etc. Fall back to UTC (None) for all-day events.
+                # Gracefully handle: API errors, stub/mock calendars without
+                # get_calendar, invalid timezone strings, etc. Fall back to UTC
+                # (None) for all-day events.
                 pass
         return self.__calendar_timezone
 
