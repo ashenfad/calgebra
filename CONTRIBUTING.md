@@ -2,7 +2,7 @@
 
 ## Documentation
 
-calgebra makes its documentation available programmatically via the `calgebra.docs` dictionary. This enables AI agents and code-aware tools to access the same documentation that humans read.
+calgebra makes its documentation available programmatically via the `calgebra.docs` object. This enables AI agents and code-aware tools to access the same documentation that humans read.
 
 ### Updating Documentation
 
@@ -23,7 +23,7 @@ This ensures the documentation is included in PyPI distributions and accessible 
 
 - **`calgebra/docs/`**: Copies included in the package distribution
   - Synced from root via `sync_docs.sh`
-  - Loaded at import time as `calgebra.docs["readme"]`, `calgebra.docs["tutorial"]`, and `calgebra.docs["api"]`
+  - Loaded at import time as `calgebra.docs.readme`, `calgebra.docs.tutorial`, and `calgebra.docs.api`
   - Enables agents to discover (readme), learn (tutorial), and reference (api) the library programmatically
 
 ### Testing
