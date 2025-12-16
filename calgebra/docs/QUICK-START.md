@@ -13,6 +13,11 @@ meeting = Interval.from_datetimes(start=at(2025, 1, 15, 14, 0), end=at(2025, 1, 
 
 # Timelines: lazy interval sources, sliced to execute
 events = list(my_calendar[at("2025-01-01"):at("2025-01-31")])
+
+# Display results
+from calgebra import pprint
+pprint(events, tz="US/Pacific")
+# 2025-01-15 14:00:00 -> 2025-01-15 15:00:00
 ```
 
 ## Operators

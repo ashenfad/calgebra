@@ -71,6 +71,8 @@ events = timeline(
   - Converts to Unix timestamps automatically
   - Works with all `Interval` subclasses
   - Example: `Interval.from_datetimes(start=dt1, end=dt2)`
+- `format(tz="UTC", fmt="%Y-%m-%d %H:%M:%S")` method to get a human-readable string representation.
+- `pprint(intervals, tz="UTC", fmt=...)` helper to print a formatted list of intervals to stdout.
 - Type vars `IvlIn`, `IvlOut` for generic timelines/filters.
 
 ## Properties (`calgebra.properties`)

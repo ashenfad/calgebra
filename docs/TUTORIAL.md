@@ -146,6 +146,25 @@ timeline[at("2024-01-01"):eastern("2024-12-31")]
 
 This pattern is especially useful for interactive queries and scripts where you're working in a consistent timezone.
 
+### Displaying Intervals
+
+When debugging or working in a REPL, raw timestamps can be hard to read. Use the `pprint` helper or `Interval.format()` method to see human-readable datetimes:
+
+```python
+from calgebra import pprint
+
+# Print a list of intervals
+pprint(events, tz="US/Pacific")
+# Output:
+# 2025-01-01 09:00:00 -> 2025-01-01 17:00:00
+# 2025-01-02 09:00:00 -> 2025-01-02 17:00:00
+
+# Format a single interval
+ivl = events[0]
+print(ivl.format(tz="US/Pacific", fmt="%H:%M"))
+# Output: 09:00 -> 17:00
+```
+
 ### Automatic Clipping
 
 **Important behavior**: Intervals are automatically clipped to your query bounds. When you slice `timeline[start:end]`, any intervals extending beyond those bounds are trimmed to fit within the query range:
