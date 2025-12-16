@@ -1,7 +1,8 @@
 import sys
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, TypeVar
+from typing import Any, Iterable, TypeVar
+from zoneinfo import ZoneInfo
 
 # Sentinels for unbounded intervals
 # Use values that leave room for arithmetic operations (±1)
@@ -81,6 +82,46 @@ class Interval:
         else:
             return f"Interval({start_str}→{end_str}, unbounded)"
 
+    def format(self, tz: str = "UTC", fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
+        """Format interval as a string with timezone-aware datetimes.
+
+        Args:
+            tz: Target timezone name (default "UTC")
+            fmt: strftime format string (default "%Y-%m-%d %H:%M:%S")
+
+        Returns:
+            Formatted string like "2024-01-01 09:00:00 -> 2024-01-01 17:00:00"
+        """
+        zone = ZoneInfo(tz)
+
+        start_str = "-∞"
+        if self.start is not None:
+            dt = datetime.fromtimestamp(self.start, tz=zone)
+            start_str = dt.strftime(fmt)
+
+        end_str = "+∞"
+        if self.end is not None:
+            dt = datetime.fromtimestamp(self.end, tz=zone)
+            end_str = dt.strftime(fmt)
+
+        return f"{start_str} -> {end_str}"
+
 
 IvlOut = TypeVar("IvlOut", bound="Interval", covariant=True)
 IvlIn = TypeVar("IvlIn", bound="Interval", contravariant=True)
+
+
+def pprint(
+    intervals: Iterable["Interval"], tz: str = "UTC", fmt: str = "%Y-%m-%d %H:%M:%S"
+) -> None:
+    """Pretty-print an iterable of Intervals.
+
+    Consumes the iterable and prints formatted datetime strings to stdout.
+
+    Args:
+        intervals: Iterable of Interval objects
+        tz: Target timezone name (default "UTC")
+        fmt: strftime format string (default "%Y-%m-%d %H:%M:%S")
+    """
+    for ivl in intervals:
+        print(ivl.format(tz=tz, fmt=fmt))

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from importlib.resources import files
 
 from .core import Filter, Timeline, flatten, intersection, union
-from .interval import Interval
+from .interval import Interval, pprint
 from .metrics import (
     count_intervals,
     coverage_ratio,
@@ -85,6 +85,7 @@ __all__ = [
     "HOUR",
     "DAY",
     "at_tz",
+    "pprint",
     "docs",
     "Docs",
 ]

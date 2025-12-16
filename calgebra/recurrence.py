@@ -32,9 +32,12 @@ from calgebra.util import DAY, WEEK
 
 IvlOut = TypeVar("IvlOut", bound=Interval)
 
-Day: TypeAlias = Literal[
+DayRFC5545 = Literal["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
+DayRFC5545Lower = Literal["mo", "tu", "we", "th", "fr", "sa", "su"]
+DayFull = Literal[
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
 ]
+Day: TypeAlias = DayRFC5545 | DayRFC5545Lower | DayFull
 
 # Mapping from day names to dateutil weekday constants
 _DAY_MAP: dict[Day, weekday] = {
@@ -45,6 +48,20 @@ _DAY_MAP: dict[Day, weekday] = {
     "friday": FR,
     "saturday": SA,
     "sunday": SU,
+    "MO": MO,
+    "TU": TU,
+    "WE": WE,
+    "TH": TH,
+    "FR": FR,
+    "SA": SA,
+    "SU": SU,
+    "mo": MO,
+    "tu": TU,
+    "we": WE,
+    "th": TH,
+    "fr": FR,
+    "sa": SA,
+    "su": SU,
 }
 
 _FREQ_MAP = {
