@@ -1,6 +1,6 @@
 # calgebra 🗓️
 
-A tiny DSL enabling set operations on calendars.
+Set algebra for calendars. Compose lazily and query efficiently.
 
 ## Installation
 
@@ -57,7 +57,7 @@ Intervals use **exclusive end bounds** (`[start, end)`), matching Python slicing
 - **Transformations**: `buffer()` (add time around intervals), `merge_within()` (coalesce nearby intervals)
 - **Google Calendar**: `calgebra.gcsa.calendars()` for read/write operations
 
-**→ **[Quick-start](docs/QUICK-START.md)** | **[Tutorial](docs/TUTORIAL.md)** | **[API Reference](docs/API.md)** | **[Google Calendar](docs/GCSA.md)**
+**→** **[Quick-start](docs/QUICK-START.md)** | **[Tutorial](docs/TUTORIAL.md)** | **[API Reference](docs/API.md)** | **[Google Calendar](docs/GCSA.md)**
 
 
 ## License
