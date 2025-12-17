@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4] - 2025-12-16
+
+### Added
+- **Interval formatting**: New `Interval.format()` method for human-readable datetime output
+- **pprint() helper**: Pretty-print intervals with timezone-aware formatting
+
+## [0.8.3] - 2025-12-16
+
+### Added
+- **Documentation dataclass**: `docs` exported as dataclass for better IDE support
+
+### Fixed
+- Recurrence pattern anchor calculation now handles zero correctly
+- GCSA timezone discovery optimized to fetch only once per calendar
+- Recurrence anchor alignment improved
+
 ## [0.8.2] - 2025-12-02
 
 ### Changed
@@ -163,6 +179,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Google Calendar integration via `calgebra.gcsa.Calendar`
 - Comprehensive documentation accessible via `calgebra.docs` dictionary
 
+[0.8.4]: https://github.com/ashenfad/calgebra/releases/tag/v0.8.4
+[0.8.3]: https://github.com/ashenfad/calgebra/releases/tag/v0.8.3
 [0.8.2]: https://github.com/ashenfad/calgebra/releases/tag/v0.8.2
 [0.8.1]: https://github.com/ashenfad/calgebra/releases/tag/v0.8.1
 [0.8.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.8.0
