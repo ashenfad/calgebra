@@ -1,5 +1,20 @@
 # calgebra API Reference
 
+## Table of Contents
+
+- [Core Types](#core-types-calgebracore)
+- [Interval Helpers](#interval-helpers-calgebrainterval)
+- [Properties](#properties-calgebraproperties)
+- [Metrics](#metrics-calgebrametrics)
+- [Recurring Patterns](#recurring-patterns-calgebrarecurrence)
+- [Transformations](#transformations-calgebratransform)
+- [Reverse Iteration](#reverse-iteration)
+- [Mutable Timelines](#mutable-timelines-calgebramutable)
+- [Google Calendar Integration](#google-calendar-integration-calgebragcsa)
+- [Notes](#notes)
+
+---
+
 ## Core Types (`calgebra.core`)
 
 ### `timeline(*intervals)`
@@ -41,10 +56,9 @@ events = timeline(
     - `timeline[start:end:-1]` — events in `[start, end)`, newest first
     - `timeline[end:start:-1]` — same (bounds are normalized)
     - Only step values of `1`, `-1`, or `None` are supported
-  - **Reverse limits**:
-    - Intersection, difference, complement, and recurring patterns materialize reverse slices in memory. Keep reverse queries bounded and avoid huge/unbounded ranges.
-    - Recurring reverse requires a finite `end`; forward requires a finite `start`. When `start` is omitted for reverse, a ~10-year lookback is used.
-    - Google Calendar reverse fetches 30-day windows forward then reverses each window; if `start` is omitted it defaults to a 1-year lookback.
+  - **Reverse iteration notes**:
+    - Keep reverse queries bounded (days to weeks) for operations that buffer results in memory (intersection, difference, complement, recurring patterns)
+    - Recurring patterns and Google Calendar require a finite `end` bound for reverse iteration
 - Set-like operators:
   - `timeline | other` → `Union`
   - `timeline & other` → `Intersection` or `Filtered`
@@ -59,10 +73,10 @@ events = timeline(
   - `filter & timeline` → filtered timeline
 
 ### `flatten(timeline)`
-- Returns a coalesced timeline by complementing twice. Useful before aggregations or rendering availability. Emits mask `Interval`s and supports unbounded queries (start/end can be `None`).
+- Merges overlapping and adjacent intervals into single coalesced spans. Loses custom metadata (emits basic `Interval` objects). Useful before aggregations or rendering availability. Supports unbounded queries (start/end can be `None`). See [Auto-Flattening and When to Use `flatten()`](TUTORIAL.md#auto-flattening-and-when-to-use-flatten) for when you need this vs. automatic flattening.
 
 ### `union(*timelines)` / `intersection(*timelines)`
-- Functional counterparts to chaining `|` / `&`; require at least one operand and preserve overlaps. `intersection` emits one interval per source for each overlap; use `flatten` if you want single coalesced spans.
+- Functional forms of `|` and `&` operators. Accept multiple timelines as arguments.
 
 ## Interval Helpers (`calgebra.interval`)
 - `Interval(start, end)` dataclass with exclusive end bounds `[start, end)`. Duration is `end - start`.
@@ -337,7 +351,7 @@ tax_deadline = recurring(freq="yearly", month=4, day_of_month=15, tz="UTC")
 For common patterns, use these ergonomic wrappers:
 
 #### `day_of_week(days, tz="UTC")`
-Convenience wrapper for filtering by day(s) of the week. Returns `flatten(recurring(freq="weekly", day=days, tz=tz))` — adjacent days are merged into continuous intervals.
+Filter by day(s) of the week. Adjacent days are merged into continuous intervals.
 
 - `days`: Single day name or list (e.g., `"monday"`, `["tuesday", "thursday"]`)
 - `tz`: IANA timezone name
@@ -350,7 +364,7 @@ weekends = day_of_week(["saturday", "sunday"], tz="UTC")
 ```
 
 #### `time_of_day(start=0, duration=DAY, tz="UTC")`
-Convenience wrapper for daily time windows. Returns `flatten(recurring(freq="daily", start=start, duration=duration, tz=tz))` — consecutive days are merged.
+Daily time window filter. Consecutive days are merged into continuous intervals.
 
 - `start`: Start time in seconds from midnight (default: 0)
 - `duration`: Duration in seconds (default: DAY = full day)
@@ -383,7 +397,7 @@ monday_standup = (
 )
 ```
 
-**Note:** Recurring patterns require finite bounds when slicing. When intersecting mask timelines (like recurring patterns), the result is automatically flattened to yield one interval per overlap.
+**Note:** Recurring patterns require finite bounds when slicing. When intersecting with recurring patterns, overlapping intervals are automatically merged into single spans. See [Auto-Flattening and When to Use `flatten()`](TUTORIAL.md#auto-flattening-and-when-to-use-flatten) for details.
 
 ## Transformations (`calgebra.transform`)
 
@@ -524,17 +538,6 @@ Iteration requires a finite "origin" — the point where iteration begins:
 
 **Note:** Infinite sources (recurring patterns, Google Calendar) cannot iterate from ±∞, so they require a finite origin for the direction of travel. The opposite bound is always optional. For in-memory timelines, both bounds are optional since the data is finite.
 
-## Module Exports (`calgebra.__init__`)
-- `Interval`, `Timeline`, `Filter`, `Property`
-- Timeline creation: `timeline`
-- Properties and helpers: `start`, `end`, `seconds`, `minutes`, `hours`, `days`, `field`, `one_of`, `has_any`, `has_all`
-- Metrics: `total_duration`, `max_duration`, `min_duration`, `count_intervals`, `coverage_ratio`
-- Utils: `flatten`, `union`, `intersection`
-- Recurring patterns: `recurring`, `day_of_week`, `time_of_day`
-- Transforms: `buffer`, `merge_within`
-- Time constants: `SECOND`, `MINUTE`, `HOUR`, `DAY`
-- Utilities: `at_tz`, `docs`
-
 ## Mutable Timelines (`calgebra.mutable`)
 
 `MutableTimeline` extends `Timeline` with write operations:
@@ -546,7 +549,7 @@ Iteration requires a finite "origin" — the point where iteration begins:
 
 - `remove(items)` → `list[WriteResult]`
   - Remove single interval or iterable of intervals
-  - For recurring instances, adds to exdates instead of deleting
+  - For recurring instances, marks the instance as excluded (master event remains)
   - Returns list of `WriteResult` objects
 
 - `remove_series(items)` → `list[WriteResult]`

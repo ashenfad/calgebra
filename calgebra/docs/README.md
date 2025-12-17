@@ -1,6 +1,6 @@
 # calgebra 🗓️
 
-A tiny DSL for merging and searching over calendar-like intervals.
+A tiny DSL enabling set operations on calendars.
 
 ## Installation
 
