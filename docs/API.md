@@ -11,6 +11,7 @@
 - [Reverse Iteration](#reverse-iteration)
 - [Mutable Timelines](#mutable-timelines-calgebramutable)
 - [Google Calendar Integration](#google-calendar-integration-calgebragcsa)
+- [iCalendar Integration (.ics)](#icalendar-integration-ics-calgebraical)
 - [Notes](#notes)
 
 ---
@@ -306,8 +307,8 @@ Generate intervals based on recurrence rules with full RFC 5545 support.
   - `interval=2` with `freq="weekly"` → bi-weekly
   - `interval=3` with `freq="monthly"` → quarterly
 - `day`: Day name(s) for weekly/monthly patterns (single string or list)
-  - Valid: `"monday"`, `"tuesday"`, `"wednesday"`, `"thursday"`, `"friday"`, `"saturday"`, `"sunday"`
-  - Examples: `"monday"`, `["tuesday", "thursday"]`
+  - Valid: `"monday"`, `"tuesday"`, `"MO"`, `"1MO"`, `["TU", "TH"]`
+  - Examples: `"monday"`, `["tuesday", "thursday"]`, `"1MO"` (first Monday)
 - `week`: Nth occurrence for monthly patterns (1=first, -1=last, 2=second, etc.)
   - Combine with `day` for patterns like "first Monday" or "last Friday"
 - `day_of_month`: Day(s) of month (1-31, or -1 for last day)
@@ -579,6 +580,80 @@ Iteration requires a finite "origin" — the point where iteration begins:
   - `minutes`: Minutes before event start
 
 **See also:** [Google Calendar Guide](GCSA.md) for authentication, examples, and common patterns.
+
+## iCalendar Integration (.ics) (`calgebra.ical`)
+
+Provides interoperability with standard iCalendar files (RFC 5545).
+
+### Functions
+
+#### `file_to_timeline(path)` → `MemoryTimeline`
+Load an `.ics` file into an in-memory timeline.
+
+- **Preserves Recurrence**: `RRULE`s are parsed into symbolic `RecurringPattern` objects, allowing efficient manipulation of infinite series.
+- **Error Handling**: Skips malformed VEVENT components with a warning.
+
+#### `timeline_to_file(timeline, path)`
+Save a timeline to an `.ics` file.
+
+- **Optimized**: If `MemoryTimeline` contains symbolic `RecurringPattern` objects, they are written as `RRULE`s.
+- **Static Intervals**: Static intervals are written as individual `VEVENT`s.
+
+### `RecurringPattern`
+For advanced recurrence rules beyond `recurring()`'s simplified interface, you can instantiate `RecurringPattern` directly. It supports all standard RFC 5545 recurrence parts via `dateutil.rrule`.
+
+```python
+from calgebra.recurrence import RecurringPattern
+
+# "Last weekday of the month"
+pattern = RecurringPattern(
+    freq="monthly",
+    day=["MO", "TU", "WE", "TH", "FR"],
+    bysetpos=-1,  # Last occurrence in the set
+    tz="UTC"
+)
+```
+
+**Supported Advanced Arguments:**
+- `bysetpos`: Nth occurrence (e.g., `-1` for last, `[1, 3]` for 1st and 3rd)
+- `byyearday`: Day of year (1 to 366)
+- `byweekno`: Week of year (1 to 53)
+- `byhour`, `byminute`, `bysecond`: Time components
+- `wkst`: Week start day (default `MO`)
+
+### `ICalEvent`
+Extension of `Interval` for iCalendar data.
+
+- **Attributes**:
+  - `start`, `end`: Unix timestamps
+  - `summary`: Title
+  - `description`: Notes
+  - `location`: Location string
+  - `uid`: Unique Identifier
+  - `is_all_day`: Boolean flag
+  - `sequence`: Revision number
+  - `dtstamp`: Creation timestamp
+
+**Field Helpers:**
+Pre-defined `Property` objects correspond to the attributes above, allowing clean filtering syntax:
+- `summary`, `description`, `location`, `uid`
+- `is_all_day`: Useful for separating all-day events from timed events.
+- `dtstamp`, `sequence`, `recurrence_id`
+
+**Example:**
+```python
+from calgebra.ical import file_to_timeline, timeline_to_file, summary, is_all_day
+
+# Load
+timeline = file_to_timeline("my_calendar.ics")
+
+# Filter
+work_events = timeline & (summary == "Work")
+all_day_items = timeline & (is_all_day == True)
+
+# Save
+timeline_to_file(work_events, "work_only.ics")
+```
 
 ## Notes
 - All intervals use **exclusive end bounds** `[start, end)`, matching Python slicing idioms. Duration is simply `end - start`.

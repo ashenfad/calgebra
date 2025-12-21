@@ -536,8 +536,9 @@ def test_recurring_raw_lookback_captures_all_overlaps():
         jan_9 in event_starts
     ), "Should include Jan 9 (extends to Jan 13, overlaps query)"
 
-    # Should have at least 9 events (Jan 7-15)
-    assert len(results) >= 9
+    # Should have at least 8 events (Jan 7-14)
+    # Jan 15 starts exactly at query_end, so it is strictly excluded
+    assert len(results) >= 8
 
 
 # Tests for RRULE string conversion

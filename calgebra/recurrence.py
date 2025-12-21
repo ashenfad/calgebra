@@ -40,7 +40,7 @@ DayFull = Literal[
 Day: TypeAlias = DayRFC5545 | DayRFC5545Lower | DayFull
 
 # Mapping from day names to dateutil weekday constants
-_DAY_MAP: dict[Day, weekday] = {
+_DAY_MAP: dict[str, weekday] = {
     "monday": MO,
     "tuesday": TU,
     "wednesday": WE,
@@ -100,6 +100,26 @@ _WEEKDAY_INT_TO_STRING = {
     5: "SA",  # Saturday
     6: "SU",  # Sunday
 }
+
+# Fields that take a list of integers and map to capitalized keys
+_RRULE_LIST_FIELDS = {
+    "bymonth": "BYMONTH",
+    "bymonthday": "BYMONTHDAY",
+    "byweekno": "BYWEEKNO",
+    "byyearday": "BYYEARDAY",
+    "bysetpos": "BYSETPOS",
+    "byhour": "BYHOUR",
+    "byminute": "BYMINUTE",
+    "bysecond": "BYSECOND",
+}
+
+
+def _to_int_list(val: int | str | list[int | str] | None) -> list[int] | None:
+    """Helper to sanitize loose inputs into a list of integers."""
+    if val is None:
+        return None
+    val_list = [val] if not isinstance(val, list) else val
+    return [int(x) for x in val_list]
 
 
 def rrule_kwargs_to_rrule_string(rrule_kwargs: dict[str, Any]) -> str:
@@ -169,23 +189,25 @@ def rrule_kwargs_to_rrule_string(rrule_kwargs: dict[str, Any]) -> str:
         if day_strings:
             parts.append(f"BYDAY={','.join(day_strings)}")
 
-    # BYMONTHDAY (for monthly patterns with specific days)
-    bymonthday = rrule_kwargs.get("bymonthday")
-    if bymonthday is not None:
-        if isinstance(bymonthday, list):
-            day_strs = [str(d) for d in bymonthday]
-            parts.append(f"BYMONTHDAY={','.join(day_strs)}")
-        else:
-            parts.append(f"BYMONTHDAY={bymonthday}")
+    # Generic list fields (BYMONTH, BYMONTHDAY, BYSETPOS, etc.)
+    for key, ical_key in _RRULE_LIST_FIELDS.items():
+        val = rrule_kwargs.get(key)
+        if val is not None:
+            if isinstance(val, list):
+                # Map to string to handle integers safely
+                parts.append(f"{ical_key}={','.join(map(str, val))}")
+            else:
+                parts.append(f"{ical_key}={val}")
 
-    # BYMONTH (for yearly patterns)
-    bymonth = rrule_kwargs.get("bymonth")
-    if bymonth is not None:
-        if isinstance(bymonth, list):
-            month_strs = [str(m) for m in bymonth]
-            parts.append(f"BYMONTH={','.join(month_strs)}")
-        else:
-            parts.append(f"BYMONTH={bymonth}")
+    # WKST
+    wkst = rrule_kwargs.get("wkst")
+    if wkst is not None:
+        if isinstance(wkst, weekday):
+            s = _WEEKDAY_INT_TO_STRING.get(wkst.weekday)
+            if s:
+                parts.append(f"WKST={s}")
+        elif isinstance(wkst, int) and wkst in _WEEKDAY_INT_TO_STRING:
+            parts.append(f"WKST={_WEEKDAY_INT_TO_STRING[wkst]}")
 
     return ";".join(parts)
 
@@ -240,13 +262,21 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
         interval: int = 1,
         day: Day | list[Day] | None = None,
         week: int | None = None,
-        day_of_month: int | list[int] | None = None,
-        month: int | list[int] | None = None,
+        day_of_month: int | str | list[int | str] | None = None,
+        month: int | str | list[int | str] | None = None,
         start: datetime | int = 0,
         duration: int = DAY,
         tz: str | None = None,
         interval_class: type[IvlOut] = Interval,  # type: ignore
         exdates: Iterable[int] | None = None,
+        # Advanced RRULE parts
+        bysetpos: int | list[int] | None = None,
+        byweekno: int | list[int] | None = None,
+        byyearday: int | list[int] | None = None,
+        byhour: int | list[int] | None = None,
+        byminute: int | list[int] | None = None,
+        bysecond: int | list[int] | None = None,
+        wkst: Day | None = None,
         **metadata: Any,
     ):
         """
@@ -256,9 +286,9 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
             freq: Frequency - "daily", "weekly", "monthly", or "yearly"
             interval: Repeat every N units (default 1)
             day: Day(s) of week for weekly/monthly patterns
-                ("monday" or ["monday", "wednesday"])
-            week: Which week of month for monthly patterns
-                (1=first, -1=last, 2=second, etc.)
+                ("monday", ["monday", "wednesday"], or "MO"/"1MO")
+            week: Which week of month for monthly patterns (1=first, -1=last).
+                Alternatively use day="1MO".
             day_of_month: Day(s) of month (1-31, or -1 for last day)
             month: Month(s) for yearly patterns (1-12)
             start: Either a full timestamp (seconds since epoch) or time-of-day
@@ -268,6 +298,14 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
             tz: IANA timezone name (inferred from start if datetime with tzinfo)
             interval_class: Class to instantiate for each interval (default: Interval)
             exdates: Optional set of excluded start timestamps (seconds from epoch)
+            bysetpos: The Nth occurrence of the set of recurrence instances
+                (e.g. -1 for last)
+            byweekno: The week(s) of the year
+            byyearday: The day(s) of the year
+            byhour: The hour(s) of the day
+            byminute: The minute(s) of the hour
+            bysecond: The second(s) of the minute
+            wkst: The first day of the week (default MO)
             **metadata: Additional metadata to store on generated intervals
         """
         self.freq = freq
@@ -309,22 +347,35 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
         # Validate: if day is specified and start is a full datetime/timestamp,
         # the start date should fall on one of the specified days
         if day is not None and anchor_dt is not None:
-            days_list = [day] if isinstance(day, str) else day
+            days_list = [day] if isinstance(day, (str, weekday)) else day
             # Get the weekday of anchor_dt (0=Monday, 6=Sunday)
             anchor_weekday = anchor_dt.weekday()
-            # Map day names to weekday integers
-            day_name_to_int = {
-                "monday": 0,
-                "tuesday": 1,
-                "wednesday": 2,
-                "thursday": 3,
-                "friday": 4,
-                "saturday": 5,
-                "sunday": 6,
-            }
-            valid_weekdays = {day_name_to_int[d.lower()] for d in days_list}
-            if anchor_weekday not in valid_weekdays:
-                anchor_day_name = list(day_name_to_int.keys())[anchor_weekday]
+
+            # Map day names to weekday integers using _DAY_MAP
+            valid_weekdays = set()
+            for d in days_list:
+                if isinstance(d, weekday):
+                    valid_weekdays.add(d.weekday)
+                    continue
+
+                d_lower = d.lower()
+                if d_lower in _DAY_MAP:
+                    valid_weekdays.add(_DAY_MAP[d_lower].weekday)
+                # If invalid day, we'll catch it later in initialization
+
+            # If valid_weekdays is empty, let normal validation handle it
+            if valid_weekdays and anchor_weekday not in valid_weekdays:
+                # Find readable name for error message
+                day_name_map = {
+                    0: "monday",
+                    1: "tuesday",
+                    2: "wednesday",
+                    3: "thursday",
+                    4: "friday",
+                    5: "saturday",
+                    6: "sunday",
+                }
+                anchor_day_name = day_name_map.get(anchor_weekday, str(anchor_weekday))
                 raise ValueError(
                     f"start date ({anchor_dt.date()}) is a {anchor_day_name}, "
                     f"but day={day!r} specifies different day(s).\n"
@@ -338,6 +389,15 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
         self.day_of_month = day_of_month
         self.month = month
 
+        # Advanced attributes
+        self.bysetpos = bysetpos
+        self.byweekno = byweekno
+        self.byyearday = byyearday
+        self.byhour = byhour
+        self.byminute = byminute
+        self.bysecond = bysecond
+        self.wkst = wkst
+
         # Build rrule kwargs
         rrule_kwargs: dict[str, Any] = {
             "freq": _FREQ_MAP[freq],
@@ -345,34 +405,76 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
         }
 
         # Handle day-of-week
+        # Handle day-of-week
         if day is not None:
             days = [day] if isinstance(day, str) else day
             weekdays: list[weekday] = []
             for d in days:
-                d_lower = d.lower()
-                if d_lower not in _DAY_MAP:
-                    valid = ", ".join(sorted(_DAY_MAP.keys()))
-                    raise ValueError(
-                        f"Invalid day name: '{d}'\n" f"Valid days: {valid}\n"
-                    )
+                # Parse string: "monday", "MO", "1MO", "-1FR", etc.
+                s = d.upper()
+                # Check directly in map first (MO, MONDAY)
+                if d.lower() in _DAY_MAP:
+                    wd = _DAY_MAP[d.lower()]
+                    # Apply legacy 'week' offset if present and this is a simple day
+                    # name
+                    if week is not None:
+                        wd = wd(week)
+                    weekdays.append(wd)
+                    continue
 
-                wd = _DAY_MAP[d_lower]
-                # If week is specified (for monthly), apply offset
-                if week is not None:
-                    wd = wd(week)
-                weekdays.append(wd)
+                # Try parsing numbered day: 1MO
+                # Last 2 chars are code
+                if len(s) > 2:
+                    code = s[-2:]
+                    prefix = s[:-2]
+                    # Check code in map (must use lower for map key)
+                    if code.lower() in _DAY_MAP:
+                        wd_const = _DAY_MAP[code.lower()]
+                        try:
+                            n = int(prefix)
+                            weekdays.append(wd_const(n))
+                            continue
+                        except ValueError:
+                            pass
+
+                # If we get here, invalid
+                valid = ", ".join(sorted(_DAY_MAP.keys()))
+                raise ValueError(
+                    f"Invalid day name: '{d}'\n"
+                    f"Valid days: {valid} or numbered (e.g. 1MO)\n"
+                )
 
             rrule_kwargs["byweekday"] = weekdays
 
-        # Handle day of month
-        if day_of_month is not None:
-            rrule_kwargs["bymonthday"] = (
-                [day_of_month] if isinstance(day_of_month, int) else day_of_month
-            )
+        # Handle standard list fields
+        # Note: 'day_of_month' maps to 'bymonthday' in rrule logic,
+        # but the actual kwarg passed to __init__ is 'day_of_month'.
+        # So we handle day_of_month specially, or remap it.
+        # Here we just iterate the ones directly passed as kwargs
 
-        # Handle month
-        if month is not None:
-            rrule_kwargs["bymonth"] = [month] if isinstance(month, int) else month
+        list_args = {
+            "bymonthday": day_of_month,
+            "bymonth": month,
+            "bysetpos": bysetpos,
+            "byweekno": byweekno,
+            "byyearday": byyearday,
+            "byhour": byhour,
+            "byminute": byminute,
+            "bysecond": bysecond,
+        }
+
+        for key, val in list_args.items():
+            if val is not None:
+                rrule_kwargs[key] = _to_int_list(val)
+
+        if wkst is not None:
+            if isinstance(wkst, weekday):
+                rrule_kwargs["wkst"] = wkst
+            elif isinstance(wkst, str) and wkst.lower() in _DAY_MAP:
+                rrule_kwargs["wkst"] = _DAY_MAP[wkst.lower()]
+            elif isinstance(wkst, int) and wkst in _WEEKDAY_INT_TO_STRING:
+                # dateutil accepts int 0-6
+                rrule_kwargs["wkst"] = wkst
 
         # Store rrule (without start date - we'll set that dynamically based on query)
         self.rrule_kwargs: dict[str, Any] = rrule_kwargs
@@ -495,7 +597,7 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
             ivl = self._occurrence_to_interval(occurrence)
 
             # Fast-forward: Skip if it ends before our query window
-            if ivl.end is not None and ivl.end < start:
+            if ivl.end is not None and ivl.end <= start:
                 continue
 
             # Stop: If we've passed the query window
@@ -575,8 +677,8 @@ def recurring(
     interval: int = 1,
     day: Day | list[Day] | None = None,
     week: int | None = None,
-    day_of_month: int | list[int] | None = None,
-    month: int | list[int] | None = None,
+    day_of_month: int | str | list[int | str] | None = None,
+    month: int | str | list[int | str] | None = None,
     start: datetime | int = 0,
     duration: int = DAY,
     tz: str | None = None,

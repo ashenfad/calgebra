@@ -42,8 +42,18 @@ from typing_extensions import override
 
 from calgebra.interval import Interval, IvlOut
 from calgebra.mutable import MutableTimeline, WriteResult
+from calgebra.properties import Property, field
 from calgebra.recurrence import RecurringPattern
 from calgebra.util import DAY
+
+# Field Helpers
+summary: Property[Interval] = field("summary")
+description: Property[Interval] = field("description")
+event_id: Property[Interval] = field("id")
+calendar_id: Property[Interval] = field("calendar_id")
+calendar_summary: Property[Interval] = field("calendar_summary")
+is_all_day: Property[Interval] = field("is_all_day")
+recurring_event_id: Property[Interval] = field("recurring_event_id")
 
 # Type variable for write operation methods
 _F = TypeVar("_F", bound=Callable[..., list[WriteResult]])
