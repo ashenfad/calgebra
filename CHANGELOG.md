@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2025-12-21
+
+### Added
+- **iCalendar Support**: Load and save `.ics` files (RFC 5545)
+  - `calgebra.ical.file_to_timeline()`: Load `.ics` files into a memory timeline
+  - `calgebra.ical.timeline_to_file()`: Save timelines to `.ics` files
+  - `ICalEvent`: New interval subclass preserving iCalendar fields (UID, location, etc.)
+  - Full round-trip support for recurring patterns (RRULE)
+
 ## [0.8.4] - 2025-12-16
 
 ### Added
@@ -179,6 +188,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Google Calendar integration via `calgebra.gcsa.Calendar`
 - Comprehensive documentation accessible via `calgebra.docs` dictionary
 
+[0.9.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.9.0
 [0.8.4]: https://github.com/ashenfad/calgebra/releases/tag/v0.8.4
 [0.8.3]: https://github.com/ashenfad/calgebra/releases/tag/v0.8.3
 [0.8.2]: https://github.com/ashenfad/calgebra/releases/tag/v0.8.2
