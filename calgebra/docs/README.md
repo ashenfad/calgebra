@@ -9,6 +9,9 @@ pip install calgebra
 
 # Or with Google Calendar support
 pip install calgebra[google-calendar]
+
+# Or with iCalendar (.ics) file support
+pip install calgebra[ical]
 ```
 
 ## Quick Start
@@ -56,6 +59,7 @@ Intervals use **exclusive end bounds** (`[start, end)`), matching Python slicing
 - **Aggregations**: `total_duration`, `max_duration`, `min_duration`, `count_intervals`, `coverage_ratio`
 - **Transformations**: `buffer()` (add time around intervals), `merge_within()` (coalesce nearby intervals)
 - **Google Calendar**: `calgebra.gcsa.calendars()` for read/write operations
+- **iCalendar (.ics)**: Load/save timelines to standard RFC 5545 files
 
 **→** **[Quick-start](docs/QUICK-START.md)** | **[Tutorial](docs/TUTORIAL.md)** | **[API Reference](docs/API.md)** | **[Google Calendar](docs/GCSA.md)**
 

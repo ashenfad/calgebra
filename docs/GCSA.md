@@ -98,6 +98,12 @@ most_recent = next(primary[at("2024-01-01"):at("2025-01-01"):-1], None)
 - `is_all_day`: True for all-day events, False for timed events
 - `reminders`: List of `Reminder` objects (None = calendar defaults)
 
+**Field Helpers:**
+Pre-defined `Property` objects correspond to attributes, allowing clean filtering syntax:
+- `summary`, `description`, `calendar_id`, `calendar_summary`
+- `event_id` (maps to `id`)
+- `is_all_day`, `recurring_event_id`
+
 ## Writing Single Events
 
 Create and add events using `Event.from_datetimes()`:

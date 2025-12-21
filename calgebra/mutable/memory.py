@@ -42,6 +42,22 @@ def _get_recurrence_params(
     if pattern.month is not None:
         params["month"] = pattern.month
 
+    # Advanced
+    if getattr(pattern, "bysetpos", None) is not None:
+        params["bysetpos"] = pattern.bysetpos
+    if getattr(pattern, "byweekno", None) is not None:
+        params["byweekno"] = pattern.byweekno
+    if getattr(pattern, "byyearday", None) is not None:
+        params["byyearday"] = pattern.byyearday
+    if getattr(pattern, "byhour", None) is not None:
+        params["byhour"] = pattern.byhour
+    if getattr(pattern, "byminute", None) is not None:
+        params["byminute"] = pattern.byminute
+    if getattr(pattern, "bysecond", None) is not None:
+        params["bysecond"] = pattern.bysecond
+    if getattr(pattern, "wkst", None) is not None:
+        params["wkst"] = pattern.wkst
+
     return params
 
 
@@ -56,11 +72,13 @@ class MemoryTimeline(MutableTimeline[Interval]):
         _static_intervals: List of individual interval objects
     """
 
-    def __init__(self, intervals: Iterable[Interval] = ()) -> None:
+    def __init__(
+        self, intervals: Iterable[Interval | RecurringPattern[Any]] = ()
+    ) -> None:
         """Initialize an empty or pre-populated memory timeline.
 
         Args:
-            intervals: Optional initial intervals to add (creates static storage)
+            intervals: Optional initial intervals or recurring patterns
         """
         # Store recurring patterns with their unique IDs
         # Format: list of (recurring_event_id, RecurringPattern) tuples
@@ -72,7 +90,7 @@ class MemoryTimeline(MutableTimeline[Interval]):
         # Add any initial intervals
         for interval in intervals:
             # Consume the WriteResult iterator
-            list(self._add_interval(interval, vars(interval)))
+            list(self.add(interval))
 
     @override
     def fetch(

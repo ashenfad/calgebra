@@ -41,9 +41,13 @@ dev = [
     "uv",
     "pytest",
     "gcsa>=2.6.0",
+    "icalendar>=6.1.0",
 ]
 google-calendar = [
     "gcsa>=2.6.0",
+]
+ical = [
+    "icalendar>=6.1.0",
 ]
 
 [build-system]

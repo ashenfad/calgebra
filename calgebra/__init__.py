@@ -2,6 +2,11 @@ from dataclasses import dataclass
 from importlib.resources import files
 
 from .core import Filter, Timeline, flatten, intersection, union
+
+try:
+    from .ical import file_to_timeline, timeline_to_file
+except ImportError:
+    pass
 from .interval import Interval, pprint
 from .metrics import (
     count_intervals,
@@ -88,4 +93,6 @@ __all__ = [
     "pprint",
     "docs",
     "Docs",
+    "file_to_timeline",
+    "timeline_to_file",
 ]
