@@ -21,7 +21,7 @@ This installs the `gcsa` library, which handles Google Calendar API authenticati
 2. Import and use `calendars()` - authentication happens automatically on first use
 3. Grant calendar access permissions when prompted
 
-**Note:** For production deployments, you may need to configure OAuth2 credentials explicitly. See the [gcsa documentation](https://github.com/getyourguide/gcsa) for advanced authentication options.
+**Note:** For production deployments, you may need to configure OAuth2 credentials explicitly. See the [gcsa documentation](https://github.com/kuzmoyev/google-calendar-simple-api) for advanced authentication options.
 
 ## Getting Started
 
@@ -524,5 +524,5 @@ event: Event = Event.from_datetimes(
 
 - [API Reference](API.md) - Complete API documentation
 - [Tutorial](TUTORIAL.md) - Learn calgebra's core concepts
-- [gcsa Documentation](https://github.com/getyourguide/gcsa) - Underlying Google Calendar library
+- [gcsa Documentation](https://github.com/kuzmoyev/google-calendar-simple-api) - Underlying Google Calendar library
 
