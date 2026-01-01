@@ -261,6 +261,50 @@ Shortest interval per period, or None if empty.
 shortest = min_duration(meetings, date(2025, 11, 1), date(2025, 12, 1), period="week")
 ```
 
+### Cyclic Histograms with `group_by`
+
+The `total_duration()`, `count_intervals()`, and `coverage_ratio()` metrics support a `group_by` parameter for creating cyclic histograms (e.g., hour-of-day, day-of-week).
+
+**Valid period/group_by combinations:**
+
+| period | group_by | Buckets |
+|--------|----------|---------|
+| `"hour"` | `"hour_of_day"` | 24 (0-23) |
+| `"day"` | `"day_of_week"` | 7 (0-6, Mon=0) |
+| `"day"` | `"day_of_month"` | 31 (1-31) |
+| `"week"` | `"week_of_year"` | 53 (1-53) |
+| `"month"` | `"month_of_year"` | 12 (1-12) |
+
+**Return type changes:** When `group_by` is set, returns `list[tuple[int, T]]` keyed by group instead of `list[tuple[date, T]]`.
+
+**Examples:**
+
+```python
+from datetime import date
+from calgebra import total_duration, count_intervals, coverage_ratio
+
+# Hour-of-day histogram: total busy time per hour
+hourly = total_duration(
+    cal, date(2025, 1, 1), date(2025, 2, 1),
+    period="hour", group_by="hour_of_day", tz="US/Pacific"
+)
+# Returns: [(0, 1800), (1, 0), ..., (9, 54000), (10, 48000), ...]
+
+# Day-of-week histogram: how many meetings per weekday?
+by_weekday = count_intervals(
+    meetings, date(2025, 1, 1), date(2025, 3, 1),
+    period="day", group_by="day_of_week", tz="US/Pacific"
+)
+# Returns: [(0, 45), (1, 52), ..., (4, 38), (5, 12), (6, 8)]  # Mon-Sun
+
+# Coverage by hour: what fraction of each hour am I busy?
+hourly_coverage = coverage_ratio(
+    cal, date(2025, 1, 1), date(2025, 2, 1),
+    period="hour", group_by="hour_of_day", tz="US/Pacific"
+)
+# Returns: [(0, 0.02), ..., (9, 0.85), (10, 0.78), ...]
+```
+
 ### Performance
 
 **Efficient:** Timeline data is fetched once, then aggregated across all periods.

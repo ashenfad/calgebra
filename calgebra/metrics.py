@@ -1,6 +1,7 @@
+from collections import defaultdict
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
-from typing import Literal, TypeVar
+from typing import Any, Literal, TypeVar
 from zoneinfo import ZoneInfo
 
 from .core import Timeline, flatten
@@ -8,6 +9,56 @@ from .interval import Interval
 from .mutable.memory import timeline as make_timeline
 
 Ivl = TypeVar("Ivl", bound=Interval)
+
+# Period types for windowing
+Period = Literal["hour", "day", "week", "month", "year", "full"]
+
+# Group-by types for cyclic aggregation
+GroupBy = Literal[
+    "hour_of_day", "day_of_week", "day_of_month", "week_of_year", "month_of_year"
+]
+
+# Valid period -> group_by mappings
+_VALID_GROUP_BY: dict[str, set[str]] = {
+    "hour": {"hour_of_day"},
+    "day": {"day_of_week", "day_of_month"},
+    "week": {"week_of_year"},
+    "month": {"month_of_year"},
+}
+
+
+def _extract_group_key(dt: datetime, group_by: GroupBy) -> int:
+    """Extract cyclic key from datetime for grouping."""
+    match group_by:
+        case "hour_of_day":
+            return dt.hour
+        case "day_of_week":
+            return dt.weekday()
+        case "day_of_month":
+            return dt.day
+        case "week_of_year":
+            return dt.isocalendar()[1]
+        case "month_of_year":
+            return dt.month
+        case _:
+            raise ValueError(f"Unsupported group_by value: {group_by!r}")
+
+
+def _validate_period_group_by(period: str, group_by: GroupBy | None) -> None:
+    """Validate that period and group_by are compatible."""
+    if group_by is None:
+        return
+    if period not in _VALID_GROUP_BY:
+        raise ValueError(
+            f"group_by requires period to be one of {list(_VALID_GROUP_BY.keys())}, "
+            f"got period={period!r}"
+        )
+    if group_by not in _VALID_GROUP_BY[period]:
+        valid = _VALID_GROUP_BY[period]
+        raise ValueError(
+            f"Invalid group_by={group_by!r} for period={period!r}. "
+            f"Valid options: {valid}"
+        )
 
 
 def _coerce_bound(
@@ -50,7 +101,7 @@ def _coerce_bound(
 def _period_windows(
     start_ts: int,
     end_ts: int,
-    period: Literal["day", "week", "month", "year", "full"],
+    period: Period,
     tz: str,
 ) -> list[tuple[date, int, int]]:
     """Generate calendar-aligned period windows.
@@ -65,6 +116,24 @@ def _period_windows(
         List of (period_label_date, window_start_ts, window_end_ts) tuples.
         Empty if start_ts >= end_ts.
     """
+    # Use datetime-labeled version and convert to date labels
+    windows = _period_windows_with_dt(start_ts, end_ts, period, tz)
+    return [
+        (dt.date() if isinstance(dt, datetime) else dt, ws, we)
+        for dt, ws, we in windows
+    ]
+
+
+def _period_windows_with_dt(
+    start_ts: int,
+    end_ts: int,
+    period: Period,
+    tz: str,
+) -> list[tuple[datetime, int, int]]:
+    """Generate calendar-aligned period windows with datetime labels.
+
+    Like _period_windows but returns datetime labels for group key extraction.
+    """
     if start_ts >= end_ts:
         return []
 
@@ -74,19 +143,30 @@ def _period_windows(
 
     if period == "full":
         # Exact bounds, no snapping
-        return [(start_dt.date(), start_ts, end_ts)]
+        return [(start_dt, start_ts, end_ts)]
 
-    windows: list[tuple[date, int, int]] = []
+    windows: list[tuple[datetime, int, int]] = []
 
-    if period == "day":
+    if period == "hour":
+        # Snap to hour boundaries
+        current = datetime(
+            start_dt.year, start_dt.month, start_dt.day, start_dt.hour, tzinfo=zone
+        )
+        while current < end_dt:
+            next_hour = current + timedelta(hours=1)
+            win_start = int(current.timestamp())
+            win_end = int(next_hour.timestamp())
+            windows.append((current, win_start, win_end))
+            current = next_hour
+
+    elif period == "day":
         # Snap to midnight-to-midnight
         current = datetime(start_dt.year, start_dt.month, start_dt.day, tzinfo=zone)
         while current < end_dt:
             next_day = current + timedelta(days=1)
-            label = current.date()
             win_start = int(current.timestamp())
             win_end = int(next_day.timestamp())
-            windows.append((label, win_start, win_end))
+            windows.append((current, win_start, win_end))
             current = next_day
 
     elif period == "week":
@@ -100,10 +180,9 @@ def _period_windows(
         current = week_start
         while current < end_dt:
             next_week = current + timedelta(weeks=1)
-            label = current.date()
             win_start = int(current.timestamp())
             win_end = int(next_week.timestamp())
-            windows.append((label, win_start, win_end))
+            windows.append((current, win_start, win_end))
             current = next_week
 
     elif period == "month":
@@ -115,10 +194,9 @@ def _period_windows(
                 next_month = datetime(current.year + 1, 1, 1, tzinfo=zone)
             else:
                 next_month = datetime(current.year, current.month + 1, 1, tzinfo=zone)
-            label = current.date()
             win_start = int(current.timestamp())
             win_end = int(next_month.timestamp())
-            windows.append((label, win_start, win_end))
+            windows.append((current, win_start, win_end))
             current = next_month
 
     elif period == "year":
@@ -126,10 +204,9 @@ def _period_windows(
         current = datetime(start_dt.year, 1, 1, tzinfo=zone)
         while current < end_dt:
             next_year = datetime(current.year + 1, 1, 1, tzinfo=zone)
-            label = current.date()
             win_start = int(current.timestamp())
             win_end = int(next_year.timestamp())
-            windows.append((label, win_start, win_end))
+            windows.append((current, win_start, win_end))
             current = next_year
 
     return windows
@@ -189,9 +266,9 @@ def _windowed_agg(
     start: date | datetime | int,
     end: date | datetime | int,
     tz: str,
-    period: Literal["day", "week", "month", "year", "full"],
-    agg: Callable[[Timeline[Ivl], int, int], Ivl],
-) -> list[tuple[date, Ivl]]:
+    period: Period,
+    agg: Callable[[Timeline[Ivl], int, int], Any],
+) -> list[tuple[date, Any]]:
     """Helper to materialize timeline once and apply agg to each period.
 
     Args:
@@ -222,29 +299,85 @@ def _windowed_agg(
     ]
 
 
+def _grouped_agg(
+    tl: Timeline[Ivl],
+    start: date | datetime | int,
+    end: date | datetime | int,
+    tz: str,
+    period: Period,
+    group_by: GroupBy,
+    agg: Callable[[Timeline[Ivl], int, int], Any],
+    combiner: Callable[[list[Any]], Any],
+) -> list[tuple[int, Any]]:
+    """Helper to aggregate per-window values by cyclic group key.
+
+    Args:
+        tl: Source timeline to fetch from
+        start: Query start bound
+        end: Query end bound
+        tz: Timezone for interpretation
+        period: Period type (determines slicing granularity)
+        group_by: Cyclic dimension to group by
+        agg: Function (timeline, start_ts, end_ts) -> value per window
+        combiner: Function to combine values in same group (e.g., sum for ints)
+
+    Returns:
+        List of (group_key, combined_value) tuples, sorted by key
+    """
+    # Coerce bounds
+    start_ts = _coerce_bound(start, tz)
+    end_ts = _coerce_bound(end, tz)
+
+    # Materialize timeline data once
+    cached_timeline = make_timeline(*tl[start_ts:end_ts])
+
+    # Generate windows with datetime labels
+    windows = _period_windows_with_dt(start_ts, end_ts, period, tz)
+
+    # Aggregate per window, grouping by cyclic key
+    buckets: dict[int, list[Any]] = defaultdict(list)
+    for label_dt, win_start, win_end in windows:
+        key = _extract_group_key(label_dt, group_by)
+        value = agg(cached_timeline, win_start, win_end)
+        buckets[key].append(value)
+
+    # Combine values per bucket and return sorted by key
+    return sorted((key, combiner(values)) for key, values in buckets.items())
+
+
 def total_duration(
     timeline: Timeline[Interval],
     start: date | datetime | int,
     end: date | datetime | int,
-    period: Literal["day", "week", "month", "year", "full"] = "full",
+    period: Period = "full",
     tz: str = "UTC",
-) -> list[tuple[date, int]]:
+    group_by: GroupBy | None = None,
+) -> list[tuple[date, int]] | list[tuple[int, int]]:
     """Compute total duration covered by timeline over one or more periods.
 
     Materializes timeline data once, then computes total duration for each period.
-    Period boundaries are aligned to calendar grid (full days, weeks, months, years).
+    Period boundaries are aligned to calendar grid (hours, days, weeks, months, years).
 
     Args:
         timeline: Source timeline (fetched once for all periods)
         start: Window start (date → midnight in tz, datetime → as-is,
             int → Unix timestamp)
         end: Window end (exclusive, same interpretation rules)
-        period: "day", "week" (ISO Mon-Sun), "month", "year", or "full"
+        period: "hour", "day", "week" (ISO Mon-Sun), "month", "year", or "full"
             (exact bounds)
         tz: Timezone for date interpretation and period boundaries
+        group_by: Optional cyclic grouping. When set, aggregates across periods
+            with the same cyclic key (e.g., "hour_of_day" aggregates all 9am hours).
+            Valid combinations:
+            - period="hour" + group_by="hour_of_day" → 24 buckets
+            - period="day" + group_by="day_of_week" → 7 buckets
+            - period="day" + group_by="day_of_month" → 31 buckets
+            - period="week" + group_by="week_of_year" → 53 buckets
+            - period="month" + group_by="month_of_year" → 12 buckets
 
     Returns:
-        List of (period_start_date, total_seconds) tuples.
+        Without group_by: List of (period_start_date, total_seconds) tuples.
+        With group_by: List of (group_key, total_seconds) tuples sorted by key.
         Empty periods return 0.
 
     Example:
@@ -261,7 +394,28 @@ def total_duration(
         ...     tz="UTC"
         ... )
         >>> # Returns [(date(2025,11,1), 86400), (date(2025,11,2), 0)]
+        >>>
+        >>> # Hour-of-day histogram
+        >>> hourly = total_duration(
+        ...     cal, start, end,
+        ...     period="hour", group_by="hour_of_day", tz="US/Pacific"
+        ... )
+        >>> # Returns [(0, 3600), (1, 0), ..., (9, 54000), ...]
     """
+    _validate_period_group_by(period, group_by)
+
+    if group_by is not None:
+        return _grouped_agg(
+            timeline,
+            start,
+            end,
+            tz,
+            period,
+            group_by,
+            agg=_total_duration,
+            combiner=sum,
+        )
+
     return _windowed_agg(timeline, start, end, tz, period, _total_duration)
 
 
@@ -325,9 +479,10 @@ def count_intervals(
     timeline: Timeline[Ivl],
     start: date | datetime | int,
     end: date | datetime | int,
-    period: Literal["day", "week", "month", "year", "full"] = "full",
+    period: Period = "full",
     tz: str = "UTC",
-) -> list[tuple[date, int]]:
+    group_by: GroupBy | None = None,
+) -> list[tuple[date, int]] | list[tuple[int, int]]:
     """Count intervals within each period.
 
     Args:
@@ -335,16 +490,31 @@ def count_intervals(
         start: Window start (date → midnight in tz, datetime → as-is,
             int → Unix timestamp)
         end: Window end (exclusive)
-        period: "day", "week", "month", "year", or "full"
+        period: "hour", "day", "week", "month", "year", or "full"
         tz: Timezone for date interpretation and period boundaries
+        group_by: Optional cyclic grouping (see total_duration for valid combinations)
 
     Returns:
-        List of (period_start_date, interval_count) tuples.
+        Without group_by: List of (period_start_date, interval_count) tuples.
+        With group_by: List of (group_key, interval_count) tuples sorted by key.
         Empty periods return 0.
     """
+    _validate_period_group_by(period, group_by)
 
     def _agg(tl, win_start, win_end):
         return sum(1 for _ in tl[win_start:win_end])
+
+    if group_by is not None:
+        return _grouped_agg(
+            timeline,
+            start,
+            end,
+            tz,
+            period,
+            group_by,
+            agg=_agg,
+            combiner=sum,
+        )
 
     return _windowed_agg(timeline, start, end, tz, period, _agg)
 
@@ -353,26 +523,29 @@ def coverage_ratio(
     timeline: Timeline[Ivl],
     start: date | datetime | int,
     end: date | datetime | int,
-    period: Literal["day", "week", "month", "year", "full"] = "full",
+    period: Period = "full",
     tz: str = "UTC",
-) -> list[tuple[date, float]]:
+    group_by: GroupBy | None = None,
+) -> list[tuple[date, float]] | list[tuple[int, float]]:
     """Compute coverage ratio (fraction of time covered) for each period.
 
     Materializes timeline data once, then computes coverage for each period.
-    Period boundaries are aligned to calendar grid (full days, weeks, months, years).
+    Period boundaries are aligned to calendar grid (hours, days, weeks, months, years).
 
     Args:
         timeline: Source timeline (fetched once for all periods)
         start: Window start (date → midnight in tz, datetime → as-is,
             int → Unix timestamp)
         end: Window end (exclusive, same interpretation rules)
-        period: "day", "week" (ISO Mon-Sun), "month", "year", or "full"
+        period: "hour", "day", "week" (ISO Mon-Sun), "month", "year", or "full"
             (exact bounds)
         tz: Timezone for date interpretation and period boundaries
+        group_by: Optional cyclic grouping (see total_duration for valid combinations)
 
     Returns:
-        List of (period_start_date, ratio) tuples where ratio is between 0.0 and 1.0.
-        Empty periods return 0.0.
+        Without group_by: List of (period_start_date, ratio) tuples.
+        With group_by: List of (group_key, ratio) tuples sorted by key.
+        Ratio is between 0.0 and 1.0. Empty periods return 0.0.
 
     Example:
         >>> from datetime import date
@@ -388,6 +561,31 @@ def coverage_ratio(
         ... )
         >>> # Returns 30 tuples: [(date(2025,11,1), 0.73), (date(2025,11,2), 0.81), ...]
     """
+    _validate_period_group_by(period, group_by)
+
+    if group_by is not None:
+        # For grouped coverage, we need to sum numerator and denominator
+        # separately, then divide at the end
+        def _agg_tuple(tl, win_start, win_end):
+            span = win_end - win_start
+            total = _total_duration(tl, win_start, win_end)
+            return (total, span)  # (numerator, denominator)
+
+        def _combine_ratios(tuples: list[tuple[int, int]]) -> float:
+            total_num = sum(t[0] for t in tuples)
+            total_denom = sum(t[1] for t in tuples)
+            return total_num / total_denom if total_denom > 0 else 0.0
+
+        return _grouped_agg(
+            timeline,
+            start,
+            end,
+            tz,
+            period,
+            group_by,
+            agg=_agg_tuple,
+            combiner=_combine_ratios,
+        )
 
     def _agg(tl, win_start, win_end):
         span = win_end - win_start
