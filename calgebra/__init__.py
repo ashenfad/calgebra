@@ -4,7 +4,23 @@ from importlib.resources import files
 from .core import Filter, Timeline, flatten, intersection, union
 
 try:
-    from .ical import file_to_timeline, timeline_to_file
+    from .ical import (
+        ICalEvent,
+        calendar_name,
+        categories,
+        description,
+        dtstamp,
+        file_to_timeline,
+        is_all_day,
+        location,
+        recurrence_id,
+        sequence,
+        status,
+        summary,
+        timeline_to_file,
+        transp,
+        uid,
+    )
 except ImportError:
     pass
 from .interval import Interval, pprint
@@ -93,6 +109,20 @@ __all__ = [
     "pprint",
     "docs",
     "Docs",
+    # iCal (available when icalendar is installed)
+    "ICalEvent",
     "file_to_timeline",
     "timeline_to_file",
+    "summary",
+    "description",
+    "uid",
+    "location",
+    "dtstamp",
+    "sequence",
+    "recurrence_id",
+    "is_all_day",
+    "calendar_name",
+    "status",
+    "transp",
+    "categories",
 ]
