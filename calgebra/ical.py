@@ -361,6 +361,7 @@ def file_to_timeline(path: str | Path) -> MemoryTimeline:
     Returns:
         MemoryTimeline populated with events from the file.
         Recurring events are preserved as symbolic RecurringPattern objects.
+        The timeline's metadata includes calendar_name from X-WR-CALNAME.
     """
     _ensure_icalendar_installed()
 
@@ -370,7 +371,9 @@ def file_to_timeline(path: str | Path) -> MemoryTimeline:
     # Extract calendar name from X-WR-CALNAME property
     calendar_name = str(cal.get("X-WR-CALNAME", "")) or None
 
-    timeline = MemoryTimeline()
+    # Create timeline with calendar_name as container metadata
+    metadata = {"calendar_name": calendar_name} if calendar_name else {}
+    timeline = MemoryTimeline(metadata=metadata)
 
     for component in cal.walk("VEVENT"):
         try:
