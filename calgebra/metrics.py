@@ -103,7 +103,7 @@ def _period_windows(
     end_ts: int,
     period: Period,
     tz: str,
-) -> list[tuple[date, int, int]]:
+) -> list[tuple[date | datetime, int, int]]:
     """Generate calendar-aligned period windows.
 
     Args:
@@ -113,11 +113,15 @@ def _period_windows(
         tz: Timezone for calendar alignment
 
     Returns:
-        List of (period_label_date, window_start_ts, window_end_ts) tuples.
+        List of (period_label, window_start_ts, window_end_ts) tuples.
+        For hourly periods, label is datetime; for others, label is date.
         Empty if start_ts >= end_ts.
     """
-    # Use datetime-labeled version and convert to date labels
+    # Use datetime-labeled version
     windows = _period_windows_with_dt(start_ts, end_ts, period, tz)
+    # For hourly periods, keep datetime labels; otherwise convert to date
+    if period == "hour":
+        return [(dt, ws, we) for dt, ws, we in windows]
     return [
         (dt.date() if isinstance(dt, datetime) else dt, ws, we)
         for dt, ws, we in windows

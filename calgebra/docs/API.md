@@ -181,9 +181,10 @@ metric_function(
     timeline: Timeline,
     start: date | datetime | int,
     end: date | datetime | int,
-    period: Literal["day", "week", "month", "year", "full"] = "full",
-    tz: str = "UTC"
-) -> list[tuple[date, ReturnType]]
+    period: Literal["hour", "day", "week", "month", "year", "full"] = "full",
+    tz: str = "UTC",
+    group_by: GroupBy | None = None  # for applicable metrics
+) -> list[tuple[date | datetime | int, ReturnType]]
 ```
 
 **Parameters:**
@@ -191,14 +192,23 @@ metric_function(
 - `start`: Query start (date → midnight in tz, datetime → as-is, int → Unix timestamp)
 - `end`: Query end (exclusive)
 - `period`: Aggregation period (default: `"full"`)
+  - `"hour"` - Individual hours
   - `"day"` - Full calendar days (midnight to midnight)
   - `"week"` - ISO weeks (Monday through Sunday)
   - `"month"` - Calendar months (1st to last day)
   - `"year"` - Calendar years (Jan 1 to Dec 31)
   - `"full"` - Exact query bounds (no calendar snapping)
 - `tz`: Timezone for date interpretation and period boundaries (default: `"UTC"`)
+- `group_by`: Optional cyclic grouping (only for `total_duration`, `count_intervals`, `coverage_ratio`)
 
-**Returns:** List of `(period_start_date, value)` tuples
+**Return types (key depends on parameters):**
+
+| Parameters | Key Type | Example |
+|------------|----------|---------|
+| `period="hour"` | `datetime` | `[(datetime(2025,1,1,9,0), 3600), ...]` |
+| `period="day"`, `"week"`, `"month"`, `"year"`, `"full"` | `date` | `[(date(2025,1,1), 86400), ...]` |
+| `group_by="hour_of_day"` | `int` (0-23) | `[(0, 1800), (1, 0), ..., (23, 900)]` |
+| `group_by="day_of_week"` | `int` (0-6) | `[(0, 28800), ..., (6, 3600)]` |
 
 **Period alignment:** Periods snap to calendar boundaries even if query doesn't. Querying Mon 3pm → Fri 9am with `period="day"` returns 5 full calendar days (Mon 00:00 → Sat 00:00).
 
