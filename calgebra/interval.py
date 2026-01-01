@@ -33,6 +33,13 @@ class Interval:
         """End bound treating None as very positive int for algorithms."""
         return self.end if self.end is not None else POS_INF
 
+    @property
+    def duration(self) -> int | None:
+        """Duration in seconds, or None if interval is unbounded."""
+        if self.start is None or self.end is None:
+            return None
+        return self.end - self.start
+
     @classmethod
     def from_datetimes(
         cls,
