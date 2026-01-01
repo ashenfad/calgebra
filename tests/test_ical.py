@@ -18,6 +18,7 @@ def sample_ics(tmp_path):
     ics_content = b"""BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//test//calgebra//
+X-WR-CALNAME:Test Calendar
 BEGIN:VEVENT
 UID:12345
 DTSTART:20250101T090000Z
@@ -25,18 +26,24 @@ DTEND:20250101T100000Z
 SUMMARY:Test Event
 DESCRIPTION:A test event
 LOCATION:Office
+STATUS:CONFIRMED
+TRANSP:OPAQUE
+CATEGORIES:work,meeting
 END:VEVENT
 BEGIN:VEVENT
 UID:67890
 DTSTART:20250102T090000Z
 RRULE:FREQ=WEEKLY;COUNT=2
 SUMMARY:Recurring Meeting
+STATUS:TENTATIVE
+TRANSP:TRANSPARENT
 END:VEVENT
 END:VCALENDAR"""
 
     p = tmp_path / "test.ics"
     p.write_bytes(ics_content)
     return p
+
 
 def test_file_to_timeline(sample_ics):
     timeline = file_to_timeline(sample_ics)
@@ -58,6 +65,48 @@ def test_file_to_timeline(sample_ics):
     assert isinstance(pattern, RecurringPattern)
     assert pattern.metadata["summary"] == "Recurring Meeting"
     assert pattern.freq == "weekly"
+
+
+def test_calendar_name_extraction(sample_ics):
+    """Test that X-WR-CALNAME is extracted and propagated to events."""
+    timeline = file_to_timeline(sample_ics)
+
+    # Check static event has calendar name
+    event = timeline._static_intervals[0]
+    assert event.calendar_name == "Test Calendar"
+
+    # Check recurring pattern has calendar name in metadata
+    _, pattern = timeline._recurring_patterns[0]
+    assert pattern.metadata["calendar_name"] == "Test Calendar"
+
+
+def test_status_and_transp(sample_ics):
+    """Test that STATUS and TRANSP properties are parsed correctly."""
+    timeline = file_to_timeline(sample_ics)
+
+    # Static event: CONFIRMED, OPAQUE
+    event = timeline._static_intervals[0]
+    assert event.status == "CONFIRMED"
+    assert event.transp == "OPAQUE"
+
+    # Recurring pattern: TENTATIVE, TRANSPARENT
+    _, pattern = timeline._recurring_patterns[0]
+    assert pattern.metadata["status"] == "TENTATIVE"
+    assert pattern.metadata["transp"] == "TRANSPARENT"
+
+
+def test_categories(sample_ics):
+    """Test that CATEGORIES property is parsed as a tuple."""
+    timeline = file_to_timeline(sample_ics)
+
+    # Static event has categories
+    event = timeline._static_intervals[0]
+    assert event.categories == ("work", "meeting")
+
+    # Recurring event has no categories
+    _, pattern = timeline._recurring_patterns[0]
+    assert pattern.metadata["categories"] == ()
+
 
 def test_round_trip(sample_ics, tmp_path):
     # Load
@@ -81,6 +130,7 @@ def test_round_trip(sample_ics, tmp_path):
     assert p1.metadata["summary"] == "Recurring Meeting"
     # assert p1.freq == "weekly" # Case might be normalized
 
+
 def test_timeline_to_file_validation(tmp_path):
     # Should fail for generic timeline
     from calgebra import timeline as make_timeline
@@ -95,4 +145,3 @@ def test_timeline_to_file_validation(tmp_path):
     # Check if file exists and has content
     assert out.exists()
     assert b"BEGIN:VCALENDAR" in out.read_bytes()
-

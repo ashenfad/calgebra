@@ -11,7 +11,7 @@ import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 try:
     import icalendar
@@ -36,6 +36,10 @@ dtstamp: Property[Interval] = field("dtstamp")
 sequence: Property[Interval] = field("sequence")
 recurrence_id: Property[Interval] = field("recurrence_id")
 is_all_day: Property[Interval] = field("is_all_day")
+calendar_name: Property[Interval] = field("calendar_name")
+status: Property[Interval] = field("status")
+transp: Property[Interval] = field("transp")
+categories: Property[Interval] = field("categories")
 
 # Constants
 _UTC = timezone.utc
@@ -61,6 +65,10 @@ class ICalEvent(Interval):
         sequence: Revision sequence number
         recurrence_id: ID for specific instances of a recurring event
         is_all_day: True if event is all-day (derived from DTSTART/DTEND type)
+        calendar_name: Name of the source calendar (from X-WR-CALNAME)
+        status: Event status (TENTATIVE, CONFIRMED, CANCELLED)
+        transp: Time transparency (OPAQUE = busy, TRANSPARENT = free)
+        categories: Tuple of category tags
     """
 
     summary: str | None = None
@@ -71,6 +79,10 @@ class ICalEvent(Interval):
     sequence: int = 0
     recurrence_id: datetime | None = None
     is_all_day: bool = False
+    calendar_name: str | None = None
+    status: Literal["TENTATIVE", "CONFIRMED", "CANCELLED"] | None = None
+    transp: Literal["OPAQUE", "TRANSPARENT"] = "OPAQUE"
+    categories: tuple[str, ...] = ()
 
     def __str__(self) -> str:
         base = super().__str__()
@@ -99,7 +111,7 @@ def _dt_to_timestamp(dt: datetime | date) -> int:
 
 
 def _parse_vevent(
-    component: Event, tz_provider: Any = None
+    component: Event, tz_provider: Any = None, calendar_name: str | None = None
 ) -> Interval | RecurringPattern[ICalEvent]:
     """Parse a VEVENT component into an Interval or RecurringPattern."""
     # Extract basic properties
@@ -112,6 +124,21 @@ def _parse_vevent(
     dtstamp = dtstamp_prop.dt if dtstamp_prop else None
 
     sequence = int(component.get("SEQUENCE", 0))
+
+    # Status and transparency
+    status = str(component.get("STATUS", "")) or None
+    transp = str(component.get("TRANSP", "OPAQUE")) or "OPAQUE"
+
+    # Categories (can be a comma-separated list)
+    categories_prop = component.get("CATEGORIES")
+    if categories_prop:
+        # categories_prop.cats is a list of category strings
+        if hasattr(categories_prop, "cats"):
+            categories = tuple(categories_prop.cats)
+        else:
+            categories = tuple(str(categories_prop).split(","))
+    else:
+        categories = ()
 
     # Times
     dtstart_prop = component.get("DTSTART")
@@ -155,6 +182,10 @@ def _parse_vevent(
         "dtstamp": dtstamp,
         "sequence": sequence,
         "is_all_day": is_all_day,
+        "calendar_name": calendar_name,
+        "status": status,
+        "transp": transp,
+        "categories": categories,
     }
 
     # Common event factory
@@ -336,11 +367,14 @@ def file_to_timeline(path: str | Path) -> MemoryTimeline:
     with open(path, "rb") as f:
         cal = Calendar.from_ical(f.read())
 
+    # Extract calendar name from X-WR-CALNAME property
+    calendar_name = str(cal.get("X-WR-CALNAME", "")) or None
+
     timeline = MemoryTimeline()
 
     for component in cal.walk("VEVENT"):
         try:
-            item = _parse_vevent(component)
+            item = _parse_vevent(component, calendar_name=calendar_name)
             timeline.add(item)
         except Exception as e:
             # We might want to log this or optionally fail
