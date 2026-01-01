@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2025-12-31
+
+### Added
+- **Metrics `group_by` parameter**: Create cyclic histograms from metrics
+  - `total_duration()`, `count_intervals()`, `coverage_ratio()` now accept `group_by` parameter
+  - Valid groupings: `hour_of_day`, `day_of_week`, `day_of_month`, `week_of_year`, `month_of_year`
+  - Example: `total_duration(cal, start, end, period="hour", group_by="hour_of_day")` → hour-of-day histogram
+- **`period="hour"` support**: Metrics now support hourly granularity
+- **`GroupBy` type**: Exported from `calgebra.metrics` for type hints
+
 ## [0.9.1] - 2025-12-31
 
 ### Added
@@ -198,6 +208,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Google Calendar integration via `calgebra.gcsa.Calendar`
 - Comprehensive documentation accessible via `calgebra.docs` dictionary
 
+[0.10.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.10.0
 [0.9.1]: https://github.com/ashenfad/calgebra/releases/tag/v0.9.1
 [0.9.0]: https://github.com/ashenfad/calgebra/releases/tag/v0.9.0
 [0.8.4]: https://github.com/ashenfad/calgebra/releases/tag/v0.8.4
