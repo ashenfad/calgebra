@@ -633,12 +633,20 @@ Extension of `Interval` for iCalendar data.
   - `is_all_day`: Boolean flag
   - `sequence`: Revision number
   - `dtstamp`: Creation timestamp
+  - `calendar_name`: Source calendar name (from `X-WR-CALNAME`)
+  - `status`: Event status (`"TENTATIVE"`, `"CONFIRMED"`, `"CANCELLED"`, or `None`)
+  - `transp`: Time transparency (`"OPAQUE"` = busy, `"TRANSPARENT"` = free; default: `"OPAQUE"`)
+  - `categories`: Tuple of category tags (e.g., `("work", "meeting")`)
 
 **Field Helpers:**
 Pre-defined `Property` objects correspond to the attributes above, allowing clean filtering syntax:
 - `summary`, `description`, `location`, `uid`
-- `is_all_day`: Useful for separating all-day events from timed events.
+- `is_all_day`: Useful for separating all-day events from timed events
 - `dtstamp`, `sequence`, `recurrence_id`
+- `calendar_name`: Filter by source calendar
+- `status`: Filter by event status
+- `transp`: Filter busy vs free time
+- `categories`: Filter by category tags (use with `has_any()` or `has_all()`)
 
 **Example:**
 ```python
