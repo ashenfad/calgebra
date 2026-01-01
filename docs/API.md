@@ -80,7 +80,8 @@ events = timeline(
 - Functional forms of `|` and `&` operators. Accept multiple timelines as arguments.
 
 ## Interval Helpers (`calgebra.interval`)
-- `Interval(start, end)` dataclass with exclusive end bounds `[start, end)`. Duration is `end - start`.
+- `Interval(start, end)` dataclass with exclusive end bounds `[start, end)`.
+- `.duration` property returns `end - start` in seconds, or `None` if unbounded.
 - `Interval.from_datetimes(start, end, **kwargs)` classmethod to create intervals from timezone-aware `datetime` objects.
   - Requires timezone-aware datetimes (raises `ValueError` for naive datetimes)
   - Converts to Unix timestamps automatically
