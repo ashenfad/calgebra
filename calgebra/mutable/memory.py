@@ -68,18 +68,26 @@ class MemoryTimeline(MutableTimeline[Interval]):
     via union when fetching. This preserves symbolic recurrence rules.
 
     Attributes:
+        metadata: Container-level metadata (e.g., calendar_name) applied to new events
         _recurring_patterns: List of recurring pattern timelines
         _static_intervals: List of individual interval objects
     """
 
     def __init__(
-        self, intervals: Iterable[Interval | RecurringPattern[Any]] = ()
+        self,
+        intervals: Iterable[Interval | RecurringPattern[Any]] = (),
+        *,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Initialize an empty or pre-populated memory timeline.
 
         Args:
             intervals: Optional initial intervals or recurring patterns
+            metadata: Container-level metadata to apply to new events (e.g., calendar_name)
         """
+        # Container-level metadata applied to new events
+        self.metadata: dict[str, Any] = metadata or {}
+
         # Store recurring patterns with their unique IDs
         # Format: list of (recurring_event_id, RecurringPattern) tuples
         self._recurring_patterns: list[tuple[str, RecurringPattern[Interval]]] = []
@@ -171,15 +179,18 @@ class MemoryTimeline(MutableTimeline[Interval]):
         Returns:
             List containing single WriteResult
         """
-        # For base Interval class, we can't add extra fields like 'id'
-        # Just store the interval as-is
-        # Subclasses with id field would work with replace()
+        # Merge container metadata with passed metadata
+        # Container metadata fills in for None/missing values only
+        merged = dict(metadata)  # Start with passed metadata
+        for key, value in self.metadata.items():
+            if merged.get(key) is None:
+                merged[key] = value
 
         # Try to update with safe metadata
-        if metadata:
+        if merged:
             # Apply metadata overrides to the interval
             try:
-                interval_with_metadata = replace(interval, **metadata)
+                interval_with_metadata = replace(interval, **merged)
             except TypeError:
                 # If replace fails (e.g. invalid fields), just use the original
                 # but maybe we should warn or error? For now, silent fallback.
@@ -207,8 +218,13 @@ class MemoryTimeline(MutableTimeline[Interval]):
         # Use pattern's object ID as recurring_event_id
         recurring_id = str(id(pattern))
 
-        # Merge metadata with recurring_event_id (if interval class supports it)
-        merged_metadata = {**pattern.metadata, **metadata}
+        # Merge metadata: container defaults fill in for None/missing values
+        # Then pattern metadata, then passed metadata (each can override previous)
+        merged_metadata = dict(pattern.metadata)
+        for key, value in self.metadata.items():
+            if merged_metadata.get(key) is None:
+                merged_metadata[key] = value
+        merged_metadata.update(metadata)
 
         # Check if interval_class has recurring_event_id field
         # Only add it if the class supports it (not base Interval)
