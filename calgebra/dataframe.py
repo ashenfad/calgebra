@@ -33,8 +33,8 @@ _TYPE_LEADING: dict[str, list[str]] = {
 
 # Type-specific trailing columns (after core columns)
 _TYPE_TRAILING: dict[str, list[str]] = {
-    "ICalEvent": ["summary", "location"],
-    "Event": ["summary", "description"],  # gcsa.Event
+    "ICalEvent": ["summary"],
+    "Event": ["summary"],  # gcsa.Event
     "Interval": [],
 }
 
@@ -190,14 +190,10 @@ def to_dataframe(
     if include is not None:
         columns = list(include)
     else:
-        # Leading + Core + Trailing + remaining metadata
+        # Leading + Core + Trailing (no auto-metadata)
         leading = _TYPE_LEADING.get(type_name, [])
         trailing = _TYPE_TRAILING.get(type_name, [])
-        metadata_cols = _get_metadata_fields(sample)
-        # Filter metadata to exclude already-included
-        seen = set(leading) | set(_CORE_COLUMNS) | set(trailing)
-        remaining = [c for c in metadata_cols if c not in seen]
-        columns = leading + _CORE_COLUMNS + trailing + remaining
+        columns = leading + _CORE_COLUMNS + trailing
 
     if exclude:
         columns = [c for c in columns if c not in exclude]
