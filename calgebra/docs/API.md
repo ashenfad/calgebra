@@ -91,6 +91,47 @@ events = timeline(
 - `pprint(intervals, tz="UTC", fmt=...)` helper to print a formatted list of intervals to stdout.
 - Type vars `IvlIn`, `IvlOut` for generic timelines/filters.
 
+## DataFrame Helpers (`calgebra.dataframe`)
+
+Convert intervals to pandas DataFrames with sensible defaults. Requires `pip install calgebra[pandas]`.
+
+### `to_dataframe(intervals, tz="UTC", *, include=None, exclude=None, raw=False)`
+
+Convert an iterable of intervals to a DataFrame with human-friendly formatting.
+
+**Parameters:**
+- `intervals`: Iterable of `Interval` or subclass instances
+- `tz`: Timezone for datetime formatting (default: `"UTC"`)
+- `include`: Explicit columns to include (overrides defaults)
+- `exclude`: Columns to drop from defaults
+- `raw`: If `True`, output raw `datetime` objects instead of formatted strings
+
+**Column Order:**
+1. Core columns: `day`, `time`, `duration`
+2. Type-specific: `calendar_name`, `summary`, `location` (for ICalEvent)
+3. Remaining metadata in definition order
+
+> [!NOTE]
+> **Unioned Timelines:** When converting a timeline created from the union of multiple calendars, `to_dataframe` preserves the source calendar identity. If the events have a `calendar_name` or `calendar_summary` field (like `ICalEvent` or `gcsa.Event`), this column will be included and prioritized, making it easy to distinguish events from different sources in the combined DataFrame.
+
+**Example:**
+```python
+from calgebra import to_dataframe, at_tz, file_to_timeline
+
+cal = file_to_timeline("calendar.ics")
+at = at_tz("US/Pacific")
+events = list(cal[at("2025-01-01"):at("2025-02-01")])
+
+# Auto-detects ICalEvent → sensible columns
+df = to_dataframe(events, tz="US/Pacific")
+
+# Cleaner output with explicit columns
+df = to_dataframe(events, include=["day", "time", "duration", "summary"])
+
+# Remove noisy metadata
+df = to_dataframe(events, exclude=["uid", "dtstamp", "sequence"])
+```
+
 ## Properties (`calgebra.properties`)
 - Base `Property` class (`apply(event)`).
 - Duration helpers (exclusive end semantics: `end - start`):
@@ -705,7 +746,7 @@ Pre-defined `Property` objects correspond to the attributes above, allowing clea
 
 **Example:**
 ```python
-from calgebra.ical import file_to_timeline, timeline_to_file, summary, is_all_day
+from calgebra import file_to_timeline, timeline_to_file, summary, is_all_day
 
 # Load
 timeline = file_to_timeline("my_calendar.ics")

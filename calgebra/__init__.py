@@ -23,6 +23,11 @@ try:
     )
 except ImportError:
     pass
+
+try:
+    from .dataframe import to_dataframe
+except ImportError:
+    pass
 from .interval import Interval, pprint
 from .metrics import (
     count_intervals,
@@ -125,4 +130,6 @@ __all__ = [
     "status",
     "transp",
     "categories",
+    # DataFrame (available when pandas is installed)
+    "to_dataframe",
 ]
