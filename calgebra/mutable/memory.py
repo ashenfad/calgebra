@@ -83,7 +83,7 @@ class MemoryTimeline(MutableTimeline[Interval]):
 
         Args:
             intervals: Optional initial intervals or recurring patterns
-            metadata: Container-level metadata to apply to new events (e.g., calendar_name)
+            metadata: Container-level metadata applied to new events
         """
         # Container-level metadata applied to new events
         self.metadata: dict[str, Any] = metadata or {}
