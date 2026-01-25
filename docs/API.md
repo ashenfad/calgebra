@@ -52,6 +52,7 @@ events = timeline(
   - Integer seconds (Unix timestamps): `timeline[1735689600:1767225600]` (exclusive end)
   - Timezone-aware datetime: `timeline[datetime(2025, 1, 1, tzinfo=timezone.utc):...]`
   - Naive datetimes are rejected with TypeError
+  - **Tip**: Use `at_tz()` for ergonomic slicing — it accepts `date` objects, date strings, and naive datetimes: `at = at_tz("US/Pacific"); timeline[at(date(2025,1,1)):at(date(2025,2,1))]`
   - **Automatic clipping**: Intervals are automatically clipped to query bounds. Any interval extending beyond `[start:end)` will be trimmed to fit. This ensures accurate aggregations and consistent set operations.
   - **Reverse iteration**: Use step `-1` to iterate in reverse chronological order:
     - `timeline[start:end:-1]` — events in `[start, end)`, newest first
