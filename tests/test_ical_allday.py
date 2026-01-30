@@ -1,4 +1,3 @@
-
 from calgebra.ical import file_to_timeline, timeline_to_file
 
 
@@ -44,4 +43,3 @@ END:VCALENDAR"""
 
     # Check duration (should be 1 day = 86400s)
     assert ev2.end - ev2.start == 86400
-

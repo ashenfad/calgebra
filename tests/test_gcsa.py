@@ -806,7 +806,6 @@ def test_add_recurring_rejects_non_event_pattern() -> None:
     assert gcsa_event.summary == "Daily Pattern"
 
 
-
 def test_remove_interval_deletes_standalone_event() -> None:
     """Test that _remove_interval deletes a standalone event."""
     from calgebra.gcsa import Event

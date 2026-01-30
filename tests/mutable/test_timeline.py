@@ -636,9 +636,8 @@ def test_max_duration_can_use_flatten() -> None:
     )
     overlap = DummyTimeline(Interval(start=2, end=6))
 
-    assert (
-        max_duration(flatten(timeline | overlap), 0, 10)[0][1]
-        == Interval(start=0, end=9)
+    assert max_duration(flatten(timeline | overlap), 0, 10)[0][1] == Interval(
+        start=0, end=9
     )
 
 
@@ -649,9 +648,8 @@ def test_min_duration_can_use_flatten() -> None:
     )
     overlap = DummyTimeline(Interval(start=2, end=6))
 
-    assert (
-        min_duration(flatten(timeline | overlap), 0, 10)[0][1]
-        == Interval(start=0, end=9)
+    assert min_duration(flatten(timeline | overlap), 0, 10)[0][1] == Interval(
+        start=0, end=9
     )
 
 

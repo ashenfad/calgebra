@@ -19,11 +19,7 @@ def test_preserve_weekly_day_pattern():
     mem = MemoryTimeline()
 
     # Create pattern: Every Tuesday and Thursday
-    pattern = RecurringPattern(
-        freq="weekly",
-        day=["tuesday", "thursday"],
-        tz="UTC"
-    )
+    pattern = RecurringPattern(freq="weekly", day=["tuesday", "thursday"], tz="UTC")
 
     # Add to timeline
     results = mem.add(pattern)
@@ -54,7 +50,7 @@ def test_preserve_monthly_first_monday():
         freq="monthly",
         day="monday",
         week=1,  # First week
-        tz="UTC"
+        tz="UTC",
     )
 
     results = mem.add(pattern)
@@ -88,7 +84,7 @@ def test_preserve_monthly_last_friday():
         freq="monthly",
         day="friday",
         week=-1,  # Last week
-        tz="UTC"
+        tz="UTC",
     )
 
     results = mem.add(pattern)
@@ -116,11 +112,7 @@ def test_preserve_day_of_month():
     mem = MemoryTimeline()
 
     # Create pattern: 1st and 15th of each month
-    pattern = RecurringPattern(
-        freq="monthly",
-        day_of_month=[1, 15],
-        tz="UTC"
-    )
+    pattern = RecurringPattern(freq="monthly", day_of_month=[1, 15], tz="UTC")
 
     results = mem.add(pattern)
     assert results[0].success
@@ -149,7 +141,7 @@ def test_preserve_yearly_month():
         freq="yearly",
         month=6,  # June
         day_of_month=15,
-        tz="UTC"
+        tz="UTC",
     )
 
     results = mem.add(pattern)
@@ -181,7 +173,7 @@ def test_preserve_start_time():
         day="monday",
         start=9 * HOUR + 30 * MINUTE,  # 9:30 AM
         duration=HOUR,  # 1 hour duration
-        tz="UTC"
+        tz="UTC",
     )
 
     results = mem.add(pattern)
@@ -220,10 +212,7 @@ def test_preserve_exdates():
 
     # Create pattern: Every Monday with Event class that supports recurring_event_id
     pattern = RecurringPattern(
-        freq="weekly",
-        day="monday",
-        interval_class=Event,
-        tz="UTC"
+        freq="weekly", day="monday", interval_class=Event, tz="UTC"
     )
 
     # Add pattern
@@ -267,7 +256,7 @@ def test_preserve_interval_parameter():
         freq="weekly",
         day="tuesday",
         interval=2,  # Every 2 weeks
-        tz="UTC"
+        tz="UTC",
     )
 
     results = mem.add(pattern)
@@ -304,7 +293,7 @@ def test_preserve_quarterly_pattern():
         freq="monthly",
         day_of_month=1,
         interval=3,  # Every 3 months
-        tz="UTC"
+        tz="UTC",
     )
 
     results = mem.add(pattern)
@@ -341,7 +330,7 @@ def test_preserve_complex_pattern():
         day_of_month=None,  # Use day of week instead
         month=[3, 6, 9, 12],  # Q1, Q2, Q3, Q4 months
         interval=1,
-        tz="UTC"
+        tz="UTC",
     )
 
     # Actually, monthly with month filter requires yearly freq
@@ -351,7 +340,7 @@ def test_preserve_complex_pattern():
         month=[3, 6, 9, 12],  # March, June, September, December
         day="tuesday",
         week=2,  # Second Tuesday
-        tz="UTC"
+        tz="UTC",
     )
 
     results = mem.add(pattern)
@@ -385,7 +374,7 @@ def test_pattern_equivalence_before_and_after_add():
         day="wednesday",
         start=14 * HOUR,  # 2 PM
         duration=2 * HOUR,  # 2 hours
-        tz="UTC"
+        tz="UTC",
     )
 
     # Generate intervals from original
@@ -419,7 +408,7 @@ def test_preserve_timezone():
     pattern = RecurringPattern(
         freq="daily",
         start=9 * HOUR,  # 9 AM
-        tz="US/Pacific"
+        tz="US/Pacific",
     )
 
     results = mem.add(pattern)
@@ -454,4 +443,3 @@ def test_preserve_timezone():
             assert dt_pacific.minute == 0, (
                 f"Expected 0 minutes, got {dt_pacific.minute}"
             )
-

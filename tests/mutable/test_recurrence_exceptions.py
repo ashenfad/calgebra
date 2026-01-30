@@ -20,10 +20,7 @@ def test_remove_single_recurring_instance():
 
     # Add weekly pattern
     pattern = RecurringPattern(
-        freq="weekly",
-        day="monday",
-        interval_class=Event,
-        summary="Weekly Sync"
+        freq="weekly", day="monday", interval_class=Event, summary="Weekly Sync"
     )
     mem.add(pattern)
 
@@ -55,27 +52,23 @@ def test_remove_instance_persists_exdate():
     """Test that exdates persist across fetches."""
     mem = MemoryTimeline()
 
-    pattern = RecurringPattern(
-        freq="daily",
-        interval_class=Event,
-        summary="Daily"
-    )
+    pattern = RecurringPattern(freq="daily", interval_class=Event, summary="Daily")
     mem.add(pattern)
 
     # Fetch today's instance
     now = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    events = list(mem[now:now+timedelta(seconds=100)])
+    events = list(mem[now : now + timedelta(seconds=100)])
     instance = events[0]
 
     # Remove it
     mem.remove(instance)
 
     # Fetch again
-    events_after = list(mem[now:now+timedelta(seconds=100)])
+    events_after = list(mem[now : now + timedelta(seconds=100)])
     assert len(events_after) == 0
 
     # Fetch wider range
-    events_wider = list(mem[now:now+timedelta(seconds=86400*2)])
+    events_wider = list(mem[now : now + timedelta(seconds=86400 * 2)])
     assert len(events_wider) == 1  # Next day should be there
 
 
@@ -85,10 +78,7 @@ def test_remove_instance_without_id_fails_gracefully():
 
     # Create an event that looks like it belongs to a series but doesn't
     fake_event = Event(
-        start=100,
-        end=200,
-        summary="Fake",
-        recurring_event_id="nonexistent"
+        start=100, end=200, summary="Fake", recurring_event_id="nonexistent"
     )
 
     # Try to remove

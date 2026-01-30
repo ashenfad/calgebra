@@ -11,6 +11,7 @@ from calgebra.recurrence import RecurringPattern
 @dataclass(frozen=True, kw_only=True)
 class CalendarEvent(Interval):
     """Custom interval class with extra metadata."""
+
     summary: str
     location: str | None = None
     attendees: tuple[str, ...] = ()
@@ -26,7 +27,7 @@ def test_single_event_metadata_persistence():
         end=2000,
         summary="Team Meeting",
         location="Room A",
-        attendees=("alice@example.com", "bob@example.com")
+        attendees=("alice@example.com", "bob@example.com"),
     )
 
     mem.add(event)
@@ -53,7 +54,7 @@ def test_recurring_event_metadata_persistence():
         interval_class=CalendarEvent,
         summary="Weekly Standup",
         location="Zoom",
-        attendees=("team@example.com",)
+        attendees=("team@example.com",),
     )
 
     mem.add(pattern)
@@ -102,12 +103,10 @@ def test_remove_recurring_series_with_metadata():
 
     # Add two overlapping recurring series
     p1 = RecurringPattern(
-        freq="weekly", day="monday",
-        interval_class=CalendarEvent, summary="Series 1"
+        freq="weekly", day="monday", interval_class=CalendarEvent, summary="Series 1"
     )
     p2 = RecurringPattern(
-        freq="weekly", day="monday",
-        interval_class=CalendarEvent, summary="Series 2"
+        freq="weekly", day="monday", interval_class=CalendarEvent, summary="Series 2"
     )
 
     mem.add(p1)

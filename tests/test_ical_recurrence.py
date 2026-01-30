@@ -1,4 +1,3 @@
-
 from calgebra.ical import file_to_timeline, timeline_to_file
 
 
@@ -28,10 +27,10 @@ END:VCALENDAR"""
     assert pattern.freq == "monthly"
     assert pattern.week is None
     # pattern.day should be strings now (passed from ical)
-    assert pattern.day == ['1MO']
+    assert pattern.day == ["1MO"]
 
     # Check internal parsing
-    wd = pattern.rrule_kwargs['byweekday'][0]
+    wd = pattern.rrule_kwargs["byweekday"][0]
     assert wd.weekday == MO.weekday
     assert wd.n == 1
 
@@ -49,4 +48,3 @@ END:VCALENDAR"""
     # OR it might be reconstructed. RecurringPattern.to_rrule_string()
     # uses dateutil logic which outputs "BYDAY=1MO".
     assert "BYDAY=1MO" in content
-

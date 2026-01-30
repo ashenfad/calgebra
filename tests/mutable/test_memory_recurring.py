@@ -45,11 +45,7 @@ def test_add_recurring_pattern_metadata_override():
     mem = MemoryTimeline()
 
     # Create pattern with metadata
-    pattern = RecurringPattern(
-        freq="weekly",
-        day="monday",
-        interval_class=Event
-    )
+    pattern = RecurringPattern(freq="weekly", day="monday", interval_class=Event)
 
     # Add with metadata override
     results = mem.add(pattern, summary="Overridden")

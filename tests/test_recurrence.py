@@ -431,7 +431,9 @@ def test_recurring_weekly_with_multi_day_duration():
     for interval in results[:4]:
         assert interval.start is not None and interval.end is not None
         duration = interval.end - interval.start
-        assert duration == 3 * 86400, f"Expected 3 days, got {duration/86400:.2f} days"
+        assert duration == 3 * 86400, (
+            f"Expected 3 days, got {duration / 86400:.2f} days"
+        )
 
     # Last event (Jan 31) extends beyond query range and gets clamped
     # Just verify it starts on Jan 31
@@ -508,7 +510,9 @@ def test_recurring_raw_lookback_captures_all_overlaps():
 
     # Create raw timeline (bypasses the flatten in recurring())
     raw = RecurringPattern(
-        freq="daily", duration=4 * DAY, tz="UTC"  # 4-day duration on daily events
+        freq="daily",
+        duration=4 * DAY,
+        tz="UTC",  # 4-day duration on daily events
     )
 
     # Query starts on Jan 10
@@ -526,15 +530,15 @@ def test_recurring_raw_lookback_captures_all_overlaps():
     event_starts = {r.start for r in results}
 
     # Verify we captured the previous overlapping events
-    assert (
-        jan_7 in event_starts
-    ), "Should include Jan 7 (extends to Jan 11, overlaps query)"
-    assert (
-        jan_8 in event_starts
-    ), "Should include Jan 8 (extends to Jan 12, overlaps query)"
-    assert (
-        jan_9 in event_starts
-    ), "Should include Jan 9 (extends to Jan 13, overlaps query)"
+    assert jan_7 in event_starts, (
+        "Should include Jan 7 (extends to Jan 11, overlaps query)"
+    )
+    assert jan_8 in event_starts, (
+        "Should include Jan 8 (extends to Jan 12, overlaps query)"
+    )
+    assert jan_9 in event_starts, (
+        "Should include Jan 9 (extends to Jan 13, overlaps query)"
+    )
 
     # Should have at least 8 events (Jan 7-14)
     # Jan 15 starts exactly at query_end, so it is strictly excluded

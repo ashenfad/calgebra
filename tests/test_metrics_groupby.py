@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 
 from calgebra import Interval, timeline
-from calgebra.metrics import coverage_ratio, count_intervals, GroupBy, total_duration
+from calgebra.metrics import count_intervals, coverage_ratio, total_duration
 
 
 class TestGroupByValidation:
@@ -45,8 +45,12 @@ class TestTotalDurationGroupBy:
             Interval(start=1735808400, end=1735812000),  # 9am-10am day 2
         )
         result = total_duration(
-            t, date(2025, 1, 1), date(2025, 1, 3),
-            period="hour", group_by="hour_of_day", tz="UTC"
+            t,
+            date(2025, 1, 1),
+            date(2025, 1, 3),
+            period="hour",
+            group_by="hour_of_day",
+            tz="UTC",
         )
         result_dict = dict(result)
         # 2 hours at 9am (2 days × 1 hour)
@@ -60,8 +64,12 @@ class TestTotalDurationGroupBy:
             Interval(start=1736294400, end=1736298000),  # Wed Jan 8 00:00-01:00
         )
         result = total_duration(
-            t, date(2025, 1, 1), date(2025, 1, 15),
-            period="day", group_by="day_of_week", tz="UTC"
+            t,
+            date(2025, 1, 1),
+            date(2025, 1, 15),
+            period="day",
+            group_by="day_of_week",
+            tz="UTC",
         )
         result_dict = dict(result)
         # Wednesday = weekday 2, should have 2 hours total
@@ -71,8 +79,12 @@ class TestTotalDurationGroupBy:
         """All hour buckets should appear, even empty ones with zero value."""
         t = timeline(Interval(start=1735722000, end=1735725600))  # 9am-10am only
         result = total_duration(
-            t, date(2025, 1, 1), date(2025, 1, 2),
-            period="hour", group_by="hour_of_day", tz="UTC"
+            t,
+            date(2025, 1, 1),
+            date(2025, 1, 2),
+            period="hour",
+            group_by="hour_of_day",
+            tz="UTC",
         )
         result_dict = dict(result)
         # All 24 hours should be present
@@ -95,8 +107,12 @@ class TestCountIntervalsGroupBy:
             Interval(start=1735725600, end=1735725700),  # 10am event day 1
         )
         result = count_intervals(
-            t, date(2025, 1, 1), date(2025, 1, 3),
-            period="hour", group_by="hour_of_day", tz="UTC"
+            t,
+            date(2025, 1, 1),
+            date(2025, 1, 3),
+            period="hour",
+            group_by="hour_of_day",
+            tz="UTC",
         )
         result_dict = dict(result)
         assert result_dict.get(9) == 2  # Two 9am events
@@ -114,8 +130,12 @@ class TestCoverageRatioGroupBy:
             Interval(start=1735808400, end=1735810200),  # 9am-9:30am (50%) day 2
         )
         result = coverage_ratio(
-            t, date(2025, 1, 1), date(2025, 1, 3),
-            period="hour", group_by="hour_of_day", tz="UTC"
+            t,
+            date(2025, 1, 1),
+            date(2025, 1, 3),
+            period="hour",
+            group_by="hour_of_day",
+            tz="UTC",
         )
         result_dict = dict(result)
         # 9am bucket: (3600 + 1800) / (3600 + 3600) = 5400/7200 = 0.75
@@ -133,8 +153,12 @@ class TestGroupByDayOfMonth:
             Interval(start=1738368000, end=1738371600),  # Feb 1 00:00-01:00
         )
         result = total_duration(
-            t, date(2025, 1, 1), date(2025, 2, 15),
-            period="day", group_by="day_of_month", tz="UTC"
+            t,
+            date(2025, 1, 1),
+            date(2025, 2, 15),
+            period="day",
+            group_by="day_of_month",
+            tz="UTC",
         )
         result_dict = dict(result)
         assert result_dict.get(1) == 7200  # 2 hours on day 1

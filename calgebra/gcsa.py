@@ -683,9 +683,7 @@ class Calendar(MutableTimeline[Event]):
 
     @override
     def __str__(self) -> str:
-        return (
-            f"Calendar(id='{self.calendar_id}', " f"summary='{self.calendar_summary}')"
-        )
+        return f"Calendar(id='{self.calendar_id}', summary='{self.calendar_summary}')"
 
     @override
     def fetch(
@@ -701,14 +699,12 @@ class Calendar(MutableTimeline[Event]):
         # Both calgebra and Google Calendar now use exclusive end bounds
         end_dt = _timestamp_to_datetime(end) if end is not None else None
 
-        events_iterable = (
-            self.calendar.get_events(  # pyright: ignore[reportUnknownMemberType]
-                time_min=start_dt,
-                time_max=end_dt,
-                single_events=True,
-                order_by="startTime",
-                calendar_id=self.calendar_id,
-            )
+        events_iterable = self.calendar.get_events(  # pyright: ignore[reportUnknownMemberType]
+            time_min=start_dt,
+            time_max=end_dt,
+            single_events=True,
+            order_by="startTime",
+            calendar_id=self.calendar_id,
         )
 
         for e in events_iterable:
@@ -735,7 +731,9 @@ class Calendar(MutableTimeline[Event]):
                 zone_for_timestamp = (
                     self._calendar_timezone
                     if self._calendar_timezone is not None
-                    else event_zone if e.timezone else ZoneInfo(_UTC_TIMEZONE)
+                    else event_zone
+                    if e.timezone
+                    else ZoneInfo(_UTC_TIMEZONE)
                 )
             else:
                 zone_for_timestamp = event_zone
