@@ -159,10 +159,10 @@ class CachedTimeline(Timeline[IvlOut]):
             return
 
         # Find intervals ending at point (left side)
-        left = [ivl for ivl in self._overlapping_sink(point - 1) if ivl.end == point]
+        left = [ivl for ivl in self._sink.overlapping(point - 1) if ivl.end == point]
 
         # Find intervals starting at point (right side)
-        right = [ivl for ivl in self._overlapping_sink(point) if ivl.start == point]
+        right = [ivl for ivl in self._sink.overlapping(point) if ivl.start == point]
 
         if not left or not right:
             return
@@ -193,11 +193,6 @@ class CachedTimeline(Timeline[IvlOut]):
                 f"Expected: {self._key_fields}\n"
                 f"Hint: cached(..., key='your_id_field')"
             ) from e
-
-    def _overlapping_sink(self, point: int) -> list[IvlOut]:
-        """Find intervals in sink overlapping a point, unclipped."""
-        # MemoryTimeline.fetch() returns unclipped intervals that overlap the range
-        return list(self._sink.fetch(point, point + 1))
 
     def _fetch_sink(
         self, start: int, end: int, reverse: bool = False
