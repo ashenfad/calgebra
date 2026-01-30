@@ -69,10 +69,14 @@ pytest --cov=calgebra tests/
 
 ### Code Style
 
-We use `ruff` for linting and `black` for formatting:
+We use `ruff` for linting and formatting:
 
 ```bash
+# Install pre-commit hooks (recommended)
+pre-commit install
+
+# Or run manually
 ruff check calgebra/
-black calgebra/
+ruff format calgebra/
 ```
 
