@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.5] - 2026-01-30
+
+### Added
+- **`cached()` wrapper**: TTL-based caching for slow upstream timelines (e.g., Google Calendar)
+  - Partial cache hits: only fetches uncached portions of a query range
+  - Automatic interval deduplication at cache segment boundaries
+  - TTL-based eviction with interval fracturing at expiry boundaries
+- **`Timeline.overlapping(point)`**: Find all intervals containing a specific point, returning full unclipped intervals
+- **Pre-commit hooks**: Added `.pre-commit-config.yaml` with ruff linting and formatting
+
+### Changed
+- **Switched to ruff for formatting**: Replaced black with ruff format in CI and dev tooling
+
 ## [0.10.4] - 2026-01-25
 
 ### Changed
@@ -233,6 +246,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Google Calendar integration via `calgebra.gcsa.Calendar`
 - Comprehensive documentation accessible via `calgebra.docs` dictionary
 
+[0.10.5]: https://github.com/ashenfad/calgebra/releases/tag/v0.10.5
+[0.10.4]: https://github.com/ashenfad/calgebra/releases/tag/v0.10.4
 [0.10.3]: https://github.com/ashenfad/calgebra/releases/tag/v0.10.3
 [0.10.2]: https://github.com/ashenfad/calgebra/releases/tag/v0.10.2
 [0.10.1]: https://github.com/ashenfad/calgebra/releases/tag/v0.10.1
