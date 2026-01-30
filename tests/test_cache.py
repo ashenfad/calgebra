@@ -265,7 +265,6 @@ class TestCachedTimelineTTL:
 
         # Cache first segment
         list(cached_tl[100:300])
-        initial_count = tracked.fetch_count
 
         # Wait a bit, cache second segment
         time.sleep(0.1)
@@ -406,7 +405,7 @@ class TestCachedTimelineMask:
 
     def test_mask_timeline_no_key_required(self):
         """Mask timelines should not require a key field."""
-        from calgebra import time_of_day, HOUR
+        from calgebra import HOUR, time_of_day
 
         work_hours = time_of_day(start=9 * HOUR, duration=8 * HOUR, tz="UTC")
         cached_tl = cached(work_hours, ttl=60)
@@ -420,7 +419,7 @@ class TestCachedTimelineMask:
 
     def test_mask_timeline_caches_correctly(self):
         """Mask timelines should cache and serve from cache."""
-        from calgebra import time_of_day, HOUR
+        from calgebra import HOUR, time_of_day
 
         work_hours = time_of_day(start=9 * HOUR, duration=8 * HOUR, tz="UTC")
 
@@ -599,8 +598,12 @@ class TestCachedTimelineICalLike:
     def test_ical_style_caching_with_uid(self):
         """iCal-style events should cache and stitch using uid."""
         source = timeline(
-            self.ICalLikeEvent(start=100, end=400, uid="event-001", summary="Long Meeting"),
-            self.ICalLikeEvent(start=500, end=600, uid="event-002", summary="Short Meeting"),
+            self.ICalLikeEvent(
+                start=100, end=400, uid="event-001", summary="Long Meeting"
+            ),
+            self.ICalLikeEvent(
+                start=500, end=600, uid="event-002", summary="Short Meeting"
+            ),
         )
         cached_tl = cached(source, ttl=60, key="uid")
 
