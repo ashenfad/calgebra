@@ -36,5 +36,5 @@ jobs:
 
     - name: Check formatting
       run: |
-        black --check calgebra/
+        ruff format --check calgebra/
 
