@@ -492,4 +492,3 @@ def test_gcsa_calendar_reverse_with_mock():
     assert len(reverse) == 2
     assert reverse[0].summary == "Second Event"
     assert reverse[1].summary == "First Event"
-

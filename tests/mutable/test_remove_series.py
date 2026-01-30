@@ -11,6 +11,7 @@ from calgebra.recurrence import RecurringPattern
 @dataclass(frozen=True, kw_only=True)
 class Event(Interval):
     """Event with recurring_event_id support."""
+
     summary: str = ""
     recurring_event_id: str | None = None
 
@@ -21,10 +22,7 @@ def test_remove_series_with_recurring_event_id():
 
     # Add a recurring pattern with Event class
     mondays = RecurringPattern(
-        freq="weekly",
-        day="monday",
-        interval_class=Event,
-        summary="Weekly Meeting"
+        freq="weekly", day="monday", interval_class=Event, summary="Weekly Meeting"
     )
     results = mem.add(mondays)
     assert results[0].success
@@ -58,10 +56,7 @@ def test_remove_series_not_found():
 
     # Create interval with fake recurring_event_id
     fake_event = Event(
-        start=100,
-        end=200,
-        summary="Fake",
-        recurring_event_id="nonexistent"
+        start=100, end=200, summary="Fake", recurring_event_id="nonexistent"
     )
 
     # Try to remove

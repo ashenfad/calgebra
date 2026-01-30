@@ -78,8 +78,7 @@ class MutableTimeline(Timeline[IvlOut], Generic[IvlOut]):
                 return self._add_recurring(item, metadata)
             case _ if isinstance(item, Timeline):
                 raise ValueError(
-                    "Cannot add Timeline directly (only RecurringPattern is "
-                    "supported)."
+                    "Cannot add Timeline directly (only RecurringPattern is supported)."
                 )
             case _:
                 return self._add_many(item, metadata)

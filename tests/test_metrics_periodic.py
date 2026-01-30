@@ -123,9 +123,7 @@ class TestPeriodDay:
         """Intervals are clipped to day boundaries."""
         # Interval spans midnight Nov 1->Nov 2, 2025
         # Nov 1 22:00 UTC -> Nov 2 02:00 UTC
-        t = timeline(
-            Interval(start=1762034400, end=1762048800)
-        )
+        t = timeline(Interval(start=1762034400, end=1762048800))
         result = total_duration(
             t,
             start=date(2025, 11, 1),

@@ -1,4 +1,3 @@
-
 from dateutil.rrule import MO, TU
 
 from calgebra.ical import file_to_timeline
@@ -33,7 +32,7 @@ END:VCALENDAR"""
 
     # Verify exact structure
     # Verify exact structure in rrule_kwargs
-    byweekday = pattern.rrule_kwargs['byweekday']
+    byweekday = pattern.rrule_kwargs["byweekday"]
 
     # Order might vary depending on parsing, but set should match
     days = {(d.weekday, d.n) for d in byweekday}

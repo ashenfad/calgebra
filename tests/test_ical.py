@@ -1,5 +1,3 @@
-
-
 import pytest
 
 # Skip if icalendar not installed

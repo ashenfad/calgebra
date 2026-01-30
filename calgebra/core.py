@@ -12,7 +12,6 @@ from calgebra.interval import NEG_INF, POS_INF, Interval, IvlIn, IvlOut
 
 
 class Timeline(ABC, Generic[IvlOut]):
-
     @abstractmethod
     def fetch(
         self, start: int | None, end: int | None, *, reverse: bool = False
@@ -160,7 +159,6 @@ class Timeline(ABC, Generic[IvlOut]):
 
 
 class Filter(ABC, Generic[IvlIn]):
-
     @abstractmethod
     def apply(self, event: IvlIn) -> bool:
         pass

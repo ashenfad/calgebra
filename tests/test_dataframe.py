@@ -1,7 +1,5 @@
 """Tests for to_dataframe() helper."""
 
-import pytest
-
 from calgebra import Interval, to_dataframe
 from calgebra.ical import ICalEvent
 
@@ -50,9 +48,7 @@ class TestToDataframe:
 
     def test_include_overrides_defaults(self):
         """include parameter overrides default columns."""
-        events = [
-            ICalEvent(start=0, end=3600, summary="Test", calendar_name="Cal")
-        ]
+        events = [ICalEvent(start=0, end=3600, summary="Test", calendar_name="Cal")]
         df = to_dataframe(events, include=["summary", "duration"])
 
         assert list(df.columns) == ["summary", "duration"]

@@ -1,4 +1,3 @@
-
 from datetime import datetime, timezone
 
 from dateutil.rrule import SU
@@ -9,23 +8,17 @@ from calgebra.recurrence import RecurringPattern
 
 UTC = timezone.utc
 
+
 def test_bysetpos_last_weekday():
     """Test using BYSETPOS to select the last weekday of the month."""
     # Pattern: Last weekday (Mon-Fri) of the month
     # RFC: FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1
-    pattern = recurring(
-        freq="monthly",
-        day=["MO", "TU", "WE", "TH", "FR"],
-        tz="UTC"
-    )
+    pattern = recurring(freq="monthly", day=["MO", "TU", "WE", "TH", "FR"], tz="UTC")
     # Manually inject advanced kwargs since recurring() helper doesn't expose them yet
     # but RecurringPattern supports them.
     # We can also instantiate RecurringPattern directly.
     pattern = RecurringPattern(
-        freq="monthly",
-        day=["MO", "TU", "WE", "TH", "FR"],
-        bysetpos=-1,
-        tz="UTC"
+        freq="monthly", day=["MO", "TU", "WE", "TH", "FR"], bysetpos=-1, tz="UTC"
     )
 
     rrule_str = pattern.to_rrule_string()
@@ -34,10 +27,12 @@ def test_bysetpos_last_weekday():
     assert "BYDAY=MO,TU,WE,TH,FR" in rrule_str
 
     # Verify logic (Jan 2025: Last weekday is Fri 31st)
-    occurrences = list(pattern.fetch(
-        start=int(datetime(2025, 1, 1, tzinfo=UTC).timestamp()),
-        end=int(datetime(2025, 2, 1, tzinfo=UTC).timestamp())
-    ))
+    occurrences = list(
+        pattern.fetch(
+            start=int(datetime(2025, 1, 1, tzinfo=UTC).timestamp()),
+            end=int(datetime(2025, 2, 1, tzinfo=UTC).timestamp()),
+        )
+    )
 
     assert len(occurrences) == 1
     dt = datetime.fromtimestamp(occurrences[0].start, tz=UTC)
@@ -49,15 +44,17 @@ def test_byyearday():
     pattern = RecurringPattern(
         freq="yearly",
         byyearday=[1, 100],  # 1st and 100th day of year
-        tz="UTC"
+        tz="UTC",
     )
     rrule_str = pattern.to_rrule_string()
     assert "BYYEARDAY=1,100" in rrule_str
 
-    occurrences = list(pattern.fetch(
-        start=int(datetime(2025, 1, 1, tzinfo=UTC).timestamp()),
-        end=int(datetime(2026, 1, 1, tzinfo=UTC).timestamp()) - 1
-    ))
+    occurrences = list(
+        pattern.fetch(
+            start=int(datetime(2025, 1, 1, tzinfo=UTC).timestamp()),
+            end=int(datetime(2026, 1, 1, tzinfo=UTC).timestamp()) - 1,
+        )
+    )
     assert len(occurrences) == 2
     # Jan 1
     assert datetime.fromtimestamp(occurrences[0].start, tz=UTC).day == 1
@@ -73,13 +70,14 @@ def test_ical_roundtrip_advanced(tmp_path):
     pat = RecurringPattern(
         freq="monthly",
         day=["MO"],
-        bysetpos=1, # First Monday
+        bysetpos=1,  # First Monday
         wkst="SU",
         tz="UTC",
-        interval=2 # Bi-monthly
+        interval=2,  # Bi-monthly
     )
 
     from calgebra import timeline
+
     tl = timeline(pat)
 
     timeline_to_file(tl, fpath)
@@ -90,7 +88,7 @@ def test_ical_roundtrip_advanced(tmp_path):
     patterns = loaded_tl._recurring_patterns
     assert len(patterns) == 1
 
-    loaded_pat = patterns[0][1] # (key, pat)
+    loaded_pat = patterns[0][1]  # (key, pat)
 
     # Check args
     # Note: parsing might normalize types, but values should match
@@ -102,4 +100,4 @@ def test_ical_roundtrip_advanced(tmp_path):
     else:
         assert loaded_pat.rrule_kwargs["bysetpos"] == 1
 
-    assert loaded_pat.rrule_kwargs["wkst"] == SU # wkst is day object or int
+    assert loaded_pat.rrule_kwargs["wkst"] == SU  # wkst is day object or int

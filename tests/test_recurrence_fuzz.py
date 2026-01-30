@@ -1,4 +1,3 @@
-
 import random
 from datetime import datetime, timezone
 
@@ -13,6 +12,7 @@ WEEK = 7 * DAY
 # Constants
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 EPOCH_MONDAY = datetime(1969, 12, 29, tzinfo=timezone.utc)
+
 
 def get_ground_truth(freq_str, interval, start_ts, end_ts, duration):
     """
@@ -108,6 +108,7 @@ def get_ground_truth(freq_str, interval, start_ts, end_ts, duration):
 
     return merged
 
+
 @pytest.mark.parametrize("execution_number", range(50))
 def test_fuzz_recurrence_phase(execution_number):
     """
@@ -117,7 +118,7 @@ def test_fuzz_recurrence_phase(execution_number):
     # Random parameters
     freq = random.choice(["daily", "weekly", "monthly", "yearly"])
     interval = random.randint(1, 5)
-    duration = random.randint(1, 24) * 3600 # 1 hour to 1 day
+    duration = random.randint(1, 24) * 3600  # 1 hour to 1 day
 
     # Random query window in recent times (2020-2030)
     base_ts = int(datetime(2020, 1, 1, tzinfo=timezone.utc).timestamp())
@@ -132,6 +133,7 @@ def test_fuzz_recurrence_phase(execution_number):
     # Note: We use default start=0 (midnight) to match ground truth rrule defaults
     # flatten() is needed because ground truth merges overlapping intervals
     from calgebra import flatten
+
     timeline = flatten(
         recurring(freq=freq, interval=interval, duration=duration, tz="UTC")
     )

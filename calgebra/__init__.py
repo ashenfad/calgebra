@@ -28,6 +28,7 @@ try:
     from .dataframe import to_dataframe
 except ImportError:
     pass
+from .cache import cached
 from .interval import Interval, pprint
 from .metrics import (
     count_intervals,
@@ -52,7 +53,6 @@ from .properties import (
 )
 from .recurrence import day_of_week, recurring, time_of_day
 from .transform import buffer, merge_within
-from .cache import cached
 from .util import DAY, HOUR, MINUTE, SECOND, at_tz
 
 
