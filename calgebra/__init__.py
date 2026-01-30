@@ -52,6 +52,7 @@ from .properties import (
 )
 from .recurrence import day_of_week, recurring, time_of_day
 from .transform import buffer, merge_within
+from .cache import cached
 from .util import DAY, HOUR, MINUTE, SECOND, at_tz
 
 
@@ -106,6 +107,7 @@ __all__ = [
     "recurring",
     "buffer",
     "merge_within",
+    "cached",
     "SECOND",
     "MINUTE",
     "HOUR",

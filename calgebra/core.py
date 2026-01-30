@@ -144,6 +144,20 @@ class Timeline(ABC, Generic[IvlOut]):
     def __invert__(self) -> "Timeline[IvlOut]":
         return Complement(self)
 
+    def overlapping(self, point: int) -> Iterable[IvlOut]:
+        """Yield intervals that contain the given point, unclipped.
+
+        This is useful for point-in-time queries like "what's happening now?"
+        Unlike slicing, returned intervals are not clipped to query bounds.
+
+        Args:
+            point: Unix timestamp to query
+
+        Returns:
+            Intervals where start <= point < end
+        """
+        return self.fetch(point, point + 1)
+
 
 class Filter(ABC, Generic[IvlIn]):
 

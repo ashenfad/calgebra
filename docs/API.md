@@ -8,6 +8,7 @@
 - [Metrics](#metrics-calgebrametrics)
 - [Recurring Patterns](#recurring-patterns-calgebrarecurrence)
 - [Transformations](#transformations-calgebratransform)
+- [Caching](#caching-calgebracache)
 - [Reverse Iteration](#reverse-iteration)
 - [Mutable Timelines](#mutable-timelines-calgebramutable)
 - [Google Calendar Integration](#google-calendar-integration-calgebragcsa)
@@ -549,6 +550,91 @@ daily_incidents = incidents & day_of_week("monday")
 ```
 
 **Note:** Unlike `flatten()`, `merge_within()` preserves metadata from the first interval in each merged group. Use `flatten()` when you don't need to preserve metadata and want all adjacent/overlapping intervals coalesced regardless of gap size.
+
+## Caching (`calgebra.cache`)
+
+Wrap slow timelines (like Google Calendar) with TTL-based caching for faster repeated queries.
+
+### `cached(source, ttl, key="id")`
+
+Create a cached timeline that stores results from the source and serves them from cache on subsequent queries.
+
+**Parameters:**
+- `source`: Upstream timeline to cache (e.g., Google Calendar)
+- `ttl`: Time-to-live in seconds for cached segments
+- `key`: Field name(s) for interval deduplication. Default `"id"`. Use `"uid"` for iCalendar sources. Ignored for mask timelines.
+
+**Returns:** `CachedTimeline` wrapping the source
+
+**Examples:**
+```python
+from calgebra import cached, at_tz
+from calgebra.gcsa import calendars
+
+cals = calendars()
+my_cal = cached(cals[0], ttl=600)  # 10 minute cache
+
+at = at_tz("US/Pacific")
+
+# First query fetches from Google Calendar
+events = list(my_cal[at("2025-01-01"):at("2025-02-01")])
+
+# Subsequent queries in this range hit cache
+events2 = list(my_cal[at("2025-01-15"):at("2025-01-20")])
+
+# Queries extending beyond cached range only fetch the gap
+events3 = list(my_cal[at("2025-01-20"):at("2025-03-01")])
+```
+
+### Features
+
+**Partial Cache Hits:** If you query `[Jan 1 - Jan 31]` and then `[Jan 15 - Feb 15]`, only `[Feb 1 - Feb 15]` is fetched from source.
+
+**TTL Eviction:** Expired cache segments are automatically purged. Intervals spanning expired/valid boundaries are fractured to preserve valid portions.
+
+**Mask Timeline Support:** Mask timelines (like `time_of_day()`, `day_of_week()`) work without a key field.
+
+### Constraints
+
+- **Bounded queries required**: Cached timelines require explicit `start` and `end` bounds. Unbounded queries raise `ValueError`.
+- **Key field required for rich intervals**: Non-mask intervals must have the configured key field (default `"id"`). Missing fields raise `TypeError` on first query.
+
+### Custom Key Fields
+
+```python
+# iCalendar sources use 'uid' instead of 'id' for event identity.
+# (A local file is already fast; this syntax applies to remote CalDAV
+# or URL-fetched calendars where caching is actually useful.)
+cached_ical = cached(ical_source, ttl=300, key="uid")
+
+# Compound keys for custom interval types
+cached_custom = cached(my_timeline, ttl=600, key=("source_id", "event_id"))
+```
+
+### `Timeline.overlapping(point)`
+
+Find all intervals containing a specific point in time, returning full unclipped intervals.
+
+**Parameters:**
+- `point`: Unix timestamp to query
+
+**Returns:** Iterable of intervals where `start <= point < end`
+
+**Example:**
+```python
+from calgebra import timeline, Interval
+
+t = timeline(
+    Interval(start=100, end=300),
+    Interval(start=200, end=400),
+)
+
+# Find intervals containing point 250
+result = list(t.overlapping(250))
+# Returns both intervals (unclipped): [100-300], [200-400]
+```
+
+This is useful for point-in-time queries like "what's happening now?" and is used internally by the caching layer for boundary stitching.
 
 ## Reverse Iteration
 

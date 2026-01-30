@@ -370,6 +370,40 @@ monthly = count_intervals(calendar, date(2025, 1, 1), date(2026, 1, 1), period="
 
 See [API Reference](API.md#metrics-calgebrametrics) for full details including `group_by` histograms.
 
+## Caching
+
+For slow data sources like Google Calendar, wrap timelines with `cached()` to avoid repeated API calls:
+
+```python
+from calgebra import cached, at_tz
+from calgebra.gcsa import calendars
+
+cals = calendars()
+at = at_tz("US/Pacific")
+
+# Wrap with 10-minute TTL cache
+team_busy = cached(cals[0] | cals[1] | cals[2], ttl=600)
+
+# First query hits Google Calendar API
+slots = list((business_hours - team_busy)[at("2025-01-01"):at("2025-01-31")])
+
+# Subsequent queries use cache
+slots2 = list((business_hours - team_busy)[at("2025-01-15"):at("2025-01-20")])
+```
+
+**Features:**
+- **Partial hits**: Only fetches uncached portions of a query range
+- **TTL eviction**: Expired segments are automatically purged and refetched
+
+**Key field**: By default, intervals are deduplicated using the `id` field. For iCalendar sources, use `key="uid"`:
+
+```python
+# Local files are already fast; caching benefits remote CalDAV or URL sources
+cached_ical = cached(ical_source, ttl=300, key="uid")
+```
+
+See [API Reference](API.md#caching-calgebracache) for full details.
+
 ## Key Points
 
 - **Composition is lazy, slicing executes**: Build queries with operators, fetch with `timeline[start:end]`
