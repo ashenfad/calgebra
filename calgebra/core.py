@@ -241,6 +241,26 @@ class _SolidTimeline(Timeline[Interval]):
 solid: Timeline[Interval] = _SolidTimeline()
 
 
+def _neg(val: int | None) -> int | None:
+    """Negate a timestamp, preserving None for unbounded."""
+    return -val if val is not None else None
+
+
+def _negate_interval(ivl: Interval) -> Interval:
+    """Negate timestamps, swapping start/end to maintain start <= end.
+
+    Used to convert reverse iteration into forward iteration:
+    negating all timestamps turns descending order into ascending,
+    allowing the forward-only sweep to run unmodified in negated space.
+    """
+    return replace(ivl, start=_neg(ivl.end), end=_neg(ivl.start))
+
+
+def _negate_stream(stream: Iterable[Interval]) -> Iterable[Interval]:
+    """Negate every interval in a stream."""
+    return (_negate_interval(ivl) for ivl in stream)
+
+
 def _flatten_sources(
     sources: Iterable[Timeline[IvlOut]],
     cls: type["Union[IvlOut]"] | type["Intersection[IvlOut]"],
@@ -362,21 +382,13 @@ class Intersection(Timeline[IvlOut]):
     ) -> Iterable[IvlOut]:
         """Compute intersection using a multi-way merge with sliding window.
 
-        Algorithm:
-        1. Maintain one "current" interval from each source
-        2. Find the overlap region across all current intervals
-        3. Yield trimmed copies from emit sources
-        4. Advance sources whose intervals end at the overlap boundary
-        5. Handle stall condition when emit sources extend past mask boundaries
-        6. Repeat until no more overlaps possible
-
         Emit behavior (based on source types):
         - All mask sources: Emit one interval per overlap (auto-flattened)
         - Mixed mask/rich: Emit only from rich sources (preserves metadata)
         - All rich sources: Emit from all sources
 
-        The algorithm correctly handles multiple intervals with identical times
-        from the same source by detecting and resolving stall conditions.
+        Reverse iteration uses time-negation to reuse the forward-only sweep:
+        negate inputs, run forward, negate outputs.
         """
         if not self.sources:
             return ()
@@ -392,66 +404,82 @@ class Intersection(Timeline[IvlOut]):
         else:
             emit_indices = frozenset(range(len(self.sources)))
 
-        # Initialize per-source state
-        states = [_SourceState(source.fetch(start, end)) for source in self.sources]
-
-        def generate() -> Iterable[IvlOut]:
-            # Early exit if all sources exhausted on init (no intervals)
-            if all(s.exhausted and s.current is None for s in states):
-                return
-
-            # Special case: single source intersection is identity
-            if len(states) == 1:
-                state = states[0]
-                while state.current is not None:
-                    yield state.current
-                    state.advance()
-                    if state.exhausted:
-                        break  # Don't re-yield the last interval
-                return
-
-            while True:
-                # Check if all sources have a current interval
-                active = [s.current for s in states if s.current is not None]
-                if len(active) < len(states):
-                    return  # Need intervals from ALL sources for intersection
-
-                # Find overlap region across all current intervals
-                overlap_start = max(ivl.finite_start for ivl in active)
-                overlap_end = min(ivl.finite_end for ivl in active)
-
-                # Emit trimmed intervals from emit sources
-                if overlap_start < overlap_end:
-                    for idx in emit_indices:
-                        state = states[idx]
-                        if state.current is None or state.was_processed_at(overlap_end):
-                            continue
-                        # Convert sentinel values back to None for unbounded intervals
-                        start_val = overlap_start if overlap_start != NEG_INF else None
-                        end_val = overlap_end if overlap_end != POS_INF else None
-                        yield replace(state.current, start=start_val, end=end_val)
-                        state.last_processed_cutoff = overlap_end
-
-                # Advance sources whose intervals end at the overlap boundary
-                cutoff = overlap_end
-                advanced = any(s.advance_if_ends_at(cutoff) for s in states)
-
-                # Handle stall condition: emit sources processed but extending past
-                # cutoff. This ensures we get all intervals with identical times
-                # from same source
-                if not advanced:
-                    advanced = any(
-                        states[idx].advance_if_stalled(cutoff) for idx in emit_indices
-                    )
-
-                if not advanced:
-                    return  # No progress possible, done
-
         if reverse:
-            # Materialize and reverse for reverse iteration
-            # This is simpler than implementing a full reverse sweep algorithm
-            return reversed(list(generate()))
-        return generate()
+            streams = [
+                _negate_stream(s.fetch(start, end, reverse=True)) for s in self.sources
+            ]
+            return _negate_stream(self._sweep(streams, emit_indices))
+
+        streams = [s.fetch(start, end) for s in self.sources]
+        return self._sweep(streams, emit_indices)
+
+    def _sweep(
+        self,
+        streams: list[Iterable[IvlOut]],
+        emit_indices: frozenset[int],
+    ) -> Iterable[IvlOut]:
+        """Forward-only intersection sweep algorithm.
+
+        Algorithm:
+        1. Maintain one "current" interval from each source
+        2. Find the overlap region across all current intervals
+        3. Yield trimmed copies from emit sources
+        4. Advance sources whose intervals end at the overlap boundary
+        5. Handle stall condition when emit sources extend past mask boundaries
+        6. Repeat until no more overlaps possible
+        """
+        states = [_SourceState(stream) for stream in streams]
+
+        # Early exit if all sources exhausted on init (no intervals)
+        if all(s.exhausted and s.current is None for s in states):
+            return
+
+        # Special case: single source intersection is identity
+        if len(states) == 1:
+            state = states[0]
+            while state.current is not None:
+                yield state.current
+                state.advance()
+                if state.exhausted:
+                    break  # Don't re-yield the last interval
+            return
+
+        while True:
+            # Check if all sources have a current interval
+            active = [s.current for s in states if s.current is not None]
+            if len(active) < len(states):
+                return  # Need intervals from ALL sources for intersection
+
+            # Find overlap region across all current intervals
+            overlap_start = max(ivl.finite_start for ivl in active)
+            overlap_end = min(ivl.finite_end for ivl in active)
+
+            # Emit trimmed intervals from emit sources
+            if overlap_start < overlap_end:
+                for idx in emit_indices:
+                    state = states[idx]
+                    if state.current is None or state.was_processed_at(overlap_end):
+                        continue
+                    # Convert sentinel values back to None for unbounded intervals
+                    start_val = overlap_start if overlap_start != NEG_INF else None
+                    end_val = overlap_end if overlap_end != POS_INF else None
+                    yield replace(state.current, start=start_val, end=end_val)
+                    state.last_processed_cutoff = overlap_end
+
+            # Advance sources whose intervals end at the overlap boundary
+            cutoff = overlap_end
+            advanced = any(s.advance_if_ends_at(cutoff) for s in states)
+
+            # Handle stall condition: emit sources processed but extending past
+            # cutoff. This ensures we get all intervals with identical times
+            # from same source
+            if not advanced:
+                advanced = any(
+                    states[idx].advance_if_stalled(cutoff) for idx in emit_indices
+                )
+
+            if not advanced:
+                return  # No progress possible, done
 
 
 class Filtered(Timeline[IvlOut]):
@@ -497,95 +525,102 @@ class Difference(Timeline[IvlOut]):
     ) -> Iterable[IvlOut]:
         """Subtract intervals using a sweep-line algorithm.
 
-        Algorithm: For each source interval, scan through subtractor intervals
-        and emit the remaining non-overlapping fragments. Uses a cursor to track
-        the current position within each source interval as we carve out holes.
-
-        The subtractors are merged into a single sorted stream for efficiency.
+        Reverse iteration uses time-negation to reuse the forward-only sweep:
+        negate inputs, run forward, negate outputs.
         """
+        if not self.subtractors:
+            return self.source.fetch(start, end, reverse=reverse)
 
-        def generate() -> Iterable[IvlOut]:
-            if not self.subtractors:
-                yield from self.source.fetch(start, end)
-                return
+        if reverse:
+            source_stream = _negate_stream(self.source.fetch(start, end, reverse=True))
+            sub_streams = [
+                _negate_stream(sub.fetch(start, end, reverse=True))
+                for sub in self.subtractors
+            ]
+            return _negate_stream(self._sweep(source_stream, sub_streams))
 
-            # Merge all subtractor streams into one sorted by (start, end)
-            # Use finite properties to handle None (unbounded) values
-            merged = heapq.merge(
-                *(subtractor.fetch(start, end) for subtractor in self.subtractors),
-                key=lambda event: (event.finite_start, event.finite_end),
-            )
-            subtractor_iter = iter(merged)
+        source_stream = self.source.fetch(start, end)
+        sub_streams = [sub.fetch(start, end) for sub in self.subtractors]
+        return self._sweep(source_stream, sub_streams)
 
+    def _sweep(
+        self,
+        source_stream: Iterable[IvlOut],
+        sub_streams: list[Iterable[Any]],
+    ) -> Iterable[IvlOut]:
+        """Forward-only difference sweep algorithm.
+
+        For each source interval, scan through subtractor intervals and emit the
+        remaining non-overlapping fragments. Uses a cursor to track the current
+        position within each source interval as we carve out holes.
+        """
+        # Merge all subtractor streams into one sorted by (start, end)
+        merged = heapq.merge(
+            *sub_streams,
+            key=lambda event: (event.finite_start, event.finite_end),
+        )
+        subtractor_iter = iter(merged)
+
+        try:
+            current_subtractor = next(subtractor_iter)
+        except StopIteration:
+            current_subtractor = None
+
+        def advance_subtractor() -> None:
+            nonlocal current_subtractor
             try:
                 current_subtractor = next(subtractor_iter)
             except StopIteration:
                 current_subtractor = None
 
-            def advance_subtractor() -> None:
-                nonlocal current_subtractor
-                try:
-                    current_subtractor = next(subtractor_iter)
-                except StopIteration:
-                    current_subtractor = None
+        # Process each source interval
+        for event in source_stream:
+            if current_subtractor is None:
+                yield event
+                continue
 
-            # Process each source interval
-            for event in self.source.fetch(start, end):
-                if current_subtractor is None:
-                    yield event
-                    continue
+            # Track current position within this event as we carve out holes
+            # Use finite values for arithmetic operations
+            cursor = event.finite_start
+            event_end = event.finite_end
 
-                # Track current position within this event as we carve out holes
-                # Use finite values for arithmetic operations
-                cursor = event.finite_start
-                event_end = event.finite_end
+            # Skip subtractors that end before our cursor position
+            while current_subtractor and current_subtractor.finite_end < cursor:
+                advance_subtractor()
 
-                # Skip subtractors that end before our cursor position
-                while current_subtractor and current_subtractor.finite_end < cursor:
-                    advance_subtractor()
+            if current_subtractor is None:
+                yield event
+                continue
 
-                if current_subtractor is None:
-                    yield event
-                    continue
+            # Process all subtractors that overlap with this event
+            while current_subtractor and current_subtractor.finite_start <= event_end:
+                overlap_start = max(cursor, current_subtractor.finite_start)
+                overlap_end = min(event_end, current_subtractor.finite_end)
 
-                # Process all subtractors that overlap with this event
-                while (
-                    current_subtractor and current_subtractor.finite_start <= event_end
-                ):
-                    overlap_start = max(cursor, current_subtractor.finite_start)
-                    overlap_end = min(event_end, current_subtractor.finite_end)
-
-                    if overlap_start < overlap_end:
-                        # Emit fragment before the hole (if any)
-                        if cursor < overlap_start:
-                            # Convert back to None if sentinel value
-                            start_val = cursor if cursor != NEG_INF else None
-                            end_val = (
-                                overlap_start if overlap_start != NEG_INF else None
-                            )
-                            yield replace(event, start=start_val, end=end_val)
-                        # Move cursor past the hole
-                        cursor = overlap_end
-                        if cursor >= event_end:
-                            break
-
-                    # Advance if subtractor ends within this event
-                    if current_subtractor.finite_end <= event_end:
-                        advance_subtractor()
-                    else:
+                if overlap_start < overlap_end:
+                    # Emit fragment before the hole (if any)
+                    if cursor < overlap_start:
+                        # Convert back to None if sentinel value
+                        start_val = cursor if cursor != NEG_INF else None
+                        end_val = overlap_start if overlap_start != NEG_INF else None
+                        yield replace(event, start=start_val, end=end_val)
+                    # Move cursor past the hole
+                    cursor = overlap_end
+                    if cursor >= event_end:
                         break
 
-                # Emit final fragment after all holes (if any remains)
-                if cursor < event_end:
-                    # Convert back to None if sentinel value
-                    start_val = cursor if cursor != NEG_INF else None
-                    end_val = event_end if event_end != POS_INF else None
-                    yield replace(event, start=start_val, end=end_val)
+                # Advance if subtractor ends within this event
+                if current_subtractor.finite_end <= event_end:
+                    advance_subtractor()
+                else:
+                    break
 
-        if reverse:
-            # Materialize and reverse for reverse iteration
-            return reversed(list(generate()))
-        return generate()
+            # Emit final fragment after all holes (if any remains)
+            if cursor < event_end:
+                # Convert back to None if sentinel value
+                start_val = cursor if cursor != NEG_INF else None
+                end_val = event_end if event_end != POS_INF else None
+                yield replace(event, start=start_val, end=end_val)
 
 
 class Complement(Timeline[Interval]):
@@ -607,60 +642,64 @@ class Complement(Timeline[Interval]):
     ) -> Iterable[Interval]:
         """Generate gaps by inverting the source timeline.
 
-        Algorithm: Scan through source intervals and emit intervals for the spaces
-        between them. Cursor tracks the start of the next potential gap.
-
-        Can now handle unbounded queries (start/end can be None), yielding
-        unbounded gap intervals as needed.
+        Reverse iteration uses time-negation to reuse the forward-only sweep:
+        negate inputs, run forward, negate outputs.
         """
+        if reverse:
+            source_stream = _negate_stream(self.source.fetch(start, end, reverse=True))
+            return _negate_stream(self._sweep(source_stream, _neg(end), _neg(start)))
+        return self._sweep(self.source.fetch(start, end), start, end)
 
-        def generate() -> Iterable[Interval]:
-            # Convert None bounds to sentinels for comparisons
-            start_bound = start if start is not None else NEG_INF
-            end_bound = end if end is not None else POS_INF
-            cursor = start_bound
+    def _sweep(
+        self,
+        source_stream: Iterable[Interval],
+        start: int | None,
+        end: int | None,
+    ) -> Iterable[Interval]:
+        """Forward-only complement sweep algorithm.
 
-            for event in self.source.fetch(start, end):
-                event_start = event.finite_start
-                event_end = event.finite_end
+        Scan through source intervals and emit intervals for the spaces between
+        them. Cursor tracks the start of the next potential gap. Handles
+        unbounded queries (start/end can be None).
+        """
+        # Convert None bounds to sentinels for comparisons
+        start_bound = start if start is not None else NEG_INF
+        end_bound = end if end is not None else POS_INF
+        cursor = start_bound
 
-                if event_end < start_bound:
-                    continue
-                if event_start > end_bound:
-                    break
+        for event in source_stream:
+            event_start = event.finite_start
+            event_end = event.finite_end
 
-                segment_start = max(event_start, start_bound)
-                segment_end = min(event_end, end_bound)
+            if event_end < start_bound:
+                continue
+            if event_start > end_bound:
+                break
 
-                if segment_end <= cursor:
-                    continue
+            segment_start = max(event_start, start_bound)
+            segment_end = min(event_end, end_bound)
 
-                if segment_start > cursor:
-                    # Emit gap before this event
-                    # Convert sentinels back to None for unbounded gaps
-                    gap_start = cursor if cursor != NEG_INF else None
-                    gap_end = segment_start if segment_start != NEG_INF else None
-                    yield Interval(start=gap_start, end=gap_end)
+            if segment_end <= cursor:
+                continue
 
-                cursor = max(cursor, segment_end)
-
-                if cursor > end_bound:
-                    return
-
-            if cursor < end_bound:
-                # Emit final gap
+            if segment_start > cursor:
+                # Emit gap before this event
                 # Convert sentinels back to None for unbounded gaps
                 gap_start = cursor if cursor != NEG_INF else None
-                gap_end = end if end_bound != POS_INF else None
+                gap_end = segment_start if segment_start != NEG_INF else None
                 yield Interval(start=gap_start, end=gap_end)
 
-        if reverse:
-            # Materialize and reverse for reverse iteration
-            # A proper reverse algorithm would scan backward, but gaps are
-            # computed relative to source intervals, making streaming reverse
-            # complex. Materialize-and-reverse is correct and simple.
-            return reversed(list(generate()))
-        return generate()
+            cursor = max(cursor, segment_end)
+
+            if cursor > end_bound:
+                return
+
+        if cursor < end_bound:
+            # Emit final gap
+            # Convert sentinels back to None for unbounded gaps
+            gap_start = cursor if cursor != NEG_INF else None
+            gap_end = end if end_bound != POS_INF else None
+            yield Interval(start=gap_start, end=gap_end)
 
 
 def flatten(timeline: "Timeline[Any]") -> "Timeline[Interval]":
