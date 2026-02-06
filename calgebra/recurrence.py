@@ -313,7 +313,7 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
         self.duration_seconds = duration
         self.interval_class = interval_class
         self.metadata = metadata
-        self.exdates = set(exdates) if exdates else set()
+        self.exdates: frozenset[int] = frozenset(exdates) if exdates else frozenset()
 
         # Infer timezone: explicit tz > start's tzinfo > UTC
         if tz is not None:
