@@ -72,10 +72,11 @@ def test_add_with_metadata():
     mem = MemoryTimeline()
 
     # Add with metadata
-    results = mem.add(Interval(start=10, end=20), summary="Meeting")
+    results = mem.add(Event(start=10, end=20), summary="Meeting")
 
     assert len(results) == 1
     assert results[0].success is True
+    assert results[0].event == Event(start=10, end=20, summary="Meeting")
 
 
 def test_initial_intervals():
