@@ -43,19 +43,19 @@ def _get_recurrence_params(
         params["month"] = pattern.month
 
     # Advanced
-    if getattr(pattern, "bysetpos", None) is not None:
+    if pattern.bysetpos is not None:
         params["bysetpos"] = pattern.bysetpos
-    if getattr(pattern, "byweekno", None) is not None:
+    if pattern.byweekno is not None:
         params["byweekno"] = pattern.byweekno
-    if getattr(pattern, "byyearday", None) is not None:
+    if pattern.byyearday is not None:
         params["byyearday"] = pattern.byyearday
-    if getattr(pattern, "byhour", None) is not None:
+    if pattern.byhour is not None:
         params["byhour"] = pattern.byhour
-    if getattr(pattern, "byminute", None) is not None:
+    if pattern.byminute is not None:
         params["byminute"] = pattern.byminute
-    if getattr(pattern, "bysecond", None) is not None:
+    if pattern.bysecond is not None:
         params["bysecond"] = pattern.bysecond
-    if getattr(pattern, "wkst", None) is not None:
+    if pattern.wkst is not None:
         params["wkst"] = pattern.wkst
 
     return params
