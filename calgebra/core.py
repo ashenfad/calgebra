@@ -622,6 +622,28 @@ class Difference(Timeline[IvlOut]):
                 end_val = event_end if event_end != POS_INF else None
                 yield replace(event, start=start_val, end=end_val)
 
+    @override
+    def overlapping(self, point: int) -> Iterable[IvlOut]:
+        """Yield difference fragments containing the given point, unclipped.
+
+        Unlike the base implementation, this fetches subtractors across each
+        full source interval's range (not just [point, point+1)), ensuring
+        correct hole-carving for intervals that extend beyond the query point.
+        """
+        if not self.subtractors:
+            return self.source.overlapping(point)
+
+        def generate() -> Iterable[IvlOut]:
+            for src_ivl in self.source.overlapping(point):
+                sub_streams = [
+                    sub.fetch(src_ivl.start, src_ivl.end) for sub in self.subtractors
+                ]
+                for fragment in self._sweep(iter([src_ivl]), sub_streams):
+                    if fragment.finite_start <= point < fragment.finite_end:
+                        yield fragment
+
+        return generate()
+
 
 class Complement(Timeline[Interval]):
     def __init__(self, source: Timeline[Any]):
@@ -700,6 +722,40 @@ class Complement(Timeline[Interval]):
             gap_start = cursor if cursor != NEG_INF else None
             gap_end = end if end_bound != POS_INF else None
             yield Interval(start=gap_start, end=gap_end)
+
+    @override
+    def overlapping(self, point: int) -> Iterable[Interval]:
+        """Yield the complement gap containing the given point, if any.
+
+        Unlike the base implementation, this finds the full unclipped gap
+        by scanning for the gap's true boundaries in the source timeline.
+        """
+        # If point is inside a source interval, complement has no interval here
+        # Use containment check (not just overlap) because some sources like
+        # Difference can yield fragments outside the query range
+        if any(
+            ivl.finite_start <= point < ivl.finite_end
+            for ivl in self.source.fetch(point, point + 1)
+        ):
+            return ()
+
+        # Right boundary: start of first source interval after point
+        # Filter for start > point since fetch can return intervals starting
+        # before the query range (e.g. from Difference sources)
+        right: int | None = None
+        for ivl in self.source.fetch(point, None):
+            if ivl.finite_start > point:
+                right = ivl.start
+                break
+
+        # Left boundary: scan complement forward to find gap containing point
+        left: int | None = None
+        for gap in self.fetch(None, point + 1):
+            if gap.finite_start <= point and gap.finite_end > point:
+                left = gap.start
+                break
+
+        return iter([Interval(start=left, end=right)])
 
 
 def flatten(timeline: "Timeline[Any]") -> "Timeline[Interval]":
