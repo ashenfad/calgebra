@@ -186,17 +186,7 @@ class MemoryTimeline(MutableTimeline[Interval]):
             if merged.get(key) is None:
                 merged[key] = value
 
-        # Try to update with safe metadata
-        if merged:
-            # Apply metadata overrides to the interval
-            try:
-                interval_with_metadata = replace(interval, **merged)
-            except TypeError:
-                # If replace fails (e.g. invalid fields), just use the original
-                # but maybe we should warn or error? For now, silent fallback.
-                interval_with_metadata = interval
-        else:
-            interval_with_metadata = interval
+        interval_with_metadata = replace(interval, **merged) if merged else interval
 
         cast(SortedList, self._static_intervals).add(interval_with_metadata)
 
