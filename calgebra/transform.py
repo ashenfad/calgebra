@@ -28,7 +28,10 @@ class _Buffered(Timeline[Ivl], Generic[Ivl]):
     def fetch(
         self, start: int | None, end: int | None, *, reverse: bool = False
     ) -> Iterable[Ivl]:
-        for interval in self.source.fetch(start, end, reverse=reverse):
+        # Widen source query to capture intervals that shift into range after buffering
+        adj_start = start - self.after if start is not None else None
+        adj_end = end + self.before if end is not None else None
+        for interval in self.source.fetch(adj_start, adj_end, reverse=reverse):
             # Handle unbounded intervals (None values)
             buffered_start = (
                 interval.start - self.before if interval.start is not None else None

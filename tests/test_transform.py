@@ -449,3 +449,23 @@ def test_buffer_composable() -> None:
 
     result = list(long_events[0:400])
     assert len(result) == 2  # Both intervals are long enough
+
+
+def test_buffer_before_finds_interval_past_query_end() -> None:
+    """Buffer before should capture source intervals that shift into query range."""
+    # Source interval starts at 400, past query end of 350
+    # But with before=100, it shifts to start at 300, which is inside [300, 350]
+    source = SimpleTimeline(Interval(start=400, end=500))
+    buffered = buffer(source, before=100)
+    result = list(buffered[300:350])
+    assert result == [Interval(start=300, end=350)]
+
+
+def test_buffer_after_finds_interval_before_query_start() -> None:
+    """Buffer after should capture source intervals that extend into query range."""
+    # Source interval ends at 200, before query start of 250
+    # But with after=100, it extends to end at 300, which overlaps [250, 350]
+    source = SimpleTimeline(Interval(start=100, end=200))
+    buffered = buffer(source, after=100)
+    result = list(buffered[250:350])
+    assert result == [Interval(start=250, end=300)]
