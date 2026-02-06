@@ -748,9 +748,12 @@ class Complement(Timeline[Interval]):
                 right = ivl.start
                 break
 
-        # Left boundary: scan complement forward to find gap containing point
+        # Left boundary: scan complement in reverse from point to find
+        # the gap containing it.  Reverse avoids propagating start=None
+        # to sources that require a finite start (e.g. RecurringPattern),
+        # and is faster because the containing gap is the first result.
         left: int | None = None
-        for gap in self.fetch(None, point + 1):
+        for gap in self.fetch(None, point + 1, reverse=True):
             if gap.finite_start <= point and gap.finite_end > point:
                 left = gap.start
                 break
