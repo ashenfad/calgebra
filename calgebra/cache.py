@@ -6,6 +6,7 @@ cache hits, boundary stitching, and efficient eviction.
 """
 
 import heapq
+import threading
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from time import monotonic
@@ -74,6 +75,9 @@ class CachedTimeline(Timeline[IvlOut]):
         # Expiry heap: (expires_at, cover_interval)
         self._expiry_heap: list[tuple[float, CoverInterval]] = []
 
+        # Serialize evict/fill/stitch so concurrent fetches don't corrupt state
+        self._lock = threading.Lock()
+
     @property
     @override
     def _is_mask(self) -> bool:
@@ -102,16 +106,19 @@ class CachedTimeline(Timeline[IvlOut]):
                 "Use: cached_timeline[start:end] with explicit bounds."
             )
 
-        # 1. Evict expired covers
-        self._evict_expired()
+        with self._lock:
+            # 1. Evict expired covers
+            self._evict_expired()
 
-        # 2. Find gaps (query range minus known cover) and fill from source
-        query = timeline(Interval(start=start, end=end))
-        for gap in (query - self._cover).fetch(start, end):
-            self._fill_gap(cast(int, gap.start), cast(int, gap.end))
+            # 2. Find gaps (query range minus known cover) and fill from source
+            query = timeline(Interval(start=start, end=end))
+            for gap in (query - self._cover).fetch(start, end):
+                self._fill_gap(cast(int, gap.start), cast(int, gap.end))
 
-        # 3. Serve from sink
-        yield from self._fetch_sink(start, end, reverse=reverse)
+            # 3. Serve from sink (materialized while holding the lock)
+            result = list(self._fetch_sink(start, end, reverse=reverse))
+
+        yield from result
 
     def _fill_gap(self, gap_start: int, gap_end: int) -> None:
         """Fetch gap from source and add to cache."""
