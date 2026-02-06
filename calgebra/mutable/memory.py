@@ -331,7 +331,7 @@ class MemoryTimeline(MutableTimeline[Interval]):
             ]
 
         # Find the pattern
-        for i, (stored_id, pattern) in enumerate(self._recurring_patterns):
+        for stored_id, pattern in self._recurring_patterns:
             if stored_id == recurring_id:
                 # Check if start is finite
                 if interval.start is None:
@@ -345,9 +345,8 @@ class MemoryTimeline(MutableTimeline[Interval]):
                         )
                     ]
 
-                # Replace pattern with updated exdates (immutable frozenset)
+                # Add exclusion (frozenset reassignment, not in-place mutation)
                 pattern.exdates = pattern.exdates | {interval.start}
-                self._recurring_patterns[i] = (stored_id, pattern)
                 return [WriteResult(success=True, event=interval, error=None)]
 
         return [
