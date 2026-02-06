@@ -350,3 +350,75 @@ class TestDifferenceOfComplement:
         assert len(result) == 1
         assert result[0].start == 40
         assert result[0].end is None
+
+
+# --- Complement of RecurringPattern ---
+
+
+class TestComplementOverlappingRecurring:
+    """Tests for Complement.overlapping() with RecurringPattern sources.
+
+    RecurringPattern requires a finite start bound in fetch(), so
+    Complement.overlapping must avoid propagating start=None to the source.
+    This was previously broken (raised ValueError).
+    """
+
+    def test_complement_of_recurring_gap(self):
+        """Point in a gap between recurring intervals returns the full gap."""
+        from calgebra import HOUR, recurring
+
+        # 1-hour events every day at midnight UTC
+        daily = recurring(freq="daily", start=0, duration=HOUR, tz="UTC")
+        comp = ~daily
+
+        # Pick a point well inside a gap (noon on Jan 6 2025)
+        jan6_noon = 1736164800  # 2025-01-06 12:00 UTC
+        jan6_1am = 1736125200  # 2025-01-06 01:00 UTC (end of daily event)
+        jan7_midnight = 1736208000  # 2025-01-07 00:00 UTC (start of next)
+
+        result = list(comp.overlapping(jan6_noon))
+        assert len(result) == 1
+        assert result[0].start == jan6_1am
+        assert result[0].end == jan7_midnight
+
+    def test_complement_of_recurring_inside_event(self):
+        """Point inside a recurring event returns nothing."""
+        from calgebra import HOUR, recurring
+
+        daily = recurring(freq="daily", start=0, duration=HOUR, tz="UTC")
+        comp = ~daily
+
+        # 2025-01-06 00:30 UTC — inside the [00:00, 01:00) event
+        jan6_0030 = 1736123400
+
+        assert list(comp.overlapping(jan6_0030)) == []
+
+    def test_complement_of_day_of_week(self):
+        """~day_of_week(...).overlapping() — the motivating use case."""
+        from calgebra import day_of_week
+
+        weekend = day_of_week(["saturday", "sunday"], tz="UTC")
+        weekdays = ~weekend
+
+        # Wednesday Jan 8 2025 noon UTC — a weekday
+        wed_noon = 1736337600
+
+        result = list(weekdays.overlapping(wed_noon))
+        assert len(result) == 1
+        # Gap should span from end of Sunday Jan 5 to start of Saturday Jan 11
+        sun_end = 1736121600  # 2025-01-06 00:00 UTC (Monday midnight)
+        sat_start = 1736553600  # 2025-01-11 00:00 UTC
+        assert result[0].start == sun_end
+        assert result[0].end == sat_start
+
+    def test_complement_of_day_of_week_on_weekend(self):
+        """Point on a weekend day returns nothing from ~weekend complement."""
+        from calgebra import day_of_week
+
+        weekend = day_of_week(["saturday", "sunday"], tz="UTC")
+        weekdays = ~weekend
+
+        # Saturday Jan 11 2025 noon UTC
+        sat_noon = 1736596800
+
+        assert list(weekdays.overlapping(sat_noon)) == []
