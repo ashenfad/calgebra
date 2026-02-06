@@ -495,7 +495,7 @@ class RecurringPattern(Timeline[IvlOut], Generic[IvlOut]):
         # Prefer the original anchor for phase alignment; otherwise use legacy defaults:
         # - weekly aligns to the Monday before epoch
         # - others align to epoch (1970-01-01)
-        if getattr(self, "anchor_timestamp", None) is not None:
+        if self.anchor_timestamp is not None:
             base_anchor = datetime.fromtimestamp(self.anchor_timestamp, tz=self.zone)
         elif self.freq == "weekly":
             # Align to the Monday before the epoch for weekly phase
