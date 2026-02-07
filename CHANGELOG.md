@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.7] - 2026-02-06
+
+### Fixed
+- **`Complement.overlapping()` with recurring sources**: Fixed `ValueError` when calling `overlapping()` on complements of `RecurringPattern` timelines (e.g., `(~day_of_week(...)).overlapping(point)`)
+- **`Difference._sweep` subtractor bound**: Tightened loop bound from `<=` to `<` to skip subtractors that can't overlap half-open intervals
+- **`buffer()` query bounds**: Widened source query bounds to capture intervals that shift into range after buffering
+- **`overlapping()` correctness**: Fixed `Difference.overlapping()` and `Complement.overlapping()` to return full unclipped intervals
+- **`CachedTimeline` thread safety**: Added lock around fetch to prevent concurrent state corruption
+
+### Changed
+- **Streaming reverse iteration**: Replaced materialized-list reverse with time-negation trick for `Intersection`, `Difference`, and `Complement`
+- **`RecurringPattern.exdates`**: Now an immutable `frozenset`
+- **Internal cleanups**: Removed redundant defensive code in `_remove_recurring_instance` and `_add_interval`
+
 ## [0.10.6] - 2026-01-30
 
 ### Fix
@@ -251,6 +265,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Google Calendar integration via `calgebra.gcsa.Calendar`
 - Comprehensive documentation accessible via `calgebra.docs` dictionary
 
+[0.10.7]: https://github.com/ashenfad/calgebra/releases/tag/v0.10.7
 [0.10.6]: https://github.com/ashenfad/calgebra/releases/tag/v0.10.6
 [0.10.5]: https://github.com/ashenfad/calgebra/releases/tag/v0.10.5
 [0.10.4]: https://github.com/ashenfad/calgebra/releases/tag/v0.10.4
