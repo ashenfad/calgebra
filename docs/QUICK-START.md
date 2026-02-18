@@ -136,7 +136,7 @@ most_recent = next(calendar[start:end:-1], None)
 free_slots_recent = list((business_hours - busy)[start:end:-1])
 ```
 
-> Reverse iteration note: intersection, difference, complement, and recurring patterns materialize reverse slices in memory. Keep reverse ranges bounded. Recurring reverse needs a finite `end`; Google Calendar reverse defaults to a 1-year lookback and fetches 30-day windows forward before reversing.
+> Reverse iteration note: Recurring patterns and Google Calendar reverse-iterate in 30-day chunks; keep reverse ranges bounded. Recurring reverse needs a finite `end`; Google Calendar reverse defaults to a 1-year lookback.
 
 ## Common Patterns
 
