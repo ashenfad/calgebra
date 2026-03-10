@@ -195,38 +195,42 @@ longest = max_duration(meetings, date(2025, 11, 1), date(2025, 11, 8),
 **Cyclic histograms (`group_by`):**
 
 `group_by` aggregates across a cyclic dimension (e.g. all Mondays together).
-**IMPORTANT: `period` and `group_by` are paired — you MUST use them together
-exactly as shown. No other combinations are valid.**
+**IMPORTANT: `period` and `group_by` are paired — you MUST copy the exact
+`period`+`group_by` pair from the examples below. No other combinations work.**
 
 ```python
+from datetime import date
+from calgebra import total_duration, count_intervals, coverage_ratio
+
 # "How much time in meetings per hour of day?"
-by_hour = total_duration(meetings, start, end,
-    period="hour", group_by="hour_of_day", tz=tz)
+by_hour = total_duration(cal, date(2025, 1, 1), date(2025, 4, 1),
+    period="hour", group_by="hour_of_day", tz="US/Pacific")
 # Returns: [(0, 0), ..., (9, 54000), ..., (23, 0)]  — 24 buckets
 
 # "How many meetings per day of week?"
-by_dow = count_intervals(meetings, start, end,
-    period="day", group_by="day_of_week", tz=tz)
+by_dow = count_intervals(cal, date(2025, 1, 1), date(2025, 4, 1),
+    period="day", group_by="day_of_week", tz="US/Pacific")
 # Returns: [(0, 45), (1, 52), ..., (6, 0)]  — 7 buckets, Mon=0
 
 # "What % of time is booked per day of month?"
-by_dom = coverage_ratio(cal, start, end,
-    period="day", group_by="day_of_month", tz=tz)
+by_dom = coverage_ratio(cal, date(2025, 1, 1), date(2025, 4, 1),
+    period="day", group_by="day_of_month", tz="US/Pacific")
 # Returns: [(1, 0.73), (2, 0.81), ..., (31, 0.5)]  — 31 buckets
 
 # "Total meeting time per week of year?"
-by_woy = total_duration(meetings, start, end,
-    period="week", group_by="week_of_year", tz=tz)
+by_woy = total_duration(cal, date(2025, 1, 1), date(2025, 4, 1),
+    period="week", group_by="week_of_year", tz="US/Pacific")
 # Returns: [(1, 18000), ..., (53, 0)]  — 53 buckets
 
 # "Event count per month of year?"
-by_moy = count_intervals(cal, start, end,
-    period="month", group_by="month_of_year", tz=tz)
+by_moy = count_intervals(cal, date(2025, 1, 1), date(2026, 1, 1),
+    period="month", group_by="month_of_year", tz="US/Pacific")
 # Returns: [(1, 30), (2, 28), ..., (12, 25)]  — 12 buckets
 ```
 
 These are the ONLY valid period+group_by pairs. Any other combination
-(e.g. `period="day", group_by="hour_of_day"`) raises ValueError.
+(e.g. `period="full"` or `period="day"` with `group_by="hour_of_day"`)
+raises ValueError.
 
 ## iCalendar (.ics) Files
 
