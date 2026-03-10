@@ -34,11 +34,12 @@ my_events = timeline(event1, event2, event3)
 busy = alice_cal | bob_cal
 busy = union(alice_cal, bob_cal, charlie_cal)  # functional form
 
-# Slice to execute
+# Slice to execute — bounds must be datetime (via at_tz) or int, NOT date
 events = list(busy[start:end])
 ```
 
-**`at_tz()`** creates timezone-aware datetimes from strings, dates, or components:
+**`at_tz()`** creates timezone-aware datetimes from strings, dates, or components.
+Use it for all timeline slicing (date objects are only accepted by metrics, not slicing):
 
 ```python
 at = at_tz("US/Pacific")
@@ -97,7 +98,26 @@ df = to_dataframe(events, exclude=["uid", "dtstamp"])
 df = to_dataframe(events, raw=True)
 ```
 
-Columns: `day`, `time`, `duration` first, then type-specific fields (`summary`, `location`, etc.).
+**Default columns:** `day` (date string), `time` (time string), `duration` (formatted),
+then type-specific fields (`summary`, `location`, etc.).
+**With `raw=True`:** `day` → datetime, `time` → datetime, `duration` → int (seconds).
+Note: columns are still named `day`, `time`, `duration` — NOT `start`/`end`.
+
+**Need start/end datetimes?** (e.g. for Gantt charts or Plotly): access `.start` and `.end`
+(Unix timestamps) directly from interval objects, or use `raw=True` and rename:
+
+```python
+df = to_dataframe(events, tz="US/Pacific", raw=True)
+df = df.rename(columns={"day": "start", "time": "start_time"})
+# Or build directly from intervals:
+import pandas as pd
+from datetime import datetime, timezone
+df = pd.DataFrame([{
+    "start": datetime.fromtimestamp(e.start, tz=timezone.utc),
+    "end": datetime.fromtimestamp(e.end, tz=timezone.utc),
+    "summary": e.summary,
+} for e in events])
+```
 
 ## Point-in-Time Queries
 
