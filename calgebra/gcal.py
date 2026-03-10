@@ -585,12 +585,19 @@ class Calendar(MutableTimeline[Event]):
         id: str,
         summary: str,
         access_token: str,
+        *,
+        primary: bool = False,
+        timezone: str | None = None,
     ) -> None:
         self.id: str = id
         self.summary: str = summary
+        self.primary: bool = primary
+        self.timezone: str | None = timezone
         self._access_token: str = access_token
-        self.__calendar_timezone: ZoneInfo | None = None
-        self.__calendar_timezone_fetched: bool = False
+        self.__calendar_timezone: ZoneInfo | None = (
+            ZoneInfo(timezone) if timezone else None
+        )
+        self.__calendar_timezone_fetched: bool = timezone is not None
 
     @property
     def _calendar_timezone(self) -> ZoneInfo | None:
@@ -603,6 +610,7 @@ class Calendar(MutableTimeline[Event]):
                 if data:
                     tz_str = data.get("timeZone")
                     if tz_str:
+                        self.timezone = tz_str
                         self.__calendar_timezone = ZoneInfo(tz_str)
             except Exception:
                 pass
@@ -610,7 +618,12 @@ class Calendar(MutableTimeline[Event]):
 
     @override
     def __str__(self) -> str:
-        return f"Calendar('{self.summary}', id='{self.id}')"
+        parts = [f"'{self.summary}'", f"id='{self.id}'"]
+        if self.primary:
+            parts.append("primary=True")
+        if self.timezone:
+            parts.append(f"timezone='{self.timezone}'")
+        return f"Calendar({', '.join(parts)})"
 
     @override
     def fetch(
@@ -888,5 +901,13 @@ def calendars(access_token: str) -> list[Calendar]:
         cal_id = item.get("id")
         cal_summary = item.get("summary")
         if cal_id and cal_summary:
-            result.append(Calendar(cal_id, cal_summary, access_token))
+            result.append(
+                Calendar(
+                    cal_id,
+                    cal_summary,
+                    access_token,
+                    primary=item.get("primary", False),
+                    timezone=item.get("timeZone"),
+                )
+            )
     return sorted(result, key=lambda c: c.id)

@@ -25,9 +25,9 @@ at = at_tz("US/Pacific")
 
 # Get all accessible calendars
 cals = calendars(access_token)
-primary = cals[0]
+primary = next(c for c in cals if c.primary)
 
-print(f"Calendar: {primary.calendar_summary} (ID: {primary.calendar_id})")
+print(f"Calendar: {primary.summary} (ID: {primary.id}, TZ: {primary.timezone})")
 ```
 
 ## Reading Events

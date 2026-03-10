@@ -23,8 +23,10 @@ at = at_tz("US/Pacific")
 
 cals = calendars(access_token)
 for c in cals:
-    print(c.summary, c.id)
-primary = cals[0]
+    print(c.summary, c.id, c.timezone, c.primary)
+
+# Get the primary calendar
+primary = next(c for c in cals if c.primary)
 ```
 
 ## Calendar Fields
@@ -33,6 +35,8 @@ primary = cals[0]
 |-------|------|-------|
 | `id` | `str` | Google Calendar ID |
 | `summary` | `str` | Calendar display name |
+| `primary` | `bool` | True if this is the user's primary calendar |
+| `timezone` | `str \| None` | IANA timezone (e.g. `"America/Los_Angeles"`) |
 
 ## Reading Events
 
