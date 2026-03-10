@@ -2,6 +2,8 @@
 
 `calgebra` provides full read/write support for Google Calendar through the `calgebra.gcsa` module. This guide covers authentication, reading events, writing events (single and recurring), removing events, and common patterns.
 
+> **Alternative backend:** For browser/Pyodide environments or when you have an OAuth access token directly, see [`calgebra.gcal`](GCAL.md) — a dependency-free backend using direct REST API calls.
+
 ## Installation
 
 Install `calgebra` with Google Calendar support:

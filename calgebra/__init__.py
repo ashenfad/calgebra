@@ -64,6 +64,7 @@ class Docs:
     tutorial: str
     api: str
     gcsa: str
+    gcal: str
     quick_start: str
 
 
@@ -75,6 +76,7 @@ docs = Docs(
     tutorial=(_docs_path / "TUTORIAL.md").read_text(),
     api=(_docs_path / "API.md").read_text(),
     gcsa=(_docs_path / "GCSA.md").read_text(),
+    gcal=(_docs_path / "GCAL.md").read_text(),
     quick_start=(_docs_path / "QUICK-START.md").read_text(),
 )
 

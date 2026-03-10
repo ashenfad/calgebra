@@ -13,7 +13,7 @@ def test_docs_object_exists() -> None:
 
 def test_docs_fields() -> None:
     """Verify expected documentation fields exist."""
-    expected_fields = {"readme", "tutorial", "api", "gcsa", "quick_start"}
+    expected_fields = {"readme", "tutorial", "api", "gcsa", "gcal", "quick_start"}
     actual_fields = {f.name for f in dataclasses.fields(calgebra.docs)}
     assert actual_fields == expected_fields
 

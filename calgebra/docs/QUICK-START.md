@@ -95,14 +95,26 @@ total = total_duration(meetings, date(2025, 11, 1), date(2025, 11, 8))[0][1]
 
 ## Google Calendar
 
+Two backends available:
+- `calgebra.gcsa` — uses local OAuth credentials (via gcsa library)
+- `calgebra.gcal` — uses an OAuth access token directly (browser/Pyodide compatible)
+
 ```python
+# With local credentials (gcsa)
 from calgebra.gcsa import calendars, Calendar, Event
+cals = calendars()
+
+# With access token (gcal)
+from calgebra.gcal import calendars, Calendar, Event
+cals = calendars(access_token)
+```
+
+```python
 from calgebra import at_tz, union
 
 at = at_tz("US/Pacific")
 
 # Read
-cals = calendars()
 primary: Calendar = cals[0]  # primary may not be index 0
 events = list(primary[at("2025-01-01"):at("2025-01-31")])
 

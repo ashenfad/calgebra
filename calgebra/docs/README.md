@@ -50,10 +50,10 @@ pprint(islice(free_slots[at("2025-01-01"):at("2025-02-01")], 5), tz=tz)
 - **Lazy composition**: Build complex queries, execute with slicing
 - **Recurring patterns**: `day_of_week()`, `time_of_day()`, `recurring()` (RFC 5545)
 - **Interval filtering**: `hours >= 2`, `summary == "standup"`, custom properties
-- **Google Calendar**: Read/write via `calgebra.gcsa`
+- **Google Calendar**: Read/write via `calgebra.gcsa` (local credentials) or `calgebra.gcal` (OAuth token / browser)
 - **iCalendar (.ics)**: Load/save standard RFC 5545 files
 
-**→** **[Quick-start](docs/QUICK-START.md)** | **[Tutorial](docs/TUTORIAL.md)** | **[API Reference](docs/API.md)** | **[Google Calendar](docs/GCSA.md)** | **[Demo Video](https://youtu.be/10kG4tw0D4k)**
+**→** **[Quick-start](docs/QUICK-START.md)** | **[Tutorial](docs/TUTORIAL.md)** | **[API Reference](docs/API.md)** | **[Google Calendar (gcsa)](docs/GCSA.md)** | **[Google Calendar (gcal)](docs/GCAL.md)** | **[Demo Video](https://youtu.be/10kG4tw0D4k)**
 
 
 ## License
