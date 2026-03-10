@@ -63,7 +63,7 @@ packages = {find = {exclude = ["tests*", "build*"]}}
 
 # Include documentation files within the package
 [tool.setuptools.package-data]
-calgebra = ["docs/*.md", "py.typed"]
+calgebra = ["docs/*.md", "skills/*/SKILL.md", "py.typed"]
 
 [tool.ruff]
 line-length = 88

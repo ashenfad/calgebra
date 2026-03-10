@@ -7,6 +7,8 @@ and save them back.
 Requires the `icalendar` library: `pip install calgebra[ical]`
 """
 
+from __future__ import annotations
+
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
