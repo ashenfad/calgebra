@@ -192,33 +192,41 @@ longest = max_duration(meetings, date(2025, 11, 1), date(2025, 11, 8),
 # Returns: [(date(2025,11,1), Event(...)), ...] — None for empty days
 ```
 
-**group_by — cyclic histograms:**
+**Cyclic histograms (`group_by`):**
 
-`period` sets the slice granularity, `group_by` buckets those slices by a
-cyclic key. **The period must match the group_by dimension** — e.g. to group
-by hour_of_day you must slice into hours (`period="hour"`), not days.
-
-| To group by... | Set period to | group_by | Buckets |
-|---|---|---|---|
-| Hour of day | `"hour"` | `"hour_of_day"` | 0–23 |
-| Day of week | `"day"` | `"day_of_week"` | 0–6 (Mon=0) |
-| Day of month | `"day"` | `"day_of_month"` | 1–31 |
-| Week of year | `"week"` | `"week_of_year"` | 1–53 |
-| Month of year | `"month"` | `"month_of_year"` | 1–12 |
-
-Other combinations (e.g. `period="day", group_by="hour_of_day"`) raise `ValueError`.
+`group_by` aggregates across a cyclic dimension (e.g. all Mondays together).
+**IMPORTANT: `period` and `group_by` are paired — you MUST use them together
+exactly as shown. No other combinations are valid.**
 
 ```python
-# Total meeting time by hour of day — period MUST be "hour"
-by_hour = total_duration(meetings, date(2025, 1, 1), date(2025, 3, 1),
-    period="hour", group_by="hour_of_day", tz="US/Pacific")
-# Returns: [(0, 0), (1, 0), ..., (9, 54000), (10, 48000), ...]
+# "How much time in meetings per hour of day?"
+by_hour = total_duration(meetings, start, end,
+    period="hour", group_by="hour_of_day", tz=tz)
+# Returns: [(0, 0), ..., (9, 54000), ..., (23, 0)]  — 24 buckets
 
-# Event count by day of week — period MUST be "day"
-by_weekday = count_intervals(meetings, date(2025, 1, 1), date(2025, 3, 1),
-    period="day", group_by="day_of_week", tz="US/Pacific")
-# Returns: [(0, 45), (1, 52), ..., (6, 0)]  # Mon=0
+# "How many meetings per day of week?"
+by_dow = count_intervals(meetings, start, end,
+    period="day", group_by="day_of_week", tz=tz)
+# Returns: [(0, 45), (1, 52), ..., (6, 0)]  — 7 buckets, Mon=0
+
+# "What % of time is booked per day of month?"
+by_dom = coverage_ratio(cal, start, end,
+    period="day", group_by="day_of_month", tz=tz)
+# Returns: [(1, 0.73), (2, 0.81), ..., (31, 0.5)]  — 31 buckets
+
+# "Total meeting time per week of year?"
+by_woy = total_duration(meetings, start, end,
+    period="week", group_by="week_of_year", tz=tz)
+# Returns: [(1, 18000), ..., (53, 0)]  — 53 buckets
+
+# "Event count per month of year?"
+by_moy = count_intervals(cal, start, end,
+    period="month", group_by="month_of_year", tz=tz)
+# Returns: [(1, 30), (2, 28), ..., (12, 25)]  — 12 buckets
 ```
+
+These are the ONLY valid period+group_by pairs. Any other combination
+(e.g. `period="day", group_by="hour_of_day"`) raises ValueError.
 
 ## iCalendar (.ics) Files
 
