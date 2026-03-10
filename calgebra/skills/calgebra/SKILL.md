@@ -79,6 +79,26 @@ urgent = timeline & has_any(tags, {"urgent", "critical"})
 both = timeline & has_all(tags, {"work", "urgent"})
 ```
 
+## DataFrame Conversion (Preferred for Displaying Events)
+
+Use `to_dataframe` to present events to the user — it produces a clean, readable table and is the idiomatic way to share calendar data:
+
+```python
+from calgebra import to_dataframe
+
+events = list(calendar[start:end])
+df = to_dataframe(events, tz="US/Pacific")
+
+# Control columns
+df = to_dataframe(events, include=["day", "time", "duration", "summary"])
+df = to_dataframe(events, exclude=["uid", "dtstamp"])
+
+# Raw datetime objects instead of formatted strings
+df = to_dataframe(events, raw=True)
+```
+
+Columns: `day`, `time`, `duration` first, then type-specific fields (`summary`, `location`, etc.).
+
 ## Point-in-Time Queries
 
 ```python
@@ -140,24 +160,6 @@ by_weekday = count_intervals(meetings, date(2025, 1, 1), date(2025, 3, 1),
 
 Periods: `"hour"`, `"day"`, `"week"`, `"month"`, `"year"`, `"full"`.
 Groups: `"hour_of_day"`, `"day_of_week"`, `"day_of_month"`, `"week_of_year"`, `"month_of_year"`.
-
-## DataFrame Conversion
-
-```python
-from calgebra import to_dataframe
-
-events = list(calendar[start:end])
-df = to_dataframe(events, tz="US/Pacific")
-
-# Control columns
-df = to_dataframe(events, include=["day", "time", "duration", "summary"])
-df = to_dataframe(events, exclude=["uid", "dtstamp"])
-
-# Raw datetime objects instead of formatted strings
-df = to_dataframe(events, raw=True)
-```
-
-Columns: `day`, `time`, `duration` first, then type-specific fields (`summary`, `location`, etc.).
 
 ## iCalendar (.ics) Files
 
