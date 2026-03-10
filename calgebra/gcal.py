@@ -580,12 +580,12 @@ class Calendar(MutableTimeline[Event]):
 
     def __init__(
         self,
-        calendar_id: str,
-        calendar_summary: str,
+        id: str,
+        summary: str,
         access_token: str,
     ) -> None:
-        self.calendar_id: str = calendar_id
-        self.calendar_summary: str = calendar_summary
+        self.id: str = id
+        self.summary: str = summary
         self._access_token: str = access_token
         self.__calendar_timezone: ZoneInfo | None = None
         self.__calendar_timezone_fetched: bool = False
@@ -596,7 +596,7 @@ class Calendar(MutableTimeline[Event]):
         if not self.__calendar_timezone_fetched:
             self.__calendar_timezone_fetched = True
             try:
-                url = f"{_API_BASE}/calendars/{self.calendar_id}"
+                url = f"{_API_BASE}/calendars/{self.id}"
                 data = _xhr_request("GET", url, self._access_token)
                 if data:
                     tz_str = data.get("timeZone")
@@ -608,7 +608,7 @@ class Calendar(MutableTimeline[Event]):
 
     @override
     def __str__(self) -> str:
-        return f"Calendar(id='{self.calendar_id}', summary='{self.calendar_summary}')"
+        return f"Calendar('{self.summary}', id='{self.id}')"
 
     @override
     def fetch(
@@ -620,7 +620,7 @@ class Calendar(MutableTimeline[Event]):
 
     def _fetch_forward(self, start: int | None, end: int | None) -> Iterable[Event]:
         """Forward iteration through calendar events with pagination."""
-        url = f"{_API_BASE}/calendars/{self.calendar_id}/events"
+        url = f"{_API_BASE}/calendars/{self.id}/events"
         params: dict[str, str] = {
             "singleEvents": "true",
             "orderBy": "startTime",
@@ -633,7 +633,7 @@ class Calendar(MutableTimeline[Event]):
         cal_tz = self._calendar_timezone
 
         for raw in _paginated_get(url, self._access_token, params):
-            event = _json_to_event(raw, self.calendar_id, self.calendar_summary, cal_tz)
+            event = _json_to_event(raw, self.id, self.summary, cal_tz)
             if event is not None:
                 yield event
 
@@ -674,8 +674,8 @@ class Calendar(MutableTimeline[Event]):
         event = replace(
             validated,
             id="",
-            calendar_id=self.calendar_id,
-            calendar_summary=self.calendar_summary,
+            calendar_id=self.id,
+            calendar_summary=self.summary,
         )
 
         is_all_day = event.is_all_day
@@ -685,7 +685,7 @@ class Calendar(MutableTimeline[Event]):
             )
 
         body = _event_to_body(replace(event, is_all_day=is_all_day), is_all_day)
-        url = f"{_API_BASE}/calendars/{self.calendar_id}/events"
+        url = f"{_API_BASE}/calendars/{self.id}/events"
         result = _xhr_request("POST", url, self._access_token, body)
 
         created_id = result.get("id", "") if result else ""
@@ -706,8 +706,8 @@ class Calendar(MutableTimeline[Event]):
     def _add_recurring(
         self, pattern: RecurringPattern[IvlOut], metadata: dict[str, Any]
     ) -> list[WriteResult]:
-        metadata["calendar_id"] = self.calendar_id
-        metadata["calendar_summary"] = self.calendar_summary
+        metadata["calendar_id"] = self.id
+        metadata["calendar_summary"] = self.summary
         merged = {**pattern.metadata, **metadata}
 
         is_all_day = pattern.duration_seconds == DAY
@@ -770,7 +770,7 @@ class Calendar(MutableTimeline[Event]):
                 ],
             }
 
-        url = f"{_API_BASE}/calendars/{self.calendar_id}/events"
+        url = f"{_API_BASE}/calendars/{self.id}/events"
         result = _xhr_request("POST", url, self._access_token, body)
 
         created_id = result.get("id", "") if result else ""
@@ -781,8 +781,8 @@ class Calendar(MutableTimeline[Event]):
 
         result_event = Event(
             id=created_id,
-            calendar_id=self.calendar_id,
-            calendar_summary=self.calendar_summary,
+            calendar_id=self.id,
+            calendar_summary=self.summary,
             summary=summary_str,
             description=description_str,
             recurring_event_id=None,
@@ -804,7 +804,7 @@ class Calendar(MutableTimeline[Event]):
         if event.recurring_event_id:
             return self._remove_recurring_instance(event, event.recurring_event_id)
 
-        url = f"{_API_BASE}/calendars/{self.calendar_id}/events/{event.id}"
+        url = f"{_API_BASE}/calendars/{self.id}/events/{event.id}"
         _xhr_request("DELETE", url, self._access_token)
         return [WriteResult(success=True, event=event, error=None)]
 
@@ -813,7 +813,7 @@ class Calendar(MutableTimeline[Event]):
     ) -> list[WriteResult]:
         """Remove a recurring instance by adding an EXDATE to the master."""
         try:
-            url = f"{_API_BASE}/calendars/{self.calendar_id}/events/{master_event_id}"
+            url = f"{_API_BASE}/calendars/{self.id}/events/{master_event_id}"
             master_data = _xhr_request("GET", url, self._access_token)
         except Exception as e:
             return _error_result(
@@ -845,9 +845,7 @@ class Calendar(MutableTimeline[Event]):
             new_rrule = _add_exdate_to_rrule(rrule_str, exdate_str)
             master_data["recurrence"] = [new_rrule]
             try:
-                url = (
-                    f"{_API_BASE}/calendars/{self.calendar_id}/events/{master_event_id}"
-                )
+                url = f"{_API_BASE}/calendars/{self.id}/events/{master_event_id}"
                 _xhr_request("PUT", url, self._access_token, master_data)
             except Exception as e:
                 return _error_result(ValueError(f"Failed to update master event: {e}"))
@@ -863,7 +861,7 @@ class Calendar(MutableTimeline[Event]):
         assert event is not None
 
         master_id = event.recurring_event_id or event.id
-        url = f"{_API_BASE}/calendars/{self.calendar_id}/events/{master_id}"
+        url = f"{_API_BASE}/calendars/{self.id}/events/{master_id}"
         _xhr_request("DELETE", url, self._access_token)
         return [WriteResult(success=True, event=event, error=None)]
 
@@ -889,4 +887,4 @@ def calendars(access_token: str) -> list[Calendar]:
         cal_summary = item.get("summary")
         if cal_id and cal_summary:
             result.append(Calendar(cal_id, cal_summary, access_token))
-    return sorted(result, key=lambda c: c.calendar_id)
+    return sorted(result, key=lambda c: c.id)

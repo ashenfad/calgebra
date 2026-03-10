@@ -542,9 +542,9 @@ class TestCalendarsFunction:
             cals = calendars("fake-token")
 
         assert len(cals) == 2
-        # Should be sorted by calendar_id
-        assert cals[0].calendar_id == "primary"
-        assert cals[1].calendar_id == "work@group.calendar.google.com"
+        # Should be sorted by id
+        assert cals[0].id == "primary"
+        assert cals[1].id == "work@group.calendar.google.com"
 
 
 # ---------------------------------------------------------------------------
