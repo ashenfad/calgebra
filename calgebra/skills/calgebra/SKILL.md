@@ -147,7 +147,7 @@ metric(timeline, start, end, period="full", tz="UTC", group_by=None)
   - `"full"` — single window spanning start to end (default)
   - `"hour"`, `"day"`, `"week"` (ISO Mon–Sun), `"month"`, `"year"`
 - **tz**: Timezone for interpreting dates and aligning period boundaries.
-- **group_by** (optional): Collapses windows by cyclic key, summing values across matching periods.
+- **group_by** (optional): Collapses windows by cyclic key, summing values across matching periods. **Cannot be used with `period="full"` or `"year"`** — requires `"hour"`, `"day"`, `"week"`, or `"month"`.
 
 **Available metrics:**
 
