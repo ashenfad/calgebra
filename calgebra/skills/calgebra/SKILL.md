@@ -194,26 +194,30 @@ longest = max_duration(meetings, date(2025, 11, 1), date(2025, 11, 8),
 
 **group_by — cyclic histograms:**
 
-Valid `period` + `group_by` combinations:
+`period` sets the slice granularity, `group_by` buckets those slices by a
+cyclic key. **The period must match the group_by dimension** — e.g. to group
+by hour_of_day you must slice into hours (`period="hour"`), not days.
 
-| period | group_by | Buckets |
-|---|---|---|
-| `"hour"` | `"hour_of_day"` | 0–23 |
-| `"day"` | `"day_of_week"` | 0–6 (Mon=0) |
-| `"day"` | `"day_of_month"` | 1–31 |
-| `"week"` | `"week_of_year"` | 1–53 |
-| `"month"` | `"month_of_year"` | 1–12 |
+| To group by... | Set period to | group_by | Buckets |
+|---|---|---|---|
+| Hour of day | `"hour"` | `"hour_of_day"` | 0–23 |
+| Day of week | `"day"` | `"day_of_week"` | 0–6 (Mon=0) |
+| Day of month | `"day"` | `"day_of_month"` | 1–31 |
+| Week of year | `"week"` | `"week_of_year"` | 1–53 |
+| Month of year | `"month"` | `"month_of_year"` | 1–12 |
+
+Other combinations (e.g. `period="day", group_by="hour_of_day"`) raise `ValueError`.
 
 ```python
-# Total meeting time by day of week
-by_weekday = total_duration(meetings, date(2025, 1, 1), date(2025, 3, 1),
-    period="day", group_by="day_of_week", tz="US/Pacific")
-# Returns: [(0, 54000), (1, 48000), ..., (6, 0)]  # Mon=0
-
-# Event count by hour of day
-by_hour = count_intervals(meetings, date(2025, 1, 1), date(2025, 3, 1),
+# Total meeting time by hour of day — period MUST be "hour"
+by_hour = total_duration(meetings, date(2025, 1, 1), date(2025, 3, 1),
     period="hour", group_by="hour_of_day", tz="US/Pacific")
-# Returns: [(0, 0), (1, 0), ..., (9, 45), (10, 52), ...]
+# Returns: [(0, 0), (1, 0), ..., (9, 54000), (10, 48000), ...]
+
+# Event count by day of week — period MUST be "day"
+by_weekday = count_intervals(meetings, date(2025, 1, 1), date(2025, 3, 1),
+    period="day", group_by="day_of_week", tz="US/Pacific")
+# Returns: [(0, 45), (1, 52), ..., (6, 0)]  # Mon=0
 ```
 
 ## iCalendar (.ics) Files
