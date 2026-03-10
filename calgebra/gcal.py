@@ -252,9 +252,11 @@ def _paginated_get(
     params: dict[str, str],
 ) -> Iterable[dict]:
     """GET with automatic pagination, yielding items from each page."""
+    from urllib.parse import urlencode
+
     sep = "&" if "?" in url else "?"
     while True:
-        query = "&".join(f"{k}={v}" for k, v in params.items())
+        query = urlencode(params)
         full_url = f"{url}{sep}{query}"
         data = _xhr_request("GET", full_url, access_token)
         if data is None:
