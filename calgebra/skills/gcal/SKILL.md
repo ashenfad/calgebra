@@ -1,6 +1,8 @@
 ---
 name: gcal
 description: Google Calendar integration via REST API. Use when reading/writing Google Calendar events, listing calendars, creating meetings, managing recurring events, or working with attendees and reminders. Requires an OAuth access token.
+modules:
+  - calgebra.gcal
 user-invocable: true
 ---
 

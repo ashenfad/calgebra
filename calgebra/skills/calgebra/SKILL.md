@@ -1,6 +1,8 @@
 ---
 name: calgebra
 description: Set algebra for calendars. Use when working with time intervals, finding free time, detecting conflicts, composing calendars, filtering events by duration or properties, computing metrics, or building recurring patterns.
+modules:
+  - calgebra
 user-invocable: true
 ---
 
