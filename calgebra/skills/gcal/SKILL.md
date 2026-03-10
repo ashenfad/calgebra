@@ -27,13 +27,20 @@ for c in cals:
 primary = cals[0]
 ```
 
+## Calendar Fields
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | `str` | Google Calendar ID |
+| `summary` | `str` | Calendar display name |
+
 ## Reading Events
 
 ```python
 events = list(primary[at("2025-01-01"):at("2025-01-31")])
 
 for e in events:
-    print(e.summary, e.start, e.end)
+    print(e.summary, e.start, e.end, e.duration)
     print(e.location, e.status, e.attendees)
 ```
 
