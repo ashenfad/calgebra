@@ -20,6 +20,8 @@ access_token = "ya29...."  # OAuth access token with calendar scope
 at = at_tz("US/Pacific")
 
 cals = calendars(access_token)
+for c in cals:
+    print(c.calendar_summary, c.calendar_id)
 primary = cals[0]
 ```
 
