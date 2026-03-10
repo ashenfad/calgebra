@@ -11,7 +11,8 @@
 - [Caching](#caching-calgebracache)
 - [Reverse Iteration](#reverse-iteration)
 - [Mutable Timelines](#mutable-timelines-calgebramutable)
-- [Google Calendar Integration](#google-calendar-integration-calgebragcsa)
+- [Google Calendar Integration (gcsa)](#google-calendar-integration-calgebragcsa)
+- [Google Calendar Integration (gcal)](#google-calendar-integration-calgebragcal)
 - [iCalendar Integration (.ics)](#icalendar-integration-ics-calgebraical)
 - [Notes](#notes)
 
@@ -762,7 +763,45 @@ Iteration requires a finite "origin" — the point where iteration begins:
   - `method`: `"email"` or `"popup"`
   - `minutes`: Minutes before event start
 
-**See also:** [Google Calendar Guide](GCSA.md) for authentication, examples, and common patterns.
+**See also:** [Google Calendar Guide (gcsa)](GCSA.md) for authentication, examples, and common patterns.
+
+## Google Calendar Integration (`calgebra.gcal`)
+
+Direct REST API backend for Google Calendar. No `gcsa` dependency — uses synchronous HTTP (XMLHttpRequest in Pyodide Web Workers, urllib fallback elsewhere). Designed for browser environments but works anywhere you have an OAuth access token.
+
+- `calendars(access_token)` → `list[Calendar]` - Returns Calendar timelines for all accessible calendars
+- `Calendar(calendar_id, calendar_summary, access_token)` - Timeline backed by Google Calendar REST API
+- `Event` - Extends `Interval` with full Google Calendar metadata:
+  - `id`: Google Calendar event ID
+  - `calendar_id`, `calendar_summary`: Source calendar identity
+  - `summary`: Event title
+  - `description`: Event description (optional)
+  - `location`: Location string (optional)
+  - `recurring_event_id`: Master recurring event ID (None for standalone/master events)
+  - `is_all_day`: True for all-day events, False for timed events
+  - `reminders`: List of `Reminder` objects (None = calendar defaults)
+  - `attendees`: List of `Attendee` objects (None = no attendees)
+  - `status`: `"confirmed"`, `"tentative"`, or `"cancelled"`
+  - `visibility`: `"default"`, `"public"`, `"private"`, or `"confidential"`
+  - `transparency`: `"opaque"` (busy) or `"transparent"` (free)
+  - `color_id`: Google Calendar color palette ID
+  - `html_link`: URL to view in Google Calendar (read-only)
+  - `hangout_link`: Google Meet link (read-only)
+  - `creator`, `organizer`: Dict with `"email"` and optional `"displayName"` (read-only)
+- `Attendee` - Event attendee:
+  - `email`: Attendee's email address
+  - `display_name`: Display name (optional)
+  - `response_status`: `"needsAction"`, `"declined"`, `"tentative"`, or `"accepted"`
+  - `optional`: Whether attendance is optional
+- `Reminder` - Event reminder/notification:
+  - `method`: `"email"` or `"popup"`
+  - `minutes`: Minutes before event start
+
+**When to use `gcal` vs `gcsa`:**
+- Use `calgebra.gcal` when you have an OAuth access token (browser apps, Pyodide, server-to-server with token)
+- Use `calgebra.gcsa` when you have local OAuth credentials (CLI tools, desktop apps, scripts)
+
+**See also:** [Google Calendar Guide (gcal)](GCAL.md) for examples and common patterns.
 
 ## iCalendar Integration (.ics) (`calgebra.ical`)
 
