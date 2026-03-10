@@ -136,30 +136,85 @@ coalesced = flatten(cal_a | cal_b)  # merge overlapping spans
 
 ## Metrics
 
+All metric functions share this signature:
+
 ```python
-from calgebra import coverage_ratio, total_duration, count_intervals
+metric(timeline, start, end, period="full", tz="UTC", group_by=None)
+```
+
+- **start/end**: `date`, `datetime`, or Unix `int`. Dates are interpreted as midnight in `tz`.
+- **period**: Slices the start–end range into calendar-aligned windows. Each window produces one result tuple.
+  - `"full"` — single window spanning start to end (default)
+  - `"hour"`, `"day"`, `"week"` (ISO Mon–Sun), `"month"`, `"year"`
+- **tz**: Timezone for interpreting dates and aligning period boundaries.
+- **group_by** (optional): Collapses windows by cyclic key, summing values across matching periods.
+
+**Available metrics:**
+
+| Function | Returns per window | Notes |
+|---|---|---|
+| `total_duration` | `int` (seconds) | Flattens overlaps before summing |
+| `count_intervals` | `int` | Number of intervals touching window |
+| `coverage_ratio` | `float` (0–1) | Fraction of window covered |
+| `max_duration` | `Interval \| None` | Longest interval in window |
+| `min_duration` | `Interval \| None` | Shortest interval in window |
+
+**Return shape:**
+- Without `group_by`: `list[(date, value)]` — one tuple per period window
+- With `group_by`: `list[(int, value)]` — one tuple per cyclic bucket, sorted by key
+
+```python
+from calgebra import total_duration, count_intervals, coverage_ratio
 from calgebra import max_duration, min_duration
 from datetime import date
 
-daily = coverage_ratio(calendar, date(2025, 11, 1), date(2025, 12, 1), period="day", tz="US/Pacific")
+# Total meeting seconds per day
+daily = total_duration(meetings, date(2025, 11, 1), date(2025, 12, 1),
+    period="day", tz="US/Pacific")
+# Returns: [(date(2025,11,1), 7200), (date(2025,11,2), 0), ...]
+
+# Single total over entire range (default period="full")
+total = total_duration(meetings, date(2025, 11, 1), date(2025, 12, 1), tz="US/Pacific")
+# Returns: [(date(2025,11,1), 180000)]
+
+# Event count per month
+monthly = count_intervals(calendar, date(2025, 1, 1), date(2026, 1, 1),
+    period="month", tz="US/Pacific")
+
+# Daily coverage ratio
+daily_cov = coverage_ratio(calendar, date(2025, 11, 1), date(2025, 12, 1),
+    period="day", tz="US/Pacific")
 # Returns: [(date(2025,11,1), 0.73), ...]
 
-weekly = total_duration(meetings, date(2025, 11, 1), date(2025, 12, 1), period="week")
-monthly = count_intervals(calendar, date(2025, 1, 1), date(2026, 1, 1), period="month")
-
-longest = max_duration(meetings, date(2025, 11, 1), date(2025, 11, 8), period="day")
-# Returns: [(date(2025,11,1), Event(...)), ...] or None for empty periods
-
-shortest = min_duration(meetings, date(2025, 11, 1), date(2025, 12, 1), period="week")
-
-# Cyclic histograms
-by_weekday = count_intervals(meetings, date(2025, 1, 1), date(2025, 3, 1),
-    period="day", group_by="day_of_week", tz="US/Pacific")
-# Returns: [(0, 45), (1, 52), ..., (6, 8)]  # Mon=0
+# Longest meeting each day
+longest = max_duration(meetings, date(2025, 11, 1), date(2025, 11, 8),
+    period="day", tz="US/Pacific")
+# Returns: [(date(2025,11,1), Event(...)), ...] — None for empty days
 ```
 
-Periods: `"hour"`, `"day"`, `"week"`, `"month"`, `"year"`, `"full"`.
-Groups: `"hour_of_day"`, `"day_of_week"`, `"day_of_month"`, `"week_of_year"`, `"month_of_year"`.
+**group_by — cyclic histograms:**
+
+Valid `period` + `group_by` combinations:
+
+| period | group_by | Buckets |
+|---|---|---|
+| `"hour"` | `"hour_of_day"` | 0–23 |
+| `"day"` | `"day_of_week"` | 0–6 (Mon=0) |
+| `"day"` | `"day_of_month"` | 1–31 |
+| `"week"` | `"week_of_year"` | 1–53 |
+| `"month"` | `"month_of_year"` | 1–12 |
+
+```python
+# Total meeting time by day of week
+by_weekday = total_duration(meetings, date(2025, 1, 1), date(2025, 3, 1),
+    period="day", group_by="day_of_week", tz="US/Pacific")
+# Returns: [(0, 54000), (1, 48000), ..., (6, 0)]  # Mon=0
+
+# Event count by hour of day
+by_hour = count_intervals(meetings, date(2025, 1, 1), date(2025, 3, 1),
+    period="hour", group_by="hour_of_day", tz="US/Pacific")
+# Returns: [(0, 0), (1, 0), ..., (9, 45), (10, 52), ...]
+```
 
 ## iCalendar (.ics) Files
 
