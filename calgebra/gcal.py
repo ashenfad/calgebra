@@ -27,6 +27,7 @@ Example:
 """
 
 import json
+import logging
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
@@ -613,7 +614,11 @@ class Calendar(MutableTimeline[Event]):
                         self.timezone = tz_str
                         self.__calendar_timezone = ZoneInfo(tz_str)
             except Exception:
-                pass
+                logging.getLogger("calgebra.gcal").warning(
+                    "Failed to fetch timezone for calendar %s, falling back to UTC",
+                    self.id,
+                    exc_info=True,
+                )
         return self.__calendar_timezone
 
     @override
