@@ -39,7 +39,7 @@ from calgebra.gcal import calendars
 from calgebra import at_tz
 
 cals = calendars(access_token)
-primary = cals[0]
+primary = next(c for c in cals if c.primary)
 at = at_tz("US/Pacific")
 
 events = list(primary[at("2025-01-01"):at("2025-01-31")])
@@ -110,7 +110,7 @@ from calgebra.gcal import calendars, Event, Reminder, Attendee
 from calgebra import at_tz
 
 cals = calendars(access_token)
-primary = cals[0]
+primary = next(c for c in cals if c.primary)
 at = at_tz("US/Pacific")
 
 # Timed event with attendees and reminders
@@ -178,7 +178,7 @@ from calgebra.gcal import calendars, Reminder
 from calgebra import recurring, at_tz, HOUR, MINUTE
 
 cals = calendars(access_token)
-primary = cals[0]
+primary = next(c for c in cals if c.primary)
 at = at_tz("US/Pacific")
 
 # Weekly Monday standup
@@ -254,7 +254,7 @@ from calgebra.gcal import calendars
 from calgebra import day_of_week, time_of_day, hours, at_tz, HOUR
 
 cals = calendars(access_token)
-primary = cals[0]
+primary = next(c for c in cals if c.primary)
 at = at_tz("US/Pacific")
 
 weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"])
