@@ -391,7 +391,7 @@ def _parse_event_datetime(
     """
     if "dateTime" in dt_obj:
         dt_str = dt_obj["dateTime"]
-        dt = datetime.fromisoformat(dt_str)
+        dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
         if dt.tzinfo is None:
             tz_str = dt_obj.get("timeZone")
             tz = ZoneInfo(tz_str) if tz_str else timezone.utc
