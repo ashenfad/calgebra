@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.8] - 2026-03-12
+
+### Added
+- **Google Calendar REST backend (`calgebra.gcal`)**: Full read/write support via direct REST API calls with an OAuth access token. Works in browser/Pyodide environments (sync XMLHttpRequest in Web Workers, urllib fallback on server). Includes `Calendar` (a `MutableTimeline`), `Event`, `Reminder`, `Attendee`, pagination, recurring event writes, and instance-level removal.
+- **Skill documentation**: YAML-frontmatter skill files for `calgebra` and `gcal`, discoverable by agex agents via `/skills/`.
+- **`Calendar.primary` and `Calendar.timezone` fields**: Expose Google Calendar metadata.
+
+### Fixed
+- **Python 3.10 compatibility**: Handle `Z` suffix in `datetime.fromisoformat()` (added in 3.11).
+- **URL-encoding in gcal API requests**: Query parameters are now properly URL-encoded.
+- **Deferred type annotations in `ical.py`**: Avoid `NameError` when `icalendar` is not installed.
+- **Timezone fetch failure logging**: Warn instead of silently falling back to UTC.
+
 ## [0.10.7] - 2026-02-06
 
 ### Fixed
