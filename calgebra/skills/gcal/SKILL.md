@@ -55,8 +55,7 @@ from calgebra import hours, union
 
 team_busy = union(*cals)
 long_meetings = primary & (hours >= 2)
-# Exclude "transparent" (free) events before computing free time
-busy = primary - (primary & (transparency == "transparent"))
+busy = primary & (transparency == "opaque")
 free = business_hours - busy
 ```
 
@@ -190,24 +189,13 @@ from calgebra.gcal import summary, location, status, transparency, calendar_id
 
 work_events = primary & (summary == "Work")
 private = primary & (visibility == "private")
-busy_only = primary - (primary & (transparency == "transparent"))
+busy_only = primary & (transparency == "opaque")
 ```
 
-> [!IMPORTANT]
-> **Implicit Busy Status (Transparency):** In Google Calendar, most events are
-> "Busy" by default, which means the `transparency` field is often missing
-> (`None`) in the API response.
->
-> **The Pitfall:** `transparency == "opaque"` will NOT match events where the
-> field is missing/null. Using this filter will often make a busy calendar
-> appear completely free.
->
-> **The Fix:** To reliably get all busy time, start with the full timeline and
-> subtract only the explicitly "Free" (transparent) events:
-> ```python
-> # The reliable pattern for "all busy time"
-> busy = timeline - (timeline & (transparency == "transparent"))
-> ```
+> [!NOTE]
+> **Transparency** is normalized on parse: Google Calendar events missing the
+> field default to `"opaque"` (busy). You can safely use
+> `transparency == "opaque"` or `transparency == "transparent"` directly.
 
 ## Authentication
 

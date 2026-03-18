@@ -444,7 +444,7 @@ def _json_to_event(
         attendees=_parse_attendees(raw.get("attendees")),
         status=raw.get("status", "confirmed"),
         visibility=raw.get("visibility"),
-        transparency=raw.get("transparency"),
+        transparency=raw.get("transparency", "opaque"),
         color_id=raw.get("colorId"),
         html_link=raw.get("htmlLink"),
         hangout_link=raw.get("hangoutLink"),
