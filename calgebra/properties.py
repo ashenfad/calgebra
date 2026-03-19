@@ -194,7 +194,7 @@ def has_all(property: Property[IvlIn], values: Iterable[Hashable]) -> Operator[I
     return Operator(property, None, check)
 
 
-def field(accessor: str | Callable[[Any], Any]) -> Property[Interval]:
+def field(accessor: str | Callable[[Interval], Any]) -> Property[Interval]:
     """Create a property from a field name or accessor function.
 
     This helper makes it easy to create properties for custom interval fields
@@ -247,7 +247,7 @@ class _FieldProperty(Property[Interval]):
 class _GetterProperty(Property[Interval]):
     """Property that applies a callable to an interval."""
 
-    def __init__(self, getter: Callable[[Any], Any]) -> None:
+    def __init__(self, getter: Callable[[Interval], Any]) -> None:
         self._getter = getter
 
     @override
