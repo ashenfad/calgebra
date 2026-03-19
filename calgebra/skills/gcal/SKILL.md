@@ -1,6 +1,6 @@
 ---
 name: gcal
-description: Google Calendar integration via REST API. Use when reading/writing Google Calendar events, listing calendars, creating meetings, managing recurring events, or working with attendees and reminders. Requires an OAuth access token.
+description: Google Calendar integration via REST API. Use when reading/writing Google Calendar events, listing calendars, creating meetings, managing recurring events, or working with attendees and reminders.
 modules:
   - calgebra.gcal
 user-invocable: true
@@ -8,44 +8,50 @@ user-invocable: true
 
 # Google Calendar (calgebra.gcal)
 
-Direct REST API backend for Google Calendar. Works in Pyodide/browser (sync XMLHttpRequest in Web Workers) and standard Python (urllib fallback).
+Direct REST API backend for Google Calendar. Works in Pyodide/browser
+via sync XMLHttpRequest.
 
 Requires the `calgebra` skill for core concepts (Timelines, operators, slicing).
 
 ## Setup
 
+Always start with this pattern:
+
 ```python
 from calgebra.gcal import calendars, Calendar, Event, Reminder, Attendee
-from calgebra import at_tz
+from calgebra.gcal import transparency  # for busy/free filtering
+from calgebra import at_tz, to_dataframe
 
 access_token = "ya29...."  # OAuth access token with calendar scope
-at = at_tz("US/Pacific")
+tz = "US/Pacific"
+at = at_tz(tz)
 
 cals = calendars(access_token)
-for c in cals:
-    print(c.summary, c.id, c.timezone, c.primary)
-
-# Get the primary calendar
 primary = next(c for c in cals if c.primary)
 ```
 
-## Calendar Fields
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `id` | `str` | Google Calendar ID |
-| `summary` | `str` | Calendar display name |
-| `primary` | `bool` | True if this is the user's primary calendar |
-| `timezone` | `str \| None` | IANA timezone (e.g. `"America/Los_Angeles"`) |
+> **`transparency`** is imported from `calgebra.gcal`, NOT from `calgebra`.
 
 ## Reading Events
 
 ```python
+# List events
 events = list(primary[at("2025-01-01"):at("2025-01-31")])
+df = to_dataframe(events, tz=tz)
 
-for e in events:
-    print(e.summary, e.start, e.end, e.duration)
-    print(e.location, e.status, e.attendees)
+# Busy events only (excludes transparent/free events)
+busy = primary & (transparency == "opaque")
+busy_events = list(busy[at("2025-01-01"):at("2025-01-31")])
+
+# Free time during business hours
+from calgebra import day_of_week, time_of_day, HOUR
+
+weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"], tz=tz)
+work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz=tz)
+business_hours = weekdays & work_hours
+
+free = business_hours - busy
+slots = list(free[at("2025-01-20"):at("2025-01-24")])
 ```
 
 All calgebra operators work — union, intersection, difference, complement, filters:
@@ -55,37 +61,48 @@ from calgebra import hours, union
 
 team_busy = union(*cals)
 long_meetings = primary & (hours >= 2)
-busy = primary & (transparency == "opaque")
-free = business_hours - busy
 ```
+
+## Calendar Fields
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | `str` | Google Calendar ID |
+| `summary` | `str` | Calendar display name |
+| `primary` | `bool` | True if this is the user's primary calendar |
+| `timezone` | `str \| None` | IANA timezone |
 
 ## Event Fields
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `id` | `str` | Google Calendar event ID (auto-filled on add) |
+| `id` | `str` | Google event ID (auto-filled on add) |
 | `summary` | `str` | Event title |
 | `description` | `str \| None` | Event description |
 | `location` | `str \| None` | Location string |
 | `start`, `end` | `int` | Unix timestamps (UTC) |
 | `is_all_day` | `bool \| None` | Auto-inferred on write if None |
-| `recurring_event_id` | `str \| None` | Master event ID (None for standalone) |
+| `recurring_event_id` | `str \| None` | Master event ID |
 | `status` | `str` | `"confirmed"`, `"tentative"`, `"cancelled"` |
-| `visibility` | `str \| None` | `"default"`, `"public"`, `"private"`, `"confidential"` |
-| `transparency` | `str \| None` | `"opaque"` (busy) or `"transparent"` (free) |
-| `color_id` | `str \| None` | Google Calendar color palette ID |
-| `html_link` | `str \| None` | URL to view in Google Calendar (read-only) |
-| `hangout_link` | `str \| None` | Google Meet link (read-only) |
+| `transparency` | `str` | `"opaque"` (busy) or `"transparent"` (free) |
 | `attendees` | `list[Attendee] \| None` | Event attendees |
 | `reminders` | `list[Reminder] \| None` | None = calendar defaults |
-| `creator` | `dict \| None` | `{"email": ..., "displayName": ...}` (read-only) |
-| `organizer` | `dict \| None` | `{"email": ..., "displayName": ...}` (read-only) |
-| `calendar_id` | `str` | Source calendar ID |
-| `calendar_summary` | `str` | Source calendar name |
+| `html_link` | `str \| None` | URL to view in Google Calendar |
+| `hangout_link` | `str \| None` | Google Meet link |
+
+> **Transparency** is normalized on parse: events missing the field default
+> to `"opaque"` (busy).
 
 ## Creating Events
 
 ```python
+token = access_token
+tz = "US/Pacific"
+at = at_tz(tz)
+
+cals = calendars(token)
+primary = next(c for c in cals if c.primary)
+
 # Timed event
 meeting = Event.from_datetimes(
     start=at(2025, 1, 15, 14, 0),
@@ -109,15 +126,16 @@ vacation = Event.from_datetimes(
 )
 primary.add(vacation)
 
-# Multiple events at once
-events = [event1, event2, event3]
-results = primary.add(events)
+# Multiple events at once (single API call — preferred)
+results = primary.add([event1, event2, event3])
 ```
 
 ## Creating Recurring Events
 
 ```python
 from calgebra import recurring, HOUR, MINUTE
+
+at = at_tz("US/Pacific")
 
 # Weekly Monday standup
 pattern = recurring(
@@ -142,7 +160,7 @@ primary.add(pattern, summary="Retro")
 events = list(primary[at("2025-01-15"):at("2025-01-16")])
 event = events[0]
 
-# Remove single event (or single recurring instance via EXDATE)
+# Remove single event (or single recurring instance)
 results = primary.remove(event)
 
 # Remove entire recurring series
@@ -162,45 +180,19 @@ else:
     print(f"Error: {results[0].error}")
 ```
 
-## Attendee
+## Attendee & Reminder
 
 ```python
-Attendee(
-    email="alice@example.com",
-    display_name="Alice",          # optional
-    response_status="accepted",    # "needsAction", "declined", "tentative", "accepted"
-    optional=False,                # optional attendance
-)
+Attendee(email="alice@example.com", display_name="Alice", optional=False)
+Reminder(method="popup", minutes=10)
+Reminder(method="email", minutes=30)
 ```
 
-## Reminder
-
-```python
-Reminder(method="popup", minutes=10)   # popup 10 min before
-Reminder(method="email", minutes=30)   # email 30 min before
-```
-
-## Field Helpers
-
-Pre-defined `Property` objects for filtering:
+## Field Helpers for Filtering
 
 ```python
 from calgebra.gcal import summary, location, status, transparency, calendar_id
 
 work_events = primary & (summary == "Work")
-private = primary & (visibility == "private")
 busy_only = primary & (transparency == "opaque")
 ```
-
-> [!NOTE]
-> **Transparency** is normalized on parse: Google Calendar events missing the
-> field default to `"opaque"` (busy). You can safely use
-> `transparency == "opaque"` or `transparency == "transparent"` directly.
-
-## Authentication
-
-This module requires a Google OAuth access token with `calendar` scope. How you obtain it depends on your environment:
-
-- **Browser (Pyodide):** Google Identity Services JS library
-- **Server/CLI:** Google OAuth2 flow via google-auth library
-- **Testing:** Google OAuth Playground (developers.google.com/oauthplayground)

@@ -10,6 +10,36 @@ user-invocable: true
 
 Set algebra for calendars. Compose lazily, query efficiently.
 
+## Quick Start
+
+```python
+from calgebra import at_tz, to_dataframe, total_duration, HOUR
+from calgebra.gcal import calendars, transparency
+from datetime import date
+
+token = access_token
+tz = "US/Pacific"
+at = at_tz(tz)
+
+cals = calendars(token)
+primary = next(c for c in cals if c.primary)
+
+# Events this week
+events = list(primary[at("2025-01-20"):at("2025-01-27")])
+df = to_dataframe(events, tz=tz)
+
+# Busy time (excludes transparent/free events)
+busy = primary & (transparency == "opaque")
+busy_events = list(busy[at("2025-01-20"):at("2025-01-27")])
+```
+
+> **Imports matter:** `transparency` comes from `calgebra.gcal`, NOT from
+> `calgebra`. Other field helpers like `hours`, `minutes`, `field` come
+> from `calgebra`.
+
+> **`at_tz()` is required** for all timeline slicing. You cannot pass bare
+> `date` objects to slice bounds. Dates are only accepted by metrics.
+
 ## Core Concepts
 
 **Intervals** are time ranges `[start, end)` with exclusive end bounds (Unix timestamps):
@@ -27,25 +57,22 @@ meeting.duration  # seconds (end - start)
 ```python
 from calgebra import timeline, union, intersection
 
-# Static timeline from intervals
-my_events = timeline(event1, event2, event3)
-
 # Compose (no data fetched yet)
 busy = alice_cal | bob_cal
 busy = union(alice_cal, bob_cal, charlie_cal)  # functional form
 
-# Slice to execute — bounds must be datetime (via at_tz) or int, NOT date
-events = list(busy[start:end])
+# Slice to execute — bounds must use at_tz(), NOT bare dates
+at = at_tz("US/Pacific")
+events = list(busy[at("2025-01-01"):at("2025-01-31")])
 ```
 
-**`at_tz()`** creates timezone-aware datetimes from strings, dates, or components.
-Use it for all timeline slicing (date objects are only accepted by metrics, not slicing):
+**`at_tz()`** creates timezone-aware datetimes for slicing. Always pair with `"US/Pacific"`:
 
 ```python
 at = at_tz("US/Pacific")
 at("2025-01-01")              # date string -> midnight
 at(2025, 1, 15, 14, 30)      # components
-at(date(2025, 1, 1))         # date object
+at(date(2025, 1, 1))         # date object -> midnight
 ```
 
 ## Operators
@@ -80,14 +107,17 @@ urgent = timeline & has_any(tags, {"urgent", "critical"})
 both = timeline & has_all(tags, {"work", "urgent"})
 ```
 
+> **Important:** Use `&` between timelines and filters. `|` only works
+> between timelines.
+
 ## DataFrame Conversion (Preferred for Displaying Events)
 
-Use `to_dataframe` to present events to the user — it produces a clean, readable table and is the idiomatic way to share calendar data:
+Use `to_dataframe` to present events to the user:
 
 ```python
 from calgebra import to_dataframe
 
-events = list(calendar[start:end])
+events = list(calendar[at("2025-01-01"):at("2025-02-01")])
 df = to_dataframe(events, tz="US/Pacific")
 
 # Control columns
@@ -101,46 +131,22 @@ df = to_dataframe(events, raw=True)
 **Default columns:** `day` (date string), `time` (time string), `duration` (formatted),
 then type-specific fields (`summary`, `location`, etc.).
 **With `raw=True`:** `day` → datetime, `time` → datetime, `duration` → int (seconds).
-Note: columns are still named `day`, `time`, `duration` — NOT `start`/`end`.
-
-**Need start/end datetimes?** (e.g. for Gantt charts or Plotly): access `.start` and `.end`
-(Unix timestamps) directly from interval objects, or use `raw=True` and rename:
-
-```python
-df = to_dataframe(events, tz="US/Pacific", raw=True)
-df = df.rename(columns={"day": "start", "time": "start_time"})
-# Or build directly from intervals:
-import pandas as pd
-from datetime import datetime, timezone
-df = pd.DataFrame([{
-    "start": datetime.fromtimestamp(e.start, tz=timezone.utc),
-    "end": datetime.fromtimestamp(e.end, tz=timezone.utc),
-    "summary": e.summary,
-} for e in events])
-```
-
-## Point-in-Time Queries
-
-```python
-# What's happening at a specific moment?
-now_events = list(timeline.overlapping(unix_timestamp))
-# Returns full unclipped intervals where start <= point < end
-```
 
 ## Recurring Patterns
 
 ```python
 from calgebra import day_of_week, time_of_day, recurring, HOUR, MINUTE
 
-weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"], tz="US/Pacific")
-work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz="US/Pacific")
+tz = "US/Pacific"
+weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"], tz=tz)
+work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz=tz)
 business_hours = weekdays & work_hours
 
 # Advanced
-biweekly = recurring(freq="weekly", interval=2, day="monday", start=9*HOUR, duration=HOUR, tz="US/Pacific")
-first_monday = recurring(freq="monthly", week=1, day="monday", start=10*HOUR, duration=HOUR, tz="UTC")
-last_friday = recurring(freq="monthly", week=-1, day="friday", tz="UTC")
-payroll = recurring(freq="monthly", day_of_month=[1, 15], tz="UTC")
+biweekly = recurring(freq="weekly", interval=2, day="monday", start=9*HOUR, duration=HOUR, tz=tz)
+first_monday = recurring(freq="monthly", week=1, day="monday", start=10*HOUR, duration=HOUR, tz=tz)
+last_friday = recurring(freq="monthly", week=-1, day="friday", tz=tz)
+payroll = recurring(freq="monthly", day_of_month=[1, 15], tz=tz)
 ```
 
 ## Transformations
@@ -163,105 +169,60 @@ metric(timeline, start, end, period="full", tz="UTC", group_by=None)
 ```
 
 - **start/end**: `date`, `datetime`, or Unix `int`. Dates are interpreted as midnight in `tz`.
-- **period**: Slices the start–end range into calendar-aligned windows. Each window produces one result tuple.
-  - `"full"` — single window spanning start to end (default)
-  - `"hour"`, `"day"`, `"week"` (ISO Mon–Sun), `"month"`, `"year"`
-- **tz**: Timezone for interpreting dates and aligning period boundaries.
-- **group_by** (optional): Collapses windows by cyclic key, summing values across matching periods. **Cannot be used with `period="full"` or `"year"`** — requires `"hour"`, `"day"`, `"week"`, or `"month"`.
-
-**Available metrics:**
-
-| Function | Returns per window | Notes |
-|---|---|---|
-| `total_duration` | `int` (seconds) | Flattens overlaps before summing |
-| `count_intervals` | `int` | Number of intervals touching window |
-| `coverage_ratio` | `float` (0–1) | Fraction of window covered |
-| `max_duration` | `Interval \| None` | Longest interval in window |
-| `min_duration` | `Interval \| None` | Shortest interval in window |
-
-**Return shape:**
-- Without `group_by`: `list[(date, value)]` — one tuple per period window
-- With `group_by`: `list[(int, value)]` — one tuple per cyclic bucket, sorted by key
+- **period**: `"full"`, `"hour"`, `"day"`, `"week"` (ISO Mon–Sun), `"month"`, `"year"`
+- **tz**: Always pass `"US/Pacific"` (or an explicit IANA timezone).
+- **group_by** (optional): Collapses windows by cyclic key. **Cannot be used with `period="full"` or `"year"`**.
 
 ```python
 from calgebra import total_duration, count_intervals, coverage_ratio
-from calgebra import max_duration, min_duration
 from datetime import date
+
+tz = "US/Pacific"
 
 # Total meeting seconds per day
 daily = total_duration(meetings, date(2025, 11, 1), date(2025, 12, 1),
-    period="day", tz="US/Pacific")
+    period="day", tz=tz)
 # Returns: [(date(2025,11,1), 7200), (date(2025,11,2), 0), ...]
-
-# Single total over entire range (default period="full")
-total = total_duration(meetings, date(2025, 11, 1), date(2025, 12, 1), tz="US/Pacific")
-# Returns: [(date(2025,11,1), 180000)]
-
-# Event count per month
-monthly = count_intervals(calendar, date(2025, 1, 1), date(2026, 1, 1),
-    period="month", tz="US/Pacific")
 
 # Daily coverage ratio
 daily_cov = coverage_ratio(calendar, date(2025, 11, 1), date(2025, 12, 1),
-    period="day", tz="US/Pacific")
-# Returns: [(date(2025,11,1), 0.73), ...]
-
-# Longest meeting each day
-longest = max_duration(meetings, date(2025, 11, 1), date(2025, 11, 8),
-    period="day", tz="US/Pacific")
-# Returns: [(date(2025,11,1), Event(...)), ...] — None for empty days
+    period="day", tz=tz)
 ```
 
 **Cyclic histograms (`group_by`):**
 
-`group_by` aggregates across a cyclic dimension (e.g. all Mondays together).
-**IMPORTANT: `period` and `group_by` are paired — you MUST copy the exact
-`period`+`group_by` pair from the examples below. No other combinations work.**
+Copy these exact `period`+`group_by` pairs — no other combinations work:
 
 ```python
-from datetime import date
-from calgebra import total_duration, count_intervals, coverage_ratio
-
-# "How much time in meetings per hour of day?"
+# Meetings per hour of day
 by_hour = total_duration(cal, date(2025, 1, 1), date(2025, 4, 1),
-    period="hour", group_by="hour_of_day", tz="US/Pacific")
-# Returns: [(0, 0), ..., (9, 54000), ..., (23, 0)]  — 24 buckets
+    period="hour", group_by="hour_of_day", tz=tz)
 
-# "How many meetings per day of week?"
+# Events per day of week (Mon=0)
 by_dow = count_intervals(cal, date(2025, 1, 1), date(2025, 4, 1),
-    period="day", group_by="day_of_week", tz="US/Pacific")
-# Returns: [(0, 45), (1, 52), ..., (6, 0)]  — 7 buckets, Mon=0
+    period="day", group_by="day_of_week", tz=tz)
 
-# "What % of time is booked per day of month?"
+# Coverage per day of month
 by_dom = coverage_ratio(cal, date(2025, 1, 1), date(2025, 4, 1),
-    period="day", group_by="day_of_month", tz="US/Pacific")
-# Returns: [(1, 0.73), (2, 0.81), ..., (31, 0.5)]  — 31 buckets
+    period="day", group_by="day_of_month", tz=tz)
 
-# "Total meeting time per week of year?"
+# Total per week of year
 by_woy = total_duration(cal, date(2025, 1, 1), date(2025, 4, 1),
-    period="week", group_by="week_of_year", tz="US/Pacific")
-# Returns: [(1, 18000), ..., (53, 0)]  — 53 buckets
+    period="week", group_by="week_of_year", tz=tz)
 
-# "Event count per month of year?"
+# Events per month of year
 by_moy = count_intervals(cal, date(2025, 1, 1), date(2026, 1, 1),
-    period="month", group_by="month_of_year", tz="US/Pacific")
-# Returns: [(1, 30), (2, 28), ..., (12, 25)]  — 12 buckets
+    period="month", group_by="month_of_year", tz=tz)
 ```
-
-These are the ONLY valid period+group_by pairs. Any other combination
-(e.g. `period="full"` or `period="day"` with `group_by="hour_of_day"`)
-raises ValueError.
 
 ## iCalendar (.ics) Files
 
 ```python
 from calgebra import file_to_timeline, timeline_to_file
 
-# Load .ics file into a timeline
 cal = file_to_timeline("calendar.ics")
-events = list(cal[start:end])
+events = list(cal[at("2025-01-01"):at("2025-02-01")])
 
-# Save timeline to .ics file
 timeline_to_file(filtered_events, "output.ics")
 ```
 
@@ -275,32 +236,27 @@ last_5 = list(islice(calendar[start:end:-1], 5))
 most_recent = next(calendar[start:end:-1], None)
 ```
 
-## Displaying Results
-
-```python
-from calgebra import pprint
-
-pprint(events, tz="US/Pacific")
-print(event.format(tz="US/Pacific"))
-```
-
-## Caching
-
-```python
-from calgebra import cached
-
-fast_cal = cached(slow_calendar, ttl=600)  # 10 min TTL
-# Partial cache hits: only fetches uncached portions
-```
-
 ## Common Patterns
 
-**Find meeting slots:**
+**Find free time:**
 ```python
-busy = alice_cal | bob_cal | charlie_cal
+from calgebra.gcal import calendars, transparency
+from calgebra import day_of_week, time_of_day, HOUR, at_tz
+
+token = access_token
+tz = "US/Pacific"
+at = at_tz(tz)
+
+cals = calendars(token)
+primary = next(c for c in cals if c.primary)
+
+weekdays = day_of_week(["monday", "tuesday", "wednesday", "thursday", "friday"], tz=tz)
+work_hours = time_of_day(start=9*HOUR, duration=8*HOUR, tz=tz)
+business_hours = weekdays & work_hours
+
+busy = primary & (transparency == "opaque")
 free = business_hours - busy
-options = free & (hours >= 1)
-slots = list(options[at("2025-01-15"):at("2025-01-16")])
+slots = list(free[at("2025-01-20"):at("2025-01-24")])
 ```
 
 **Detect conflicts:**
@@ -319,6 +275,7 @@ overlap = pacific & london
 
 - Composition is lazy, slicing executes
 - Exclusive end bounds `[start, end)` everywhere
-- Always use timezone-aware datetimes (use `at_tz()`)
+- Always use `at_tz("US/Pacific")` for slice bounds — never bare dates
+- `transparency` is imported from `calgebra.gcal`, not `calgebra`
 - `&` works between timelines and filters; `|` only between timelines
 - Recurring patterns require finite bounds when slicing
