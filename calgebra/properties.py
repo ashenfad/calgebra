@@ -228,18 +228,28 @@ def field(accessor: str | Callable[[Any], Any]) -> Property[Interval]:
         >>> tag_count = field(lambda e: len(e.tags))
     """
     if isinstance(accessor, str):
-
-        class FieldProperty(Property[Interval]):
-            @override
-            def apply(self, event: Interval) -> Any:
-                return getattr(event, accessor)
-
-        return FieldProperty()
+        return _FieldProperty(accessor)
     else:
+        return _GetterProperty(accessor)
 
-        class GetterProperty(Property[Interval]):
-            @override
-            def apply(self, event: Interval) -> Any:
-                return accessor(event)
 
-        return GetterProperty()
+class _FieldProperty(Property[Interval]):
+    """Property that reads a named attribute from an interval."""
+
+    def __init__(self, attr: str) -> None:
+        self._attr = attr
+
+    @override
+    def apply(self, event: Interval) -> Any:
+        return getattr(event, self._attr)
+
+
+class _GetterProperty(Property[Interval]):
+    """Property that applies a callable to an interval."""
+
+    def __init__(self, getter: Callable[[Any], Any]) -> None:
+        self._getter = getter
+
+    @override
+    def apply(self, event: Interval) -> Any:
+        return self._getter(event)
