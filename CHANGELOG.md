@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.11] - 2026-03-19
+
+### Fixed
+- **Picklable field properties**: `field()` now returns module-level classes (`_FieldProperty`, `_GetterProperty`) that survive pickle round-trips. Previously, properties like `transparency` were unpicklable closures, causing agents to lose imports between turns.
+- **Tighter type annotation**: `field()` signature narrowed from `Callable[[Any], Any]` to `Callable[[Interval], Any]`.
+
+### Changed
+- **Skill documentation**: Rewrote `calgebra` and `gcal` skills with complete quick-start examples, common pitfalls, and expanded coverage.
+
 ## [0.10.10] - 2026-03-17
 
 ### Fixed
